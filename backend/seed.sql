@@ -1,34 +1,39 @@
 -- ============================================================
 -- seed.sql
--- マルチテナント初期化スクリプト（一度だけ手動で実行）
--- 実行方法:
---   docker exec -i pmt_db psql -U pmt_user -d pmt_db < backend/seed.sql
+-- Multi-tenant initialization script (run manually once)
+-- Usage:
+--   Get-Content backend/seed.sql | docker exec -i pmt_db psql -U pmt_user -d pmt_db
 -- ============================================================
 
--- 1. roles テーブルの旧グローバルユニーク制約を削除
---    （GORM が (name, organization_id) の複合ユニークに付け替えるため）
+-- 1. Drop old global unique constraint on roles.name
+--    (GORM will replace with composite unique index (name, organization_id))
 DROP INDEX IF EXISTS uni_roles_name;
 
--- 2. "Ｆ．Ｒ．Ｓ．" 組織を固定UUIDで挿入
+-- 2. Insert "F.R.S." organization with fixed UUID
+--    Name stored as Unicode escape to avoid encoding issues
 INSERT INTO organizations (id, name, created_at)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Ｆ．Ｒ．Ｓ．', NOW())
+VALUES (
+    '00000000-0000-0000-0000-000000000001',
+    E'\uff26\uff0e\uff32\uff0e\uff33\uff0e',
+    NOW()
+)
 ON CONFLICT (id) DO NOTHING;
 
--- 3. 既存のプロジェクトを "Ｆ．Ｒ．Ｓ．" 組織に紐付け
+-- 3. Backfill existing projects to F.R.S. organization
 UPDATE projects
 SET organization_id = '00000000-0000-0000-0000-000000000001'
 WHERE organization_id IS NULL;
 
--- 4. 既存の役職を "Ｆ．Ｒ．Ｓ．" 組織に紐付け
+-- 4. Backfill existing roles to F.R.S. organization
 UPDATE roles
 SET organization_id = '00000000-0000-0000-0000-000000000001'
 WHERE organization_id IS NULL;
 
--- 5. organization_id に NOT NULL 制約を追加（データ移行完了後）
+-- 5. Add NOT NULL constraint after data is populated
 ALTER TABLE projects ALTER COLUMN organization_id SET NOT NULL;
 ALTER TABLE roles    ALTER COLUMN organization_id SET NOT NULL;
 
--- 6. FK 制約を追加（参照整合性をDBレベルで保証）
+-- 6. Add FK constraints for referential integrity at DB level
 ALTER TABLE projects
     DROP CONSTRAINT IF EXISTS fk_projects_organization;
 ALTER TABLE projects
@@ -53,18 +58,18 @@ ALTER TABLE organization_users
     ADD CONSTRAINT fk_org_users_user
     FOREIGN KEY (user_id) REFERENCES users(id);
 
--- 7. 既存ユーザーを全員 "Ｆ．Ｒ．Ｓ．" 組織のメンバーに追加
+-- 7. Add all existing users to F.R.S. organization
 INSERT INTO organization_users (organization_id, user_id, is_org_admin, joined_at)
 SELECT '00000000-0000-0000-0000-000000000001', id, is_admin, NOW()
 FROM users
 ON CONFLICT (organization_id, user_id) DO NOTHING;
 
--- 8. スーパーアドミンの初期レコード（メール変更可）
---    このメールアドレスで /super-admin/login からログインできます
+-- 8. Create initial super admin account
+--    Email: superadmin@frs.example.com  (change as needed)
 INSERT INTO super_admins (id, name, email, created_at)
 VALUES (
     gen_random_uuid(),
-    'システム管理者',
+    E'\u30b7\u30b9\u30c6\u30e0\u7ba1\u7406\u8005',
     'superadmin@frs.example.com',
     NOW()
 )
