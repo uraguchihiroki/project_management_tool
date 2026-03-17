@@ -49,6 +49,7 @@ graph TD
 project_management_tool/
 ├── .sdd/                        # 設計ドキュメント
 │   ├── architecture.md          # このファイル
+│   ├── layer-responsibility.md  # レイヤー責務定義（Handler/Service/Repository の境界線）
 │   ├── db-schema.md             # DB設計
 │   └── api-spec.md              # API仕様
 ├── backend/                     # Go APIサーバー
