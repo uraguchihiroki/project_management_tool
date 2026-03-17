@@ -144,16 +144,32 @@ Get-Content backend/seed.sql | docker exec -i pmt_db psql -U pmt_user -d pmt_db
 ### 6. ローカル環境の停止手順
 
 ```powershell
-# [Terminal 2] バックエンド → Ctrl+C で停止
+# バックエンド → 起動したターミナルで Ctrl+C
 
-# [Terminal 3] フロントエンド → Ctrl+C で停止
+# フロントエンド → 起動したターミナルで Ctrl+C
 
-# [Terminal 1] Docker（PostgreSQL）を停止
+# Docker（PostgreSQL）を停止
 docker-compose stop db
 ```
 
 > **データを消さずに止める場合** は `stop`。  
 > **コンテナごと削除する場合**（DB データも消える）は `docker-compose down`。
+
+#### ポートが埋まっていて起動できない場合
+
+「Port 3000 is in use」や「Unable to acquire lock」が出た場合は、前のプロセスが残っています。
+
+```powershell
+# 3000番ポートを使っているプロセスを確認
+netstat -ano | findstr ":3000" | findstr "LISTENING"
+# 末尾の数字が PID
+
+# そのPIDを強制終了（例: PID が 14492 の場合）
+Stop-Process -Id 14492 -Force
+
+# ロックファイルを削除
+Remove-Item frontend\.next\dev\lock -ErrorAction SilentlyContinue
+```
 
 ---
 
