@@ -8,6 +8,7 @@ import (
 
 type RoleRepository interface {
 	FindAll() ([]model.Role, error)
+	FindByOrg(orgID uuid.UUID) ([]model.Role, error)
 	FindByID(id uint) (*model.Role, error)
 	Create(role *model.Role) error
 	Update(role *model.Role) error
@@ -27,6 +28,12 @@ func NewRoleRepository(db *gorm.DB) RoleRepository {
 func (r *roleRepository) FindAll() ([]model.Role, error) {
 	var roles []model.Role
 	err := r.db.Order("level DESC, name ASC").Find(&roles).Error
+	return roles, err
+}
+
+func (r *roleRepository) FindByOrg(orgID uuid.UUID) ([]model.Role, error) {
+	var roles []model.Role
+	err := r.db.Where("organization_id = ?", orgID).Order("level DESC, name ASC").Find(&roles).Error
 	return roles, err
 }
 

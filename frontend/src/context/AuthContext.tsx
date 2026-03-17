@@ -2,31 +2,62 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import type { User } from '@/types'
+import type { User, Organization } from '@/types'
 
 const SESSION_KEY = 'currentUser'
+const ORG_KEY = 'currentOrg'
 
 interface AuthContextType {
   currentUser: User | null
+  currentOrg: Organization | null
   login: (email: string, asAdmin?: boolean) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
   register: (name: string, email: string, asAdmin?: boolean) => Promise<{ ok: boolean; error?: string }>
+  selectOrg: (org: Organization) => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [currentOrg, setCurrentOrg] = useState<Organization | null>(null)
   const router = useRouter()
 
-  // 初期化時にsessionStorageから復元
   useEffect(() => {
     try {
       const stored = sessionStorage.getItem(SESSION_KEY)
       if (stored) setCurrentUser(JSON.parse(stored))
+      const storedOrg = sessionStorage.getItem(ORG_KEY)
+      if (storedOrg) setCurrentOrg(JSON.parse(storedOrg))
     } catch {
-      // sessionStorageが使えない環境（SSR）では無視
+      // SSR環境では無視
     }
+  }, [])
+
+  const selectOrg = useCallback((org: Organization) => {
+    sessionStorage.setItem(ORG_KEY, JSON.stringify(org))
+    setCurrentOrg(org)
+  }, [])
+
+  // ログイン後に組織を取得し、1件なら自動選択・複数なら選択画面へ
+  const handleOrgSelection = useCallback(async (userId: string) => {
+    try {
+      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
+      const res = await fetch(`${base}/users/${userId}/organizations`)
+      if (!res.ok) return '/projects'
+      const json = await res.json()
+      const orgs: Organization[] = json.data ?? []
+      if (orgs.length === 1) {
+        sessionStorage.setItem(ORG_KEY, JSON.stringify(orgs[0]))
+        setCurrentOrg(orgs[0])
+        return '/projects'
+      } else if (orgs.length > 1) {
+        return '/select-org'
+      }
+    } catch {
+      // エラーでも /projects へ
+    }
+    return '/projects'
   }, [])
 
   const login = useCallback(async (email: string, asAdmin?: boolean): Promise<{ ok: boolean; error?: string }> => {
@@ -47,15 +78,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = { ...found, is_admin: asAdmin ?? false }
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
       setCurrentUser(user)
+      const dest = await handleOrgSelection(found.id)
+      router.push(dest)
       return { ok: true }
     } catch {
       return { ok: false, error: 'ログインに失敗しました' }
     }
-  }, [])
+  }, [handleOrgSelection, router])
 
   const logout = useCallback(() => {
     sessionStorage.removeItem(SESSION_KEY)
+    sessionStorage.removeItem(ORG_KEY)
     setCurrentUser(null)
+    setCurrentOrg(null)
     router.push('/login')
   }, [router])
 
@@ -73,7 +108,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const json = await res.json()
       const created: User = json.data
-      // チェックボックスの状態でDBのis_adminも更新する
       if (asAdmin !== undefined) {
         await fetch(`${base}/users/${created.id}/admin`, {
           method: 'PUT',
@@ -84,14 +118,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = { ...created, is_admin: asAdmin ?? created.is_admin }
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
       setCurrentUser(user)
+      const dest = await handleOrgSelection(created.id)
+      router.push(dest)
       return { ok: true }
     } catch {
       return { ok: false, error: '登録に失敗しました' }
     }
-  }, [])
+  }, [handleOrgSelection, router])
 
   return (
-    <AuthContext.Provider value={{ currentUser, login, logout, register }}>
+    <AuthContext.Provider value={{ currentUser, currentOrg, login, logout, register, selectOrg }}>
       {children}
     </AuthContext.Provider>
   )
@@ -110,7 +146,6 @@ export function useRequireAuth(): User {
 
   useEffect(() => {
     if (currentUser === null) {
-      // sessionStorage読み込み完了後にnullなら未ログイン
       const stored = sessionStorage.getItem(SESSION_KEY)
       if (!stored) router.push('/login')
     }

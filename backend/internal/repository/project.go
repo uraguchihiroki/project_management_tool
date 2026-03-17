@@ -8,6 +8,7 @@ import (
 
 type ProjectRepository interface {
 	FindAll() ([]model.Project, error)
+	FindByOrg(orgID uuid.UUID) ([]model.Project, error)
 	FindByID(id uuid.UUID) (*model.Project, error)
 	Create(project *model.Project) error
 	Update(project *model.Project) error
@@ -25,6 +26,12 @@ func NewProjectRepository(db *gorm.DB) ProjectRepository {
 func (r *projectRepository) FindAll() ([]model.Project, error) {
 	var projects []model.Project
 	err := r.db.Preload("Owner").Find(&projects).Error
+	return projects, err
+}
+
+func (r *projectRepository) FindByOrg(orgID uuid.UUID) ([]model.Project, error) {
+	var projects []model.Project
+	err := r.db.Preload("Owner").Where("organization_id = ?", orgID).Find(&projects).Error
 	return projects, err
 }
 

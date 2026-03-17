@@ -27,8 +27,11 @@ func main() {
 
 	// AutoMigrate
 	if err := db.AutoMigrate(
+		&model.Organization{},
+		&model.SuperAdmin{},
 		&model.Role{},
 		&model.User{},
+		&model.OrganizationUser{},
 		&model.Project{},
 		&model.Status{},
 		&model.Issue{},
@@ -51,10 +54,14 @@ func main() {
 	workflowRepo := repository.NewWorkflowRepository(db)
 	templateRepo := repository.NewTemplateRepository(db)
 	approvalRepo := repository.NewApprovalRepository(db)
+	orgRepo := repository.NewOrganizationRepository(db)
+	superAdminRepo := repository.NewSuperAdminRepository(db)
 
 	// Services
 	userSvc := service.NewUserService(userRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
+	orgSvc := service.NewOrganizationService(orgRepo)
+	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
 	commentSvc := service.NewCommentService(commentRepo)
 	roleSvc := service.NewRoleService(roleRepo)
@@ -71,6 +78,8 @@ func main() {
 	workflowHandler := handler.NewWorkflowHandler(workflowSvc)
 	templateHandler := handler.NewTemplateHandler(templateSvc)
 	approvalHandler := handler.NewApprovalHandler(approvalSvc)
+	orgHandler := handler.NewOrganizationHandler(orgSvc)
+	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
 
 	// Echo
 	e := echo.New()
@@ -122,6 +131,17 @@ func main() {
 	api.GET("/issues/:issueId/approvals", approvalHandler.List)
 	api.POST("/approvals/:id/approve", approvalHandler.Approve)
 	api.POST("/approvals/:id/reject", approvalHandler.Reject)
+
+	// Organizations
+	api.GET("/organizations", orgHandler.List)
+	api.POST("/organizations", orgHandler.Create)
+	api.GET("/users/:id/organizations", orgHandler.ListByUser)
+	api.POST("/organizations/:orgId/users", orgHandler.AddUser)
+
+	// Super Admin
+	api.POST("/super-admin/login", superAdminHandler.Login)
+	api.GET("/super-admin/organizations", superAdminHandler.ListOrganizations)
+	api.POST("/super-admin/organizations", superAdminHandler.CreateOrganization)
 
 	// Admin
 	api.GET("/admin/users", userHandler.ListWithRoles)

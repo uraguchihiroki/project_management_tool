@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate, IssueApproval } from '@/types'
+import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate, IssueApproval, Organization, SuperAdmin } from '@/types'
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
@@ -13,14 +13,37 @@ export const getUsers = () =>
 export const createUser = (data: { name: string; email: string }) =>
   api.post<ApiResponse<User>>('/users', data).then((r) => r.data.data)
 
+// Organizations
+export const getOrganizations = () =>
+  api.get<ListResponse<Organization>>('/organizations').then((r) => r.data.data)
+
+export const createOrganization = (name: string) =>
+  api.post<ApiResponse<Organization>>('/organizations', { name }).then((r) => r.data.data)
+
+export const getUserOrganizations = (userId: string) =>
+  api.get<{ data: Organization[] }>(`/users/${userId}/organizations`).then((r) => r.data.data)
+
+export const addUserToOrg = (orgId: string, userId: string, isOrgAdmin = false) =>
+  api.post(`/organizations/${orgId}/users`, { user_id: userId, is_org_admin: isOrgAdmin })
+
+// Super Admin
+export const superAdminLogin = (email: string) =>
+  api.post<ApiResponse<SuperAdmin>>('/super-admin/login', { email }).then((r) => r.data.data)
+
+export const superAdminGetOrganizations = () =>
+  api.get<ListResponse<Organization>>('/super-admin/organizations').then((r) => r.data.data)
+
+export const superAdminCreateOrganization = (name: string) =>
+  api.post<ApiResponse<Organization>>('/super-admin/organizations', { name }).then((r) => r.data.data)
+
 // Projects
-export const getProjects = () =>
-  api.get<ListResponse<Project>>('/projects').then((r) => r.data.data)
+export const getProjects = (orgId?: string) =>
+  api.get<ListResponse<Project>>('/projects', { params: orgId ? { org_id: orgId } : {} }).then((r) => r.data.data)
 
 export const getProject = (id: string) =>
   api.get<ApiResponse<Project>>(`/projects/${id}`).then((r) => r.data.data)
 
-export const createProject = (data: { key: string; name: string; description?: string; owner_id: string }) =>
+export const createProject = (data: { key: string; name: string; description?: string; owner_id: string; organization_id?: string }) =>
   api.post<ApiResponse<Project>>('/projects', data).then((r) => r.data.data)
 
 export const updateProject = (id: string, data: { name?: string; description?: string }) =>

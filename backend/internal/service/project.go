@@ -9,10 +9,11 @@ import (
 )
 
 type CreateProjectInput struct {
-	Key         string
-	Name        string
-	Description *string
-	OwnerID     uuid.UUID
+	Key            string
+	Name           string
+	Description    *string
+	OwnerID        uuid.UUID
+	OrganizationID *uuid.UUID
 }
 
 type UpdateProjectInput struct {
@@ -21,7 +22,7 @@ type UpdateProjectInput struct {
 }
 
 type ProjectService interface {
-	List() ([]model.Project, error)
+	List(orgID *uuid.UUID) ([]model.Project, error)
 	Get(id uuid.UUID) (*model.Project, error)
 	Create(input CreateProjectInput) (*model.Project, error)
 	Update(id uuid.UUID, input UpdateProjectInput) (*model.Project, error)
@@ -37,7 +38,10 @@ func NewProjectService(projectRepo repository.ProjectRepository, statusRepo repo
 	return &projectService{projectRepo: projectRepo, statusRepo: statusRepo}
 }
 
-func (s *projectService) List() ([]model.Project, error) {
+func (s *projectService) List(orgID *uuid.UUID) ([]model.Project, error) {
+	if orgID != nil {
+		return s.projectRepo.FindByOrg(*orgID)
+	}
 	return s.projectRepo.FindAll()
 }
 
@@ -47,12 +51,13 @@ func (s *projectService) Get(id uuid.UUID) (*model.Project, error) {
 
 func (s *projectService) Create(input CreateProjectInput) (*model.Project, error) {
 	project := &model.Project{
-		ID:          uuid.New(),
-		Key:         input.Key,
-		Name:        input.Name,
-		Description: input.Description,
-		OwnerID:     input.OwnerID,
-		CreatedAt:   time.Now(),
+		ID:             uuid.New(),
+		Key:            input.Key,
+		Name:           input.Name,
+		Description:    input.Description,
+		OwnerID:        input.OwnerID,
+		OrganizationID: input.OrganizationID,
+		CreatedAt:      time.Now(),
 	}
 	if err := s.projectRepo.Create(project); err != nil {
 		return nil, err

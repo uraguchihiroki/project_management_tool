@@ -5,17 +5,24 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Check } from 'lucide-react'
 import type { Role } from '@/types'
 
+import { useAuth } from '@/context/AuthContext'
+
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
-async function fetchRoles(): Promise<Role[]> {
-  const res = await fetch(`${API}/roles`)
+async function fetchRoles(orgId?: string): Promise<Role[]> {
+  const url = orgId ? `${API}/roles?org_id=${orgId}` : `${API}/roles`
+  const res = await fetch(url)
   const json = await res.json()
   return json.data ?? []
 }
 
 export default function RolesPage() {
+  const { currentOrg } = useAuth()
   const queryClient = useQueryClient()
-  const { data: roles = [], isLoading } = useQuery({ queryKey: ['roles'], queryFn: fetchRoles })
+  const { data: roles = [], isLoading } = useQuery({
+    queryKey: ['roles', currentOrg?.id],
+    queryFn: () => fetchRoles(currentOrg?.id),
+  })
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -27,7 +34,7 @@ export default function RolesPage() {
       const res = await fetch(`${API}/roles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, organization_id: currentOrg?.id }),
       })
       if (!res.ok) {
         const json = await res.json()

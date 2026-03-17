@@ -27,7 +27,7 @@ const emptyForm = {
 export default function TemplatesPage() {
   const queryClient = useQueryClient()
   const { data: templates = [], isLoading } = useQuery({ queryKey: ['templates'], queryFn: getTemplates })
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: getProjects })
+  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: () => getProjects() })
   const { data: workflows = [] } = useQuery({ queryKey: ['workflows'], queryFn: fetchWorkflows })
 
   const [showForm, setShowForm] = useState(false)

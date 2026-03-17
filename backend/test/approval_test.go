@@ -31,7 +31,7 @@ func setupApprovalFixture(t *testing.T, ts *testServer) (projectID, statusID, ow
 
 	// 役職を作成してownerIDに割り当て（level 5 = 課長級）
 	_, roleResp := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{
-		"name": "課長", "level": 5,
+		"name": "課長", "level": 5, "organization_id": testOrgID,
 	})
 	roleID := mustGetFloat(t, roleResp, "data", "id")
 	ts.req(t, "PUT", "/api/v1/users/"+ownerID+"/roles", map[string]interface{}{
@@ -138,7 +138,7 @@ func TestApproval_LevelCheck(t *testing.T) {
 	// Levelが低いユーザーを作成（level 3 = 主任）
 	lowUserID := createTestUser(t, ts, "主任", "junior@example.com")
 	_, lowRoleResp := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{
-		"name": "主任", "level": 3,
+		"name": "主任", "level": 3, "organization_id": testOrgID,
 	})
 	lowRoleID := mustGetFloat(t, lowRoleResp, "data", "id")
 	ts.req(t, "PUT", "/api/v1/users/"+lowUserID+"/roles", map[string]interface{}{
@@ -175,7 +175,7 @@ func TestApproval_OrderCheck(t *testing.T) {
 	// 部長ユーザー（level 7）を作成
 	directorID := createTestUser(t, ts, "部長", "director@example.com")
 	_, dirResp := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{
-		"name": "部長", "level": 7,
+		"name": "部長", "level": 7, "organization_id": testOrgID,
 	})
 	dirRoleID := mustGetFloat(t, dirResp, "data", "id")
 	ts.req(t, "PUT", "/api/v1/users/"+directorID+"/roles", map[string]interface{}{

@@ -1,3 +1,16 @@
+export interface Organization {
+  id: string
+  name: string
+  created_at: string
+}
+
+export interface SuperAdmin {
+  id: string
+  name: string
+  email: string
+  created_at: string
+}
+
 export interface Role {
   id: number
   name: string

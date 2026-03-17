@@ -1,0 +1,80 @@
+'use client'
+
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import type { SuperAdmin } from '@/types'
+
+const SA_SESSION_KEY = 'currentSuperAdmin'
+
+interface SuperAdminContextType {
+  currentSuperAdmin: SuperAdmin | null
+  login: (email: string) => Promise<{ ok: boolean; error?: string }>
+  logout: () => void
+}
+
+const SuperAdminContext = createContext<SuperAdminContextType | null>(null)
+
+export function SuperAdminProvider({ children }: { children: React.ReactNode }) {
+  const [currentSuperAdmin, setCurrentSuperAdmin] = useState<SuperAdmin | null>(null)
+  const router = useRouter()
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(SA_SESSION_KEY)
+      if (stored) setCurrentSuperAdmin(JSON.parse(stored))
+    } catch {
+      // SSR環境では無視
+    }
+  }, [])
+
+  const login = useCallback(async (email: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/super-admin/login`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        }
+      )
+      if (!res.ok) return { ok: false, error: 'メールアドレスが見つかりません' }
+      const json = await res.json()
+      const admin: SuperAdmin = json.data
+      sessionStorage.setItem(SA_SESSION_KEY, JSON.stringify(admin))
+      setCurrentSuperAdmin(admin)
+      return { ok: true }
+    } catch {
+      return { ok: false, error: 'ログインに失敗しました' }
+    }
+  }, [])
+
+  const logout = useCallback(() => {
+    sessionStorage.removeItem(SA_SESSION_KEY)
+    setCurrentSuperAdmin(null)
+    router.push('/super-admin/login')
+  }, [router])
+
+  return (
+    <SuperAdminContext.Provider value={{ currentSuperAdmin, login, logout }}>
+      {children}
+    </SuperAdminContext.Provider>
+  )
+}
+
+export function useSuperAdmin(): SuperAdminContextType {
+  const ctx = useContext(SuperAdminContext)
+  if (!ctx) throw new Error('useSuperAdmin must be used within SuperAdminProvider')
+  return ctx
+}
+
+export function useRequireSuperAdmin(): SuperAdmin {
+  const { currentSuperAdmin } = useSuperAdmin()
+  const router = useRouter()
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem(SA_SESSION_KEY)
+    if (!stored) router.push('/super-admin/login')
+  }, [currentSuperAdmin, router])
+
+  return currentSuperAdmin as SuperAdmin
+}

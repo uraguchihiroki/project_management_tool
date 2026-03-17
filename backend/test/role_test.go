@@ -11,9 +11,10 @@ func TestRoleCreate(t *testing.T) {
 
 	t.Run("役職を作成できる", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{
-			"name":        "部長",
-			"level":       7,
-			"description": "部門の責任者",
+			"name":            "部長",
+			"level":           7,
+			"description":     "部門の責任者",
+			"organization_id": testOrgID,
 		})
 		assertStatus(t, status, http.StatusCreated, "create role")
 		assertField(t, mustGetString(t, resp, "data", "name"), "部長", "name")
@@ -32,9 +33,9 @@ func TestRoleList(t *testing.T) {
 	ts := newTestServer(t)
 
 	// 複数役職を作成
-	ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "社長", "level": 10})
-	ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "課長", "level": 5})
-	ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "平社員", "level": 1})
+	ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "社長", "level": 10, "organization_id": testOrgID})
+	ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "課長", "level": 5, "organization_id": testOrgID})
+	ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "平社員", "level": 1, "organization_id": testOrgID})
 
 	t.Run("役職一覧をlevel降順で取得できる", func(t *testing.T) {
 		status, resp := ts.req(t, "GET", "/api/v1/roles", nil)
@@ -55,8 +56,7 @@ func TestRoleUpdate(t *testing.T) {
 	ts := newTestServer(t)
 
 	_, createResp := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{
-		"name":  "課長",
-		"level": 5,
+		"name": "課長", "level": 5, "organization_id": testOrgID,
 	})
 	roleID := fmt.Sprintf("%.0f", mustGetFloat(t, createResp, "data", "id"))
 
@@ -75,8 +75,7 @@ func TestRoleDelete(t *testing.T) {
 	ts := newTestServer(t)
 
 	_, createResp := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{
-		"name":  "削除テスト役職",
-		"level": 2,
+		"name": "削除テスト役職", "level": 2, "organization_id": testOrgID,
 	})
 	roleID := fmt.Sprintf("%.0f", mustGetFloat(t, createResp, "data", "id"))
 
@@ -101,8 +100,8 @@ func TestUserRoleAssignment(t *testing.T) {
 	// ユーザーと役職を作成
 	userID := createTestUser(t, ts, "田中太郎", "tanaka@example.com")
 
-	_, r1 := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "課長", "level": 5})
-	_, r2 := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "採用担当", "level": 3})
+	_, r1 := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "課長", "level": 5, "organization_id": testOrgID})
+	_, r2 := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "採用担当", "level": 3, "organization_id": testOrgID})
 	role1ID := mustGetFloat(t, r1, "data", "id")
 	role2ID := mustGetFloat(t, r2, "data", "id")
 
@@ -187,7 +186,7 @@ func TestAdminUserList(t *testing.T) {
 	ts := newTestServer(t)
 
 	userID := createTestUser(t, ts, "テストユーザー", "test@example.com")
-	ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "エンジニア", "level": 3})
+	ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "エンジニア", "level": 3, "organization_id": testOrgID})
 	_, rolesResp := ts.req(t, "GET", "/api/v1/roles", nil)
 	roles := mustGetArray(t, rolesResp, "data")
 	roleID := roles[0].(map[string]interface{})["id"].(float64)

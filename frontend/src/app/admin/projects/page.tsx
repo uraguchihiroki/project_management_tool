@@ -6,17 +6,18 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Plus, FolderKanban, ChevronRight } from 'lucide-react'
 import type { Project } from '@/types'
-import { useRequireAdmin } from '@/context/AuthContext'
+import { useRequireAdmin, useAuth } from '@/context/AuthContext'
 
 export default function AdminProjectsPage() {
   const currentUser = useRequireAdmin()
+  const { currentOrg } = useAuth()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ key: '', name: '', description: '' })
 
   const { data: projects = [], isLoading } = useQuery({
-    queryKey: ['projects'],
-    queryFn: getProjects,
+    queryKey: ['projects', currentOrg?.id],
+    queryFn: () => getProjects(currentOrg?.id),
   })
 
   const createMutation = useMutation({
@@ -36,6 +37,7 @@ export default function AdminProjectsPage() {
       name: form.name,
       description: form.description || undefined,
       owner_id: currentUser.id,
+      organization_id: currentOrg?.id,
     })
   }
 

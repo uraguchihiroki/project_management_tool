@@ -17,7 +17,15 @@ func NewProjectHandler(projectService service.ProjectService) *ProjectHandler {
 }
 
 func (h *ProjectHandler) List(c echo.Context) error {
-	projects, err := h.projectService.List()
+	var orgID *uuid.UUID
+	if raw := c.QueryParam("org_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+		}
+		orgID = &parsed
+	}
+	projects, err := h.projectService.List(orgID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -38,10 +46,11 @@ func (h *ProjectHandler) Get(c echo.Context) error {
 
 func (h *ProjectHandler) Create(c echo.Context) error {
 	type Request struct {
-		Key         string  `json:"key" validate:"required,max=10"`
-		Name        string  `json:"name" validate:"required,max=200"`
-		Description *string `json:"description"`
-		OwnerID     string  `json:"owner_id" validate:"required,uuid"`
+		Key            string  `json:"key" validate:"required,max=10"`
+		Name           string  `json:"name" validate:"required,max=200"`
+		Description    *string `json:"description"`
+		OwnerID        string  `json:"owner_id" validate:"required,uuid"`
+		OrganizationID string  `json:"organization_id"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -51,11 +60,20 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid owner_id")
 	}
+	var orgID *uuid.UUID
+	if req.OrganizationID != "" {
+		parsed, err := uuid.Parse(req.OrganizationID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
+		}
+		orgID = &parsed
+	}
 	project, err := h.projectService.Create(service.CreateProjectInput{
-		Key:         req.Key,
-		Name:        req.Name,
-		Description: req.Description,
-		OwnerID:     ownerID,
+		Key:            req.Key,
+		Name:           req.Name,
+		Description:    req.Description,
+		OwnerID:        ownerID,
+		OrganizationID: orgID,
 	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())

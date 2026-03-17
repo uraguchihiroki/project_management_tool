@@ -15,6 +15,7 @@ type IssueRepository interface {
 	UpdateStatus(id uuid.UUID, statusID uuid.UUID) error
 	Delete(id uuid.UUID) error
 	NextNumber(projectID uuid.UUID) (int, error)
+	FindByOrg(orgID uuid.UUID) ([]model.Issue, error)
 }
 
 type issueRepository struct {
@@ -83,6 +84,19 @@ func (r *issueRepository) Update(issue *model.Issue) error {
 
 func (r *issueRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&model.Issue{}, "id = ?", id).Error
+}
+
+func (r *issueRepository) FindByOrg(orgID uuid.UUID) ([]model.Issue, error) {
+	var issues []model.Issue
+	err := r.db.
+		Preload("Status").
+		Preload("Assignee").
+		Preload("Reporter").
+		Joins("JOIN projects ON projects.id = issues.project_id").
+		Where("projects.organization_id = ?", orgID).
+		Order("issues.created_at DESC").
+		Find(&issues).Error
+	return issues, err
 }
 
 func (r *issueRepository) NextNumber(projectID uuid.UUID) (int, error) {

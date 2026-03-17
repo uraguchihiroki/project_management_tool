@@ -6,6 +6,28 @@ import (
 	"github.com/google/uuid"
 )
 
+type Organization struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	Name      string    `gorm:"size:200;not null;uniqueIndex" json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type SuperAdmin struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	Name      string    `gorm:"size:100;not null" json:"name"`
+	Email     string    `gorm:"size:255;uniqueIndex;not null" json:"email"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type OrganizationUser struct {
+	OrganizationID uuid.UUID    `gorm:"type:uuid;not null;primaryKey" json:"organization_id"`
+	Organization   Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+	UserID         uuid.UUID    `gorm:"type:uuid;not null;primaryKey" json:"user_id"`
+	User           User         `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	IsOrgAdmin     bool         `gorm:"default:false" json:"is_org_admin"`
+	JoinedAt       time.Time    `json:"joined_at"`
+}
+
 type User struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
 	Name      string    `gorm:"size:100;not null" json:"name"`
@@ -17,22 +39,26 @@ type User struct {
 }
 
 type Role struct {
-	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name        string    `gorm:"size:100;not null;uniqueIndex" json:"name"`
-	Level       int       `gorm:"not null;default:1" json:"level"`
-	Description string    `gorm:"size:500" json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID             uint         `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name           string       `gorm:"size:100;not null;uniqueIndex:idx_role_name_org" json:"name"`
+	Level          int          `gorm:"not null;default:1" json:"level"`
+	Description    string       `gorm:"size:500" json:"description"`
+	OrganizationID *uuid.UUID   `gorm:"type:uuid;uniqueIndex:idx_role_name_org" json:"organization_id,omitempty"`
+	Organization   Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+	CreatedAt      time.Time    `json:"created_at"`
 }
 
 type Project struct {
-	ID          uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	Key         string     `gorm:"size:10;uniqueIndex;not null" json:"key"`
-	Name        string     `gorm:"size:200;not null" json:"name"`
-	Description *string    `json:"description,omitempty"`
-	OwnerID     uuid.UUID  `gorm:"type:uuid;not null" json:"owner_id"`
-	Owner       User       `gorm:"foreignKey:OwnerID" json:"owner,omitempty"`
-	Statuses    []Status   `gorm:"foreignKey:ProjectID" json:"statuses,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
+	ID             uuid.UUID    `gorm:"type:uuid;primaryKey" json:"id"`
+	Key            string       `gorm:"size:10;uniqueIndex;not null" json:"key"`
+	Name           string       `gorm:"size:200;not null" json:"name"`
+	Description    *string      `json:"description,omitempty"`
+	OwnerID        uuid.UUID    `gorm:"type:uuid;not null" json:"owner_id"`
+	Owner          User         `gorm:"foreignKey:OwnerID" json:"owner,omitempty"`
+	OrganizationID *uuid.UUID   `gorm:"type:uuid" json:"organization_id,omitempty"`
+	Organization   Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+	Statuses       []Status     `gorm:"foreignKey:ProjectID" json:"statuses,omitempty"`
+	CreatedAt      time.Time    `json:"created_at"`
 }
 
 type Status struct {

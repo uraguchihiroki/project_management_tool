@@ -20,7 +20,15 @@ func NewRoleHandler(roleService service.RoleService, userService service.UserSer
 
 // GET /api/v1/roles
 func (h *RoleHandler) List(c echo.Context) error {
-	roles, err := h.roleService.ListRoles()
+	var orgID *uuid.UUID
+	if raw := c.QueryParam("org_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+		}
+		orgID = &parsed
+	}
+	roles, err := h.roleService.ListRoles(orgID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -30,9 +38,10 @@ func (h *RoleHandler) List(c echo.Context) error {
 // POST /api/v1/roles
 func (h *RoleHandler) Create(c echo.Context) error {
 	type Request struct {
-		Name        string `json:"name"`
-		Level       int    `json:"level"`
-		Description string `json:"description"`
+		Name           string `json:"name"`
+		Level          int    `json:"level"`
+		Description    string `json:"description"`
+		OrganizationID string `json:"organization_id"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -41,7 +50,15 @@ func (h *RoleHandler) Create(c echo.Context) error {
 	if req.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
-	role, err := h.roleService.CreateRole(req.Name, req.Level, req.Description)
+	var orgID *uuid.UUID
+	if req.OrganizationID != "" {
+		parsed, err := uuid.Parse(req.OrganizationID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
+		}
+		orgID = &parsed
+	}
+	role, err := h.roleService.CreateRole(req.Name, req.Level, req.Description, orgID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}

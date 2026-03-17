@@ -9,9 +9,9 @@ import (
 )
 
 type RoleService interface {
-	ListRoles() ([]model.Role, error)
+	ListRoles(orgID *uuid.UUID) ([]model.Role, error)
 	GetRole(id uint) (*model.Role, error)
-	CreateRole(name string, level int, description string) (*model.Role, error)
+	CreateRole(name string, level int, description string, orgID *uuid.UUID) (*model.Role, error)
 	UpdateRole(id uint, name string, level int, description string) (*model.Role, error)
 	DeleteRole(id uint) error
 	AssignRolesToUser(userID uuid.UUID, roleIDs []uint) error
@@ -26,7 +26,10 @@ func NewRoleService(roleRepo repository.RoleRepository) RoleService {
 	return &roleService{roleRepo: roleRepo}
 }
 
-func (s *roleService) ListRoles() ([]model.Role, error) {
+func (s *roleService) ListRoles(orgID *uuid.UUID) ([]model.Role, error) {
+	if orgID != nil {
+		return s.roleRepo.FindByOrg(*orgID)
+	}
 	return s.roleRepo.FindAll()
 }
 
@@ -34,12 +37,13 @@ func (s *roleService) GetRole(id uint) (*model.Role, error) {
 	return s.roleRepo.FindByID(id)
 }
 
-func (s *roleService) CreateRole(name string, level int, description string) (*model.Role, error) {
+func (s *roleService) CreateRole(name string, level int, description string, orgID *uuid.UUID) (*model.Role, error) {
 	role := &model.Role{
-		Name:        name,
-		Level:       level,
-		Description: description,
-		CreatedAt:   time.Now(),
+		Name:           name,
+		Level:          level,
+		Description:    description,
+		OrganizationID: orgID,
+		CreatedAt:      time.Now(),
 	}
 	if err := s.roleRepo.Create(role); err != nil {
 		return nil, err

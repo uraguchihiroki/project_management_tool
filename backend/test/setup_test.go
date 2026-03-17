@@ -11,17 +11,22 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/glebarez/sqlite"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// testOrgID はテスト用の固定組織ID
+const testOrgID = "00000000-0000-0000-0000-000000000001"
 
 // testServer はテスト用のHTTPサーバーとDBを保持します
 type testServer struct {
@@ -41,8 +46,11 @@ func newTestServer(t *testing.T) *testServer {
 	}
 
 	if err := db.AutoMigrate(
+		&model.Organization{},
+		&model.SuperAdmin{},
 		&model.Role{},
 		&model.User{},
+		&model.OrganizationUser{},
 		&model.Project{},
 		&model.Status{},
 		&model.Issue{},
@@ -55,6 +63,14 @@ func newTestServer(t *testing.T) *testServer {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 
+	// テスト用固定組織（FRS）をシード
+	frsOrg := model.Organization{
+		ID:        uuid.MustParse(testOrgID),
+		Name:      "FRS",
+		CreatedAt: time.Now(),
+	}
+	db.Create(&frsOrg)
+
 	userRepo := repository.NewUserRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
 	statusRepo := repository.NewStatusRepository(db)
@@ -64,9 +80,13 @@ func newTestServer(t *testing.T) *testServer {
 	workflowRepo := repository.NewWorkflowRepository(db)
 	templateRepo := repository.NewTemplateRepository(db)
 	approvalRepo := repository.NewApprovalRepository(db)
+	orgRepo := repository.NewOrganizationRepository(db)
+	superAdminRepo := repository.NewSuperAdminRepository(db)
 
 	userSvc := service.NewUserService(userRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
+	orgSvc := service.NewOrganizationService(orgRepo)
+	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
 	commentSvc := service.NewCommentService(commentRepo)
 	roleSvc := service.NewRoleService(roleRepo)
@@ -82,6 +102,8 @@ func newTestServer(t *testing.T) *testServer {
 	workflowH := handler.NewWorkflowHandler(workflowSvc)
 	templateH := handler.NewTemplateHandler(templateSvc)
 	approvalH := handler.NewApprovalHandler(approvalSvc)
+	orgH := handler.NewOrganizationHandler(orgSvc)
+	superAdminH := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -116,6 +138,13 @@ func newTestServer(t *testing.T) *testServer {
 	api.GET("/issues/:issueId/approvals", approvalH.List)
 	api.POST("/approvals/:id/approve", approvalH.Approve)
 	api.POST("/approvals/:id/reject", approvalH.Reject)
+	api.GET("/organizations", orgH.List)
+	api.POST("/organizations", orgH.Create)
+	api.GET("/users/:id/organizations", orgH.ListByUser)
+	api.POST("/organizations/:orgId/users", orgH.AddUser)
+	api.POST("/super-admin/login", superAdminH.Login)
+	api.GET("/super-admin/organizations", superAdminH.ListOrganizations)
+	api.POST("/super-admin/organizations", superAdminH.CreateOrganization)
 	api.GET("/admin/users", userH.ListWithRoles)
 	api.GET("/projects", projectH.List)
 	api.POST("/projects", projectH.Create)
@@ -248,9 +277,10 @@ func createTestUser(t *testing.T, ts *testServer, name, email string) string {
 func createTestProject(t *testing.T, ts *testServer, key, name, ownerID string) string {
 	t.Helper()
 	status, resp := ts.req(t, "POST", "/api/v1/projects", map[string]string{
-		"key":      key,
-		"name":     name,
-		"owner_id": ownerID,
+		"key":             key,
+		"name":            name,
+		"owner_id":        ownerID,
+		"organization_id": testOrgID,
 	})
 	assertStatus(t, status, http.StatusCreated, fmt.Sprintf("createProject(%s)", key))
 	return mustGetString(t, resp, "data", "id")
