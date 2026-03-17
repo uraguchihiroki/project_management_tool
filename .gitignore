@@ -23,6 +23,8 @@ frontend/build/
 frontend/.npm
 frontend/.eslintcache
 frontend/.vercel
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
 
 # ==================
 # 環境変数
