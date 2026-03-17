@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProject, getIssue, createComment, getUsers, updateIssue } from '@/lib/api'
-import { useState } from 'react'
+import { useState, use } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Circle, MessageSquare, Send } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
@@ -10,19 +10,20 @@ import type { Status, Comment } from '@/types'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
-export default function IssuePage({ params }: { params: { id: string; number: string } }) {
+export default function IssuePage({ params }: { params: Promise<{ id: string; number: string }> }) {
+  const { id, number } = use(params)
   const queryClient = useQueryClient()
   const [comment, setComment] = useState('')
   const [editingStatus, setEditingStatus] = useState(false)
 
   const { data: project } = useQuery({
-    queryKey: ['project', params.id],
-    queryFn: () => getProject(params.id),
+    queryKey: ['project', id],
+    queryFn: () => getProject(id),
   })
 
   const { data: issue, isLoading } = useQuery({
-    queryKey: ['issue', params.id, params.number],
-    queryFn: () => getIssue(params.id, Number(params.number)),
+    queryKey: ['issue', id, number],
+    queryFn: () => getIssue(id, Number(number)),
   })
 
   const { data: users = [] } = useQuery({
@@ -34,16 +35,16 @@ export default function IssuePage({ params }: { params: { id: string; number: st
     mutationFn: (body: string) =>
       createComment(issue!.id, { author_id: users[0]?.id, body }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issue', params.id, params.number] })
+      queryClient.invalidateQueries({ queryKey: ['issue', id, number] })
       setComment('')
     },
   })
 
   const updateStatusMutation = useMutation({
     mutationFn: (statusId: string) =>
-      updateIssue(params.id, Number(params.number), { status_id: statusId }),
+      updateIssue(id, Number(number), { status_id: statusId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issue', params.id, params.number] })
+      queryClient.invalidateQueries({ queryKey: ['issue', id, number] })
       setEditingStatus(false)
     },
   })
@@ -56,7 +57,7 @@ export default function IssuePage({ params }: { params: { id: string; number: st
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center gap-4">
-          <Link href={`/projects/${params.id}`} className="text-gray-400 hover:text-gray-600">
+          <Link href={`/projects/${id}`} className="text-gray-400 hover:text-gray-600">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>

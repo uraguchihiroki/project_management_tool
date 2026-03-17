@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProject, getIssues, createIssue, getUsers } from '@/lib/api'
-import { useState } from 'react'
+import { useState, use } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Plus, Circle } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
@@ -10,7 +10,8 @@ import type { Issue, Status } from '@/types'
 import { formatDistanceToNow } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
-export default function ProjectPage({ params }: { params: { id: string } }) {
+export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
@@ -22,13 +23,12 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   })
 
   const { data: project, isLoading: projectLoading } = useQuery({
-    queryKey: ['project', params.id],
-    queryFn: () => getProject(params.id),
+    queryKey: ['project', id],
+    queryFn: () => getProject(id),
   })
-
   const { data: issues = [], isLoading: issuesLoading } = useQuery({
-    queryKey: ['issues', params.id],
-    queryFn: () => getIssues(params.id),
+    queryKey: ['issues', id],
+    queryFn: () => getIssues(id),
   })
 
   const { data: users = [] } = useQuery({
@@ -37,7 +37,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   })
 
   const createMutation = useMutation({
-    mutationFn: (data: Parameters<typeof createIssue>[1]) => createIssue(params.id, data),
+    mutationFn: (data: Parameters<typeof createIssue>[1]) => createIssue(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issues', params.id] })
       setShowForm(false)
@@ -118,7 +118,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                   {(statusGroups[status.id] || []).map((issue: Issue) => (
                     <Link
                       key={issue.id}
-                      href={`/projects/${params.id}/issues/${issue.number}`}
+                      href={`/projects/${id}/issues/${issue.number}`}
                       className="block bg-white rounded-lg border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm transition-all"
                     >
                       <div className="flex items-start justify-between gap-2">
