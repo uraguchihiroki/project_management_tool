@@ -64,6 +64,19 @@ type Issue struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
+type IssueApproval struct {
+	ID             uuid.UUID    `gorm:"type:uuid;primaryKey" json:"id"`
+	IssueID        uuid.UUID    `gorm:"type:uuid;not null" json:"issue_id"`
+	WorkflowStepID uint         `gorm:"not null" json:"workflow_step_id"`
+	WorkflowStep   WorkflowStep `gorm:"foreignKey:WorkflowStepID" json:"workflow_step,omitempty"`
+	ApproverID     *uuid.UUID   `gorm:"type:uuid" json:"approver_id,omitempty"`
+	Approver       *User        `gorm:"foreignKey:ApproverID" json:"approver,omitempty"`
+	Status         string       `gorm:"size:20;not null;default:'pending'" json:"status"`
+	Comment        string       `gorm:"type:text" json:"comment"`
+	ActedAt        *time.Time   `json:"acted_at,omitempty"`
+	CreatedAt      time.Time    `json:"created_at"`
+}
+
 type IssueTemplate struct {
 	ID              uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	ProjectID       uuid.UUID `gorm:"type:uuid;not null" json:"project_id"`

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate } from '@/types'
+import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate, IssueApproval } from '@/types'
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
@@ -90,6 +90,16 @@ export const updateIssue = (
 
 export const deleteIssue = (projectId: string, number: number) =>
   api.delete(`/projects/${projectId}/issues/${number}`)
+
+// Approvals
+export const getApprovals = (issueId: string) =>
+  api.get<{ data: IssueApproval[] }>(`/issues/${issueId}/approvals`).then((r) => r.data.data)
+
+export const approveStep = (approvalId: string, approverId: string, comment: string) =>
+  api.post<ApiResponse<IssueApproval>>(`/approvals/${approvalId}/approve`, { approver_id: approverId, comment }).then((r) => r.data.data)
+
+export const rejectStep = (approvalId: string, approverId: string, comment: string) =>
+  api.post<ApiResponse<IssueApproval>>(`/approvals/${approvalId}/reject`, { approver_id: approverId, comment }).then((r) => r.data.data)
 
 // Comments
 export const getComments = (issueId: string) =>

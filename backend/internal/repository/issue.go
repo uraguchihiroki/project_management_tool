@@ -9,8 +9,10 @@ import (
 type IssueRepository interface {
 	FindByProject(projectID uuid.UUID) ([]model.Issue, error)
 	FindByNumber(projectID uuid.UUID, number int) (*model.Issue, error)
+	FindByID(id uuid.UUID) (*model.Issue, error)
 	Create(issue *model.Issue) error
 	Update(issue *model.Issue) error
+	UpdateStatus(id uuid.UUID, statusID uuid.UUID) error
 	Delete(id uuid.UUID) error
 	NextNumber(projectID uuid.UUID) (int, error)
 }
@@ -50,8 +52,21 @@ func (r *issueRepository) FindByNumber(projectID uuid.UUID, number int) (*model.
 	return &issue, nil
 }
 
+func (r *issueRepository) FindByID(id uuid.UUID) (*model.Issue, error) {
+	var issue model.Issue
+	err := r.db.First(&issue, "id = ?", id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &issue, nil
+}
+
 func (r *issueRepository) Create(issue *model.Issue) error {
 	return r.db.Create(issue).Error
+}
+
+func (r *issueRepository) UpdateStatus(id uuid.UUID, statusID uuid.UUID) error {
+	return r.db.Model(&model.Issue{}).Where("id = ?", id).Update("status_id", statusID).Error
 }
 
 func (r *issueRepository) Update(issue *model.Issue) error {

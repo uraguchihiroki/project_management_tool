@@ -37,6 +37,19 @@ export interface Status {
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical'
 
+export interface IssueApproval {
+  id: string
+  issue_id: string
+  workflow_step_id: number
+  workflow_step: WorkflowStep
+  approver_id?: string
+  approver?: User
+  status: 'pending' | 'approved' | 'rejected'
+  comment: string
+  acted_at?: string
+  created_at: string
+}
+
 export interface IssueTemplate {
   id: number
   project_id: string

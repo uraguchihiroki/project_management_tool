@@ -36,6 +36,7 @@ func main() {
 		&model.Workflow{},
 		&model.WorkflowStep{},
 		&model.IssueTemplate{},
+		&model.IssueApproval{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
 	}
@@ -49,6 +50,7 @@ func main() {
 	roleRepo := repository.NewRoleRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
 	templateRepo := repository.NewTemplateRepository(db)
+	approvalRepo := repository.NewApprovalRepository(db)
 
 	// Services
 	userSvc := service.NewUserService(userRepo)
@@ -58,15 +60,17 @@ func main() {
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo)
 	templateSvc := service.NewTemplateService(templateRepo)
+	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
 
 	// Handlers
 	userHandler := handler.NewUserHandler(userSvc)
 	projectHandler := handler.NewProjectHandler(projectSvc)
-	issueHandler := handler.NewIssueHandler(issueSvc)
+	issueHandler := handler.NewIssueHandler(issueSvc, approvalSvc)
 	commentHandler := handler.NewCommentHandler(commentSvc)
 	roleHandler := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowHandler := handler.NewWorkflowHandler(workflowSvc)
 	templateHandler := handler.NewTemplateHandler(templateSvc)
+	approvalHandler := handler.NewApprovalHandler(approvalSvc)
 
 	// Echo
 	e := echo.New()
@@ -113,6 +117,11 @@ func main() {
 	api.PUT("/templates/:id", templateHandler.Update)
 	api.DELETE("/templates/:id", templateHandler.Delete)
 	api.GET("/projects/:projectId/templates", templateHandler.ListByProject)
+
+	// Approvals
+	api.GET("/issues/:issueId/approvals", approvalHandler.List)
+	api.POST("/approvals/:id/approve", approvalHandler.Approve)
+	api.POST("/approvals/:id/reject", approvalHandler.Reject)
 
 	// Admin
 	api.GET("/admin/users", userHandler.ListWithRoles)

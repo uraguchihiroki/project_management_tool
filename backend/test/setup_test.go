@@ -50,6 +50,7 @@ func newTestServer(t *testing.T) *testServer {
 		&model.Workflow{},
 		&model.WorkflowStep{},
 		&model.IssueTemplate{},
+		&model.IssueApproval{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
@@ -62,6 +63,7 @@ func newTestServer(t *testing.T) *testServer {
 	roleRepo := repository.NewRoleRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
 	templateRepo := repository.NewTemplateRepository(db)
+	approvalRepo := repository.NewApprovalRepository(db)
 
 	userSvc := service.NewUserService(userRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
@@ -70,14 +72,16 @@ func newTestServer(t *testing.T) *testServer {
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo)
 	templateSvc := service.NewTemplateService(templateRepo)
+	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
 
 	userH := handler.NewUserHandler(userSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
-	issueH := handler.NewIssueHandler(issueSvc)
+	issueH := handler.NewIssueHandler(issueSvc, approvalSvc)
 	commentH := handler.NewCommentHandler(commentSvc)
 	roleH := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowH := handler.NewWorkflowHandler(workflowSvc)
 	templateH := handler.NewTemplateHandler(templateSvc)
+	approvalH := handler.NewApprovalHandler(approvalSvc)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -109,6 +113,9 @@ func newTestServer(t *testing.T) *testServer {
 	api.PUT("/templates/:id", templateH.Update)
 	api.DELETE("/templates/:id", templateH.Delete)
 	api.GET("/projects/:projectId/templates", templateH.ListByProject)
+	api.GET("/issues/:issueId/approvals", approvalH.List)
+	api.POST("/approvals/:id/approve", approvalH.Approve)
+	api.POST("/approvals/:id/reject", approvalH.Reject)
 	api.GET("/admin/users", userH.ListWithRoles)
 	api.GET("/projects", projectH.List)
 	api.POST("/projects", projectH.Create)

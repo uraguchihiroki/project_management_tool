@@ -1,16 +1,31 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getProject, getIssue, createComment, getUsers, updateIssue } from '@/lib/api'
+import {
+  getProject, getIssue, createComment, updateIssue,
+  getApprovals, approveStep, rejectStep,
+} from '@/lib/api'
 import { useState, use } from 'react'
 import Link from 'next/link'
-import { Circle, MessageSquare, Send } from 'lucide-react'
+import { Circle, MessageSquare, Send, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
-import type { Status, Comment } from '@/types'
+import type { Status, Comment, IssueApproval } from '@/types'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { useRequireAuth } from '@/context/AuthContext'
 import Header from '@/components/Header'
+
+const APPROVAL_STATUS_LABELS: Record<string, string> = {
+  pending: '未承認',
+  approved: '承認済み',
+  rejected: '却下',
+}
+
+const ApprovalStatusIcon = ({ status }: { status: string }) => {
+  if (status === 'approved') return <CheckCircle className="w-5 h-5 text-green-500" />
+  if (status === 'rejected') return <XCircle className="w-5 h-5 text-red-500" />
+  return <Clock className="w-5 h-5 text-gray-400" />
+}
 
 export default function IssuePage({ params }: { params: Promise<{ id: string; number: string }> }) {
   const { id, number } = use(params)
@@ -18,6 +33,7 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
   const queryClient = useQueryClient()
   const [comment, setComment] = useState('')
   const [editingStatus, setEditingStatus] = useState(false)
+  const [approvalComment, setApprovalComment] = useState<Record<string, string>>({})
 
   const { data: project } = useQuery({
     queryKey: ['project', id],
@@ -29,9 +45,10 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
     queryFn: () => getIssue(id, Number(number)),
   })
 
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: getUsers,
+  const { data: approvals = [] } = useQuery({
+    queryKey: ['approvals', issue?.id],
+    queryFn: () => getApprovals(issue!.id),
+    enabled: !!issue?.id,
   })
 
   const commentMutation = useMutation({
@@ -52,9 +69,34 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
     },
   })
 
+  const approveMutation = useMutation({
+    mutationFn: ({ approvalId, comment }: { approvalId: string; comment: string }) =>
+      approveStep(approvalId, currentUser!.id, comment),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['approvals', issue?.id] })
+      queryClient.invalidateQueries({ queryKey: ['issue', id, number] })
+    },
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: ({ approvalId, comment }: { approvalId: string; comment: string }) =>
+      rejectStep(approvalId, currentUser!.id, comment),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['approvals', issue?.id] })
+    },
+  })
+
   if (!currentUser) return null
   if (isLoading) return <div className="flex items-center justify-center h-screen text-gray-500">読み込み中...</div>
   if (!issue) return <div className="flex items-center justify-center h-screen text-gray-500">Issueが見つかりません</div>
+
+  // 承認ステップをorder順にソート
+  const sortedApprovals = [...approvals].sort(
+    (a, b) => (a.workflow_step?.order ?? 0) - (b.workflow_step?.order ?? 0)
+  )
+
+  // 現在のアクティブなステップ（最初のpendingステップ）
+  const activeApproval = sortedApprovals.find((a) => a.status === 'pending')
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -82,6 +124,130 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
                 <p className="mt-4 text-gray-400 italic">説明はありません</p>
               )}
             </div>
+
+            {/* Approval Steps */}
+            {sortedApprovals.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-blue-500" />
+                  承認フロー
+                </h2>
+                <div className="space-y-4">
+                  {sortedApprovals.map((approval: IssueApproval, idx) => {
+                    const step = approval.workflow_step
+                    const isActive = activeApproval?.id === approval.id
+
+                    return (
+                      <div
+                        key={approval.id}
+                        className={`rounded-lg border p-4 transition-colors ${
+                          isActive
+                            ? 'border-blue-300 bg-blue-50'
+                            : approval.status === 'approved'
+                            ? 'border-green-200 bg-green-50'
+                            : approval.status === 'rejected'
+                            ? 'border-red-200 bg-red-50'
+                            : 'border-gray-200 bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-white border text-xs font-bold text-gray-500">
+                              {step?.order}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">{step?.name}</p>
+                              <p className="text-xs text-gray-500">必要レベル: {step?.required_level}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <ApprovalStatusIcon status={approval.status} />
+                            <span className={`text-xs font-medium ${
+                              approval.status === 'approved' ? 'text-green-600'
+                              : approval.status === 'rejected' ? 'text-red-600'
+                              : 'text-gray-500'
+                            }`}>
+                              {APPROVAL_STATUS_LABELS[approval.status]}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 承認者情報 */}
+                        {approval.approver && (
+                          <div className="mt-2 text-xs text-gray-500 flex items-center gap-2">
+                            <span>{approval.approver.name}</span>
+                            {approval.acted_at && (
+                              <span>{format(new Date(approval.acted_at), 'yyyy/MM/dd HH:mm', { locale: ja })}</span>
+                            )}
+                            {approval.comment && <span className="italic">「{approval.comment}」</span>}
+                          </div>
+                        )}
+
+                        {/* アクティブなステップの承認・却下ボタン */}
+                        {isActive && (
+                          <div className="mt-3 space-y-2">
+                            <textarea
+                              value={approvalComment[approval.id] ?? ''}
+                              onChange={(e) =>
+                                setApprovalComment((prev) => ({ ...prev, [approval.id]: e.target.value }))
+                              }
+                              placeholder="コメント（任意）"
+                              rows={2}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() =>
+                                  approveMutation.mutate({
+                                    approvalId: approval.id,
+                                    comment: approvalComment[approval.id] ?? '',
+                                  })
+                                }
+                                disabled={approveMutation.isPending}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                                承認
+                              </button>
+                              <button
+                                onClick={() =>
+                                  rejectMutation.mutate({
+                                    approvalId: approval.id,
+                                    comment: approvalComment[approval.id] ?? '',
+                                  })
+                                }
+                                disabled={rejectMutation.isPending}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium"
+                              >
+                                <XCircle className="w-4 h-4" />
+                                却下
+                              </button>
+                            </div>
+                            {(approveMutation.isError || rejectMutation.isError) && (
+                              <p className="text-xs text-red-600">
+                                {String((approveMutation.error || rejectMutation.error) ?? '操作に失敗しました')}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* 全ステップ承認完了メッセージ */}
+                {sortedApprovals.length > 0 && sortedApprovals.every((a) => a.status === 'approved') && (
+                  <div className="mt-4 p-3 bg-green-100 rounded-lg text-sm text-green-700 font-medium text-center">
+                    すべての承認ステップが完了しました
+                  </div>
+                )}
+                {sortedApprovals.some((a) => a.status === 'rejected') && (
+                  <div className="mt-4 p-3 bg-red-100 rounded-lg text-sm text-red-700 font-medium text-center">
+                    承認フローが却下されました
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Comments */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -204,6 +370,29 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
                 </p>
               </div>
             </div>
+
+            {/* Approval Summary */}
+            {sortedApprovals.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">承認進捗</h3>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-green-500 h-2 rounded-full transition-all"
+                      style={{
+                        width: `${(sortedApprovals.filter((a) => a.status === 'approved').length / sortedApprovals.length) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                    {sortedApprovals.filter((a) => a.status === 'approved').length} / {sortedApprovals.length}
+                  </span>
+                </div>
+                {sortedApprovals.some((a) => a.status === 'rejected') && (
+                  <p className="mt-2 text-xs text-red-600 font-medium">却下あり</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </main>

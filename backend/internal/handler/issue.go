@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -10,11 +11,12 @@ import (
 )
 
 type IssueHandler struct {
-	issueService service.IssueService
+	issueService    service.IssueService
+	approvalService service.ApprovalService
 }
 
-func NewIssueHandler(issueService service.IssueService) *IssueHandler {
-	return &IssueHandler{issueService: issueService}
+func NewIssueHandler(issueService service.IssueService, approvalService service.ApprovalService) *IssueHandler {
+	return &IssueHandler{issueService: issueService, approvalService: approvalService}
 }
 
 func (h *IssueHandler) List(c echo.Context) error {
@@ -90,6 +92,12 @@ func (h *IssueHandler) Create(c echo.Context) error {
 	issue, err := h.issueService.Create(projectID, input)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	// ワークフローが紐付いている場合は承認レコードを自動生成
+	if issue.WorkflowID != nil {
+		if err := h.approvalService.InitializeForIssue(issue.ID, *issue.WorkflowID); err != nil {
+			log.Printf("failed to initialize approvals for issue %s: %v", issue.ID, err)
+		}
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": issue})
 }
