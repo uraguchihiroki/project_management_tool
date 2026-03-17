@@ -37,7 +37,7 @@ func (h *OrganizationHandler) Create(c echo.Context) error {
 	if req.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
-	org, err := h.orgService.Create(req.Name)
+	org, err := h.orgService.Create(req.Name, "", "")
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}

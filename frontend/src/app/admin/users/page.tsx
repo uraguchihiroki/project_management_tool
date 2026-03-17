@@ -2,30 +2,62 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Shield, ShieldOff, X, Check } from 'lucide-react'
+import { Shield, ShieldOff, X, Check, Plus, Pencil, Trash2 } from 'lucide-react'
+import { useAuth } from '@/context/AuthContext'
+import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from '@/lib/api'
 import type { Role, User } from '@/types'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
-async function fetchAdminUsers(): Promise<User[]> {
-  const res = await fetch(`${API}/admin/users`)
-  const json = await res.json()
-  return json.data ?? []
-}
-
-async function fetchRoles(): Promise<Role[]> {
-  const res = await fetch(`${API}/roles`)
+async function fetchRoles(orgId?: string): Promise<Role[]> {
+  const url = orgId ? `${API}/roles?org_id=${orgId}` : `${API}/roles`
+  const res = await fetch(url)
   const json = await res.json()
   return json.data ?? []
 }
 
 export default function AdminUsersPage() {
+  const { currentOrg } = useAuth()
   const queryClient = useQueryClient()
-  const { data: users = [], isLoading } = useQuery({ queryKey: ['admin-users'], queryFn: fetchAdminUsers })
-  const { data: allRoles = [] } = useQuery({ queryKey: ['roles'], queryFn: fetchRoles })
+  const { data: users = [], isLoading } = useQuery({
+    queryKey: ['admin-users', currentOrg?.id],
+    queryFn: () => getAdminUsers(currentOrg!.id),
+    enabled: !!currentOrg?.id,
+  })
+  const { data: allRoles = [] } = useQuery({
+    queryKey: ['roles', currentOrg?.id],
+    queryFn: () => fetchRoles(currentOrg?.id),
+    enabled: !!currentOrg?.id,
+  })
 
-  const [editingUserId, setEditingUserId] = useState<string | null>(null)
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [createForm, setCreateForm] = useState({ name: '', email: '' })
+  const [editingNameUserId, setEditingNameUserId] = useState<string | null>(null)
+  const [editingRoleUserId, setEditingRoleUserId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
   const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([])
+
+  const createMutation = useMutation({
+    mutationFn: () => createAdminUser(currentOrg!.id, createForm.name, createForm.email),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      setShowCreateForm(false)
+      setCreateForm({ name: '', email: '' })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ userId, name }: { userId: string; name: string }) => updateAdminUser(userId, name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      setEditingNameUserId(null)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => deleteAdminUser(userId, currentOrg!.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-users'] }),
+  })
 
   const setAdminMutation = useMutation({
     mutationFn: async ({ userId, isAdmin }: { userId: string; isAdmin: boolean }) => {
@@ -50,13 +82,18 @@ export default function AdminUsersPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
-      setEditingUserId(null)
+      setEditingRoleUserId(null)
     },
   })
 
   const startRoleEdit = (user: User) => {
-    setEditingUserId(user.id)
+    setEditingRoleUserId(user.id)
     setSelectedRoleIds((user.roles ?? []).map((r) => r.id))
+  }
+
+  const startNameEdit = (user: User) => {
+    setEditingNameUserId(user.id)
+    setEditingName(user.name)
   }
 
   const toggleRole = (roleId: number) => {
@@ -65,14 +102,83 @@ export default function AdminUsersPage() {
     )
   }
 
+  if (!currentOrg) {
+    return (
+      <div className="p-8 text-center text-gray-500">
+        組織を選択してください
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">ユーザー管理</h1>
-        <p className="text-sm text-gray-500 mt-0.5">管理者フラグと役職の割り当てを管理します</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">ユーザー管理</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {currentOrg.name} のユーザーを管理します（作成・更新・削除・役職）
+          </p>
+        </div>
+        <button
+          onClick={() => setShowCreateForm(!showCreateForm)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          ユーザー登録
+        </button>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        {showCreateForm && (
+          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (createForm.name && createForm.email) createMutation.mutate()
+              }}
+              className="flex gap-3 flex-wrap items-end"
+            >
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">名前</label>
+                <input
+                  type="text"
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="山田 太郎"
+                  className="w-40 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">メール *</label>
+                <input
+                  type="email"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="taro@example.com"
+                  required
+                  className="w-48 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending || !createForm.email}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                >
+                  登録
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateForm(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="p-8 text-center text-gray-400 text-sm">読み込み中...</div>
         ) : users.length === 0 ? (
@@ -84,20 +190,54 @@ export default function AdminUsersPage() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">ユーザー</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">役職</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-24">管理者</th>
-                <th className="px-4 py-3 w-24"></th>
+                <th className="px-4 py-3 w-32"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {users.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
-                    <div>
-                      <p className="font-medium text-gray-900 text-sm">{user.name}</p>
-                      <p className="text-xs text-gray-400">{user.email}</p>
-                    </div>
+                    {editingNameUserId === user.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          className="w-32 px-2 py-1 border border-gray-300 rounded text-sm"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => updateMutation.mutate({ userId: user.id, name: editingName })}
+                          disabled={updateMutation.isPending}
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setEditingNameUserId(null)}
+                          className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 group">
+                        <div>
+                          <p className="font-medium text-gray-900 text-sm">{user.name}</p>
+                          <p className="text-xs text-gray-400">{user.email}</p>
+                        </div>
+                        <button
+                          onClick={() => startNameEdit(user)}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-blue-600 rounded"
+                          title="名前を編集"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
-                    {editingUserId === user.id ? (
+                    {editingRoleUserId === user.id ? (
                       <div className="space-y-2">
                         <div className="flex flex-wrap gap-1.5">
                           {allRoles.length === 0 ? (
@@ -129,7 +269,7 @@ export default function AdminUsersPage() {
                             保存
                           </button>
                           <button
-                            onClick={() => setEditingUserId(null)}
+                            onClick={() => setEditingRoleUserId(null)}
                             className="flex items-center gap-1 px-2.5 py-1 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors"
                           >
                             <X className="w-3 h-3" />
@@ -137,7 +277,7 @@ export default function AdminUsersPage() {
                           </button>
                         </div>
                       </div>
-                    ) : (
+                    ) : editingRoleUserId !== user.id ? (
                       <button
                         onClick={() => startRoleEdit(user)}
                         className="flex flex-wrap gap-1 group"
@@ -159,7 +299,7 @@ export default function AdminUsersPage() {
                           ))
                         )}
                       </button>
-                    )}
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button
@@ -179,13 +319,26 @@ export default function AdminUsersPage() {
                     </button>
                   </td>
                   <td className="px-4 py-3">
-                    {editingUserId !== user.id && (
-                      <button
-                        onClick={() => startRoleEdit(user)}
-                        className="text-xs text-blue-600 hover:underline"
-                      >
-                        役職を編集
-                      </button>
+                    {editingNameUserId !== user.id && editingRoleUserId !== user.id && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => startRoleEdit(user)}
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          役職編集
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`${user.name} をこの組織から除外しますか？`)) {
+                              deleteMutation.mutate(user.id)
+                            }
+                          }}
+                          className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                          title="組織から除外"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>

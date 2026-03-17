@@ -14,6 +14,7 @@ type OrganizationRepository interface {
 	Create(org *model.Organization) error
 	FindByUserID(userID uuid.UUID) ([]model.Organization, error)
 	AddUser(orgUser *model.OrganizationUser) error
+	RemoveUser(orgID, userID uuid.UUID) error
 }
 
 type organizationRepository struct {
@@ -63,4 +64,9 @@ func (r *organizationRepository) AddUser(orgUser *model.OrganizationUser) error 
 	orgUser.JoinedAt = time.Now()
 	return r.db.Where("organization_id = ? AND user_id = ?", orgUser.OrganizationID, orgUser.UserID).
 		FirstOrCreate(orgUser).Error
+}
+
+func (r *organizationRepository) RemoveUser(orgID, userID uuid.UUID) error {
+	return r.db.Where("organization_id = ? AND user_id = ?", orgID, userID).
+		Delete(&model.OrganizationUser{}).Error
 }

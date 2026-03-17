@@ -13,6 +13,19 @@ export const getUsers = () =>
 export const createUser = (data: { name: string; email: string }) =>
   api.post<ApiResponse<User>>('/users', data).then((r) => r.data.data)
 
+// Admin users (org-scoped)
+export const getAdminUsers = (orgId: string) =>
+  api.get<ListResponse<User>>('/admin/users', { params: { org_id: orgId } }).then((r) => r.data.data)
+
+export const createAdminUser = (orgId: string, name: string, email: string) =>
+  api.post<ApiResponse<User>>('/admin/users', { org_id: orgId, name, email }).then((r) => r.data.data)
+
+export const updateAdminUser = (id: string, name: string) =>
+  api.put<ApiResponse<unknown>>(`/admin/users/${id}`, { name }).then((r) => r.data)
+
+export const deleteAdminUser = (id: string, orgId: string) =>
+  api.delete(`/admin/users/${id}`, { params: { org_id: orgId } })
+
 // Organizations
 export const getOrganizations = () =>
   api.get<ListResponse<Organization>>('/organizations').then((r) => r.data.data)
@@ -33,8 +46,8 @@ export const superAdminLogin = (email: string) =>
 export const superAdminGetOrganizations = () =>
   api.get<ListResponse<Organization>>('/super-admin/organizations').then((r) => r.data.data)
 
-export const superAdminCreateOrganization = (name: string) =>
-  api.post<ApiResponse<Organization>>('/super-admin/organizations', { name }).then((r) => r.data.data)
+export const superAdminCreateOrganization = (data: { name: string; admin_email?: string; admin_name?: string }) =>
+  api.post<ApiResponse<Organization>>('/super-admin/organizations', data).then((r) => r.data.data)
 
 // Projects
 export const getProjects = (orgId?: string) =>

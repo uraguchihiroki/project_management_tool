@@ -161,4 +161,74 @@ func TestSuperAdmin_Login(t *testing.T) {
 		assertStatus(t, status, http.StatusCreated, "create org via super admin")
 		assertField(t, mustGetString(t, resp, "data", "name"), "スーパー経由で作成", "name")
 	})
+
+	t.Run("admin_email指定で組織作成時に管理者ユーザーが自動作成される", func(t *testing.T) {
+		status, resp := ts.req(t, "POST", "/api/v1/super-admin/organizations", map[string]interface{}{
+			"name":        "管理者付き組織",
+			"admin_email": "orgadmin@example.com",
+			"admin_name":  "組織管理者",
+		})
+		assertStatus(t, status, http.StatusCreated, "create org with admin")
+		orgID := mustGetString(t, resp, "data", "id")
+		// ユーザーが組織に所属しているか確認
+		_, usersResp := ts.req(t, "GET", "/api/v1/admin/users?org_id="+orgID, nil)
+		users := mustGetArray(t, usersResp, "data")
+		if len(users) != 1 {
+			t.Fatalf("expected 1 user in org, got %d", len(users))
+		}
+		u := users[0].(map[string]interface{})
+		assertField(t, u["email"].(string), "orgadmin@example.com", "email")
+		assertField(t, u["name"].(string), "組織管理者", "name")
+	})
+}
+
+func TestAdminUsers_OrgScoped(t *testing.T) {
+	ts := newTestServer(t)
+
+	userID := createTestUser(t, ts, "既存ユーザー", "existing@example.com")
+	ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/users", map[string]interface{}{
+		"user_id": userID,
+	})
+
+	t.Run("org_idで管理者ユーザー一覧をフィルタできる", func(t *testing.T) {
+		status, resp := ts.req(t, "GET", "/api/v1/admin/users?org_id="+testOrgID, nil)
+		assertStatus(t, status, http.StatusOK, "admin users by org")
+		users := mustGetArray(t, resp, "data")
+		if len(users) < 1 {
+			t.Fatalf("expected at least 1 user, got %d", len(users))
+		}
+	})
+
+	t.Run("管理者が組織にユーザーを登録できる", func(t *testing.T) {
+		status, resp := ts.req(t, "POST", "/api/v1/admin/users", map[string]interface{}{
+			"org_id": testOrgID,
+			"name":   "新規メンバー",
+			"email":  "newmember@example.com",
+		})
+		assertStatus(t, status, http.StatusCreated, "create admin user")
+		assertField(t, mustGetString(t, resp, "data", "email"), "newmember@example.com", "email")
+	})
+
+	t.Run("管理者がユーザー名を更新できる", func(t *testing.T) {
+		status, _ := ts.req(t, "PUT", "/api/v1/admin/users/"+userID, map[string]interface{}{
+			"name": "更新後の名前",
+		})
+		assertStatus(t, status, http.StatusOK, "update user name")
+		_, getResp := ts.req(t, "GET", "/api/v1/users/"+userID, nil)
+		assertField(t, mustGetString(t, getResp, "data", "name"), "更新後の名前", "name")
+	})
+
+	t.Run("管理者が組織からユーザーを除外できる", func(t *testing.T) {
+		newUserID := createTestUser(t, ts, "除外対象", "remove@example.com")
+		ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/users", map[string]interface{}{
+			"user_id": newUserID,
+		})
+		status, _ := ts.req(t, "DELETE", "/api/v1/admin/users/"+newUserID+"?org_id="+testOrgID, nil)
+		assertStatus(t, status, http.StatusNoContent, "remove from org")
+		_, orgResp := ts.req(t, "GET", "/api/v1/users/"+newUserID+"/organizations", nil)
+		orgs := mustGetArray(t, orgResp, "data")
+		if len(orgs) != 0 {
+			t.Errorf("expected 0 orgs after remove, got %d", len(orgs))
+		}
+	})
 }

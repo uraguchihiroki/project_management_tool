@@ -58,9 +58,9 @@ func main() {
 	superAdminRepo := repository.NewSuperAdminRepository(db)
 
 	// Services
-	userSvc := service.NewUserService(userRepo)
+	userSvc := service.NewUserService(userRepo, orgRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
-	orgSvc := service.NewOrganizationService(orgRepo)
+	orgSvc := service.NewOrganizationService(orgRepo, userRepo)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
 	commentSvc := service.NewCommentService(commentRepo)
@@ -145,6 +145,9 @@ func main() {
 
 	// Admin
 	api.GET("/admin/users", userHandler.ListWithRoles)
+	api.POST("/admin/users", userHandler.CreateForOrg)
+	api.PUT("/admin/users/:id", userHandler.UpdateUser)
+	api.DELETE("/admin/users/:id", userHandler.RemoveFromOrg)
 
 	// Projects
 	api.GET("/projects", projectHandler.List)

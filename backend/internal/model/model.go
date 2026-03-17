@@ -7,9 +7,10 @@ import (
 )
 
 type Organization struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	Name      string    `gorm:"size:200;not null;uniqueIndex" json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	Name       string    `gorm:"size:200;not null;uniqueIndex" json:"name"`
+	AdminEmail string    `gorm:"size:255" json:"admin_email"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type SuperAdmin struct {

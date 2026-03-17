@@ -39,25 +39,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCurrentOrg(org)
   }, [])
 
-  // ログイン後に組織を取得し、1件なら自動選択・複数なら選択画面へ
-  const handleOrgSelection = useCallback(async (userId: string) => {
+  // ログイン後に組織を取得し、1件なら自動選択・複数なら選択画面へ・0件ならエラー
+  const handleOrgSelection = useCallback(async (userId: string): Promise<{ dest: string; error?: string }> => {
     try {
       const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
       const res = await fetch(`${base}/users/${userId}/organizations`)
-      if (!res.ok) return '/projects'
+      if (!res.ok) return { dest: '/projects' }
       const json = await res.json()
       const orgs: Organization[] = json.data ?? []
       if (orgs.length === 1) {
         sessionStorage.setItem(ORG_KEY, JSON.stringify(orgs[0]))
         setCurrentOrg(orgs[0])
-        return '/projects'
-      } else if (orgs.length > 1) {
-        return '/select-org'
+        return { dest: '/projects' }
       }
+      if (orgs.length > 1) {
+        return { dest: '/select-org' }
+      }
+      return { dest: '/login', error: '所属組織がありません。管理者に連絡してください。' }
     } catch {
-      // エラーでも /projects へ
+      return { dest: '/projects' }
     }
-    return '/projects'
   }, [])
 
   const login = useCallback(async (email: string, asAdmin?: boolean): Promise<{ ok: boolean; error?: string }> => {
@@ -78,7 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = { ...found, is_admin: asAdmin ?? false }
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
       setCurrentUser(user)
-      const dest = await handleOrgSelection(found.id)
+      const { dest, error } = await handleOrgSelection(found.id)
+      if (error) return { ok: false, error }
       router.push(dest)
       return { ok: true }
     } catch {
@@ -118,7 +120,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = { ...created, is_admin: asAdmin ?? created.is_admin }
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
       setCurrentUser(user)
-      const dest = await handleOrgSelection(created.id)
+      const { dest, error } = await handleOrgSelection(created.id)
+      if (error) return { ok: false, error }
       router.push(dest)
       return { ok: true }
     } catch {

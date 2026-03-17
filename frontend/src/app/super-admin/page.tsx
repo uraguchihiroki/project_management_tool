@@ -15,6 +15,8 @@ export default function SuperAdminPage() {
   const queryClient = useQueryClient()
   const router = useRouter()
   const [newOrgName, setNewOrgName] = useState('')
+  const [newOrgAdminEmail, setNewOrgAdminEmail] = useState('')
+  const [newOrgAdminName, setNewOrgAdminName] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [formError, setFormError] = useState('')
 
@@ -25,10 +27,13 @@ export default function SuperAdminPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (name: string) => superAdminCreateOrganization(name),
+    mutationFn: (data: { name: string; admin_email: string; admin_name: string }) =>
+      superAdminCreateOrganization(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['super-admin', 'organizations'] })
       setNewOrgName('')
+      setNewOrgAdminEmail('')
+      setNewOrgAdminName('')
       setShowForm(false)
       setFormError('')
     },
@@ -41,7 +46,11 @@ export default function SuperAdminPage() {
     e.preventDefault()
     if (!newOrgName.trim()) return
     setFormError('')
-    createMutation.mutate(newOrgName.trim())
+    createMutation.mutate({
+      name: newOrgName.trim(),
+      admin_email: newOrgAdminEmail.trim(),
+      admin_name: newOrgAdminName.trim(),
+    })
   }
 
   if (!currentSuperAdmin) return null
@@ -91,30 +100,48 @@ export default function SuperAdminPage() {
           {/* 新規作成フォーム */}
           {showForm && (
             <div className="px-6 py-4 border-b border-gray-700 bg-gray-750">
-              <form onSubmit={handleCreate} className="flex gap-3">
-                <input
-                  type="text"
-                  value={newOrgName}
-                  onChange={(e) => setNewOrgName(e.target.value)}
-                  placeholder="会社名・組織名"
-                  className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  autoFocus
-                />
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending || !newOrgName.trim()}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg"
-                >
-                  {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                  作成
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowForm(false); setFormError('') }}
-                  className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg"
-                >
-                  キャンセル
-                </button>
+              <form onSubmit={handleCreate} className="space-y-3">
+                <div className="flex gap-3 flex-wrap">
+                  <input
+                    type="text"
+                    value={newOrgName}
+                    onChange={(e) => setNewOrgName(e.target.value)}
+                    placeholder="会社名・組織名 *"
+                    className="flex-1 min-w-[200px] px-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    autoFocus
+                  />
+                  <input
+                    type="email"
+                    value={newOrgAdminEmail}
+                    onChange={(e) => setNewOrgAdminEmail(e.target.value)}
+                    placeholder="管理者メール"
+                    className="flex-1 min-w-[200px] px-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  <input
+                    type="text"
+                    value={newOrgAdminName}
+                    onChange={(e) => setNewOrgAdminName(e.target.value)}
+                    placeholder="管理者名"
+                    className="flex-1 min-w-[150px] px-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={createMutation.isPending || !newOrgName.trim()}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg"
+                  >
+                    {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                    作成
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowForm(false); setFormError('') }}
+                    className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg"
+                  >
+                    キャンセル
+                  </button>
+                </div>
               </form>
               {formError && <p className="mt-2 text-sm text-red-400">{formError}</p>}
             </div>

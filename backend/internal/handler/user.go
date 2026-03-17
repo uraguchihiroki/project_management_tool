@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
 )
 
@@ -52,13 +53,90 @@ func (h *UserHandler) Create(c echo.Context) error {
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": user})
 }
 
-// GET /api/v1/admin/users （ロール付きユーザー一覧）
+// GET /api/v1/admin/users （ロール付きユーザー一覧、org_id で組織フィルタ）
 func (h *UserHandler) ListWithRoles(c echo.Context) error {
-	users, err := h.userService.ListWithRoles()
+	var users []model.User
+	var err error
+	if orgIDStr := c.QueryParam("org_id"); orgIDStr != "" {
+		orgID, parseErr := uuid.Parse(orgIDStr)
+		if parseErr != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+		}
+		users, err = h.userService.ListByOrg(orgID)
+	} else {
+		users, err = h.userService.ListWithRoles()
+	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": users})
+}
+
+// POST /api/v1/admin/users （組織にユーザーを追加）
+func (h *UserHandler) CreateForOrg(c echo.Context) error {
+	type Request struct {
+		OrgID string `json:"org_id"`
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if req.OrgID == "" || req.Email == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "org_id and email are required")
+	}
+	orgID, err := uuid.Parse(req.OrgID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+	}
+	user, err := h.userService.CreateForOrg(orgID, req.Name, req.Email)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusCreated, map[string]interface{}{"data": user})
+}
+
+// PUT /api/v1/admin/users/:id （ユーザー名を更新）
+func (h *UserHandler) UpdateUser(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
+	}
+	type Request struct {
+		Name string `json:"name"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if req.Name == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+	}
+	if err := h.userService.Update(id, req.Name); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"message": "updated"})
+}
+
+// DELETE /api/v1/admin/users/:id （組織からユーザーを除外）
+func (h *UserHandler) RemoveFromOrg(c echo.Context) error {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
+	}
+	orgIDStr := c.QueryParam("org_id")
+	if orgIDStr == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "org_id is required")
+	}
+	orgID, err := uuid.Parse(orgIDStr)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+	}
+	if err := h.userService.RemoveFromOrg(orgID, userID); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // PUT /api/v1/users/:id/admin

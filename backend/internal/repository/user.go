@@ -10,7 +10,10 @@ type UserRepository interface {
 	FindAll() ([]model.User, error)
 	FindAllWithRoles() ([]model.User, error)
 	FindByID(id uuid.UUID) (*model.User, error)
+	FindByEmail(email string) (*model.User, error)
+	FindByOrg(orgID uuid.UUID) ([]model.User, error)
 	Create(user *model.User) error
+	Update(user *model.User) error
 	UpdateAdmin(id uuid.UUID, isAdmin bool) error
 	Count() (int64, error)
 }
@@ -38,6 +41,25 @@ func (r *userRepository) FindByID(id uuid.UUID) (*model.User, error) {
 	return &user, nil
 }
 
+func (r *userRepository) FindByEmail(email string) (*model.User, error) {
+	var user model.User
+	err := r.db.Where("email = ?", email).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *userRepository) FindByOrg(orgID uuid.UUID) ([]model.User, error) {
+	var users []model.User
+	err := r.db.
+		Joins("JOIN organization_users ON organization_users.user_id = users.id").
+		Where("organization_users.organization_id = ?", orgID).
+		Preload("Roles", "organization_id = ?", orgID).
+		Find(&users).Error
+	return users, err
+}
+
 func (r *userRepository) FindAllWithRoles() ([]model.User, error) {
 	var users []model.User
 	err := r.db.Preload("Roles").Find(&users).Error
@@ -46,6 +68,13 @@ func (r *userRepository) FindAllWithRoles() ([]model.User, error) {
 
 func (r *userRepository) Create(user *model.User) error {
 	return r.db.Create(user).Error
+}
+
+func (r *userRepository) Update(user *model.User) error {
+	return r.db.Model(user).Updates(map[string]interface{}{
+		"name":  user.Name,
+		"email": user.Email,
+	}).Error
 }
 
 func (r *userRepository) UpdateAdmin(id uuid.UUID, isAdmin bool) error {

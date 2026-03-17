@@ -5,19 +5,14 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { FolderKanban } from 'lucide-react'
 
-type Mode = 'login' | 'register'
-
 export default function LoginPage() {
-  const { currentUser, login, register } = useAuth()
+  const { currentUser, login } = useAuth()
   const router = useRouter()
-  const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [asAdmin, setAsAdmin] = useState(false)
 
-  // ログイン済みなら /projects へ
   useEffect(() => {
     if (currentUser) router.push('/projects')
   }, [currentUser, router])
@@ -27,9 +22,7 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
-    const result = mode === 'login'
-      ? await login(email, asAdmin)
-      : await register(name, email, asAdmin)
+    const result = await login(email, asAdmin)
 
     setLoading(false)
 
@@ -43,53 +36,15 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
           <FolderKanban className="w-8 h-8 text-blue-600" />
           <span className="text-2xl font-bold text-gray-900">ProjectHub</span>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          {/* Tab */}
-          <div className="flex rounded-lg border border-gray-200 p-1 mb-6">
-            <button
-              onClick={() => { setMode('login'); setError('') }}
-              className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                mode === 'login'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              ログイン
-            </button>
-            <button
-              onClick={() => { setMode('register'); setError('') }}
-              className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                mode === 'register'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              新規登録
-            </button>
-          </div>
+          <h1 className="text-lg font-semibold text-gray-900 mb-6">ログイン</h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'register' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  名前 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="例: 山田 太郎"
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 メールアドレス <span className="text-red-500">*</span>
@@ -104,7 +59,6 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* 管理者チェックボックス */}
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -124,17 +78,13 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              {loading
-                ? '処理中...'
-                : mode === 'login' ? 'ログイン' : '登録してログイン'}
+              {loading ? '処理中...' : 'ログイン'}
             </button>
           </form>
 
-          {mode === 'login' && (
-            <p className="mt-4 text-center text-xs text-gray-400">
-              アカウントがない場合は「新規登録」タブへ
-            </p>
-          )}
+          <p className="mt-4 text-center text-xs text-gray-400">
+            アカウントがない場合は組織の管理者に連絡してください
+          </p>
         </div>
       </div>
     </div>

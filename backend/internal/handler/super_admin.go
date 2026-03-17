@@ -47,7 +47,9 @@ func (h *SuperAdminHandler) ListOrganizations(c echo.Context) error {
 // POST /api/v1/super-admin/organizations
 func (h *SuperAdminHandler) CreateOrganization(c echo.Context) error {
 	type Request struct {
-		Name string `json:"name"`
+		Name       string `json:"name"`
+		AdminEmail string `json:"admin_email"`
+		AdminName  string `json:"admin_name"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -56,7 +58,7 @@ func (h *SuperAdminHandler) CreateOrganization(c echo.Context) error {
 	if req.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
-	org, err := h.orgService.Create(req.Name)
+	org, err := h.orgService.Create(req.Name, req.AdminEmail, req.AdminName)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
