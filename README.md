@@ -27,9 +27,15 @@ cd project_management_tool
 # Docker で PostgreSQL 起動
 docker-compose up -d db
 
-# バックエンド起動
+# バックエンド起動（初回またはコード変更後にビルド）
 cd backend
-go run cmd/server/main.go
+go build -o server.exe ./cmd/server/
+./server.exe
+
+# ※ go run ではなく go build を使う理由:
+# go run は毎回一時ファイルを生成するため、Windowsファイアウォールが
+# 毎回ネットワークアクセスの許可を求めてくる。
+# go build で exe を作れば一度許可するだけで済む。
 
 # フロントエンド起動（別ターミナル）
 cd frontend
