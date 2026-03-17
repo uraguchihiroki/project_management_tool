@@ -57,6 +57,8 @@ func (h *IssueHandler) Create(c echo.Context) error {
 		Priority    string  `json:"priority"`
 		AssigneeID  *string `json:"assignee_id"`
 		ReporterID  string  `json:"reporter_id" validate:"required,uuid"`
+		TemplateID  *uint   `json:"template_id"`
+		WorkflowID  *uint   `json:"workflow_id"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -76,6 +78,8 @@ func (h *IssueHandler) Create(c echo.Context) error {
 		StatusID:    statusID,
 		Priority:    req.Priority,
 		ReporterID:  reporterID,
+		TemplateID:  req.TemplateID,
+		WorkflowID:  req.WorkflowID,
 	}
 	if req.AssigneeID != nil {
 		aid, err := uuid.Parse(*req.AssigneeID)

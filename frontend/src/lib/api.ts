@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status } from '@/types'
+import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate } from '@/types'
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
@@ -50,8 +50,37 @@ export const createIssue = (
     assignee_id?: string
     reporter_id: string
     due_date?: string
+    template_id?: number
+    workflow_id?: number
   }
 ) => api.post<ApiResponse<Issue>>(`/projects/${projectId}/issues`, data).then((r) => r.data.data)
+
+// Templates
+export const getTemplates = () =>
+  api.get<ListResponse<IssueTemplate>>('/templates').then((r) => r.data.data)
+
+export const getProjectTemplates = (projectId: string) =>
+  api.get<ListResponse<IssueTemplate>>(`/projects/${projectId}/templates`).then((r) => r.data.data)
+
+export const createTemplate = (data: {
+  project_id: string
+  name: string
+  description?: string
+  body?: string
+  default_priority?: string
+  workflow_id?: number
+}) => api.post<ApiResponse<IssueTemplate>>('/templates', data).then((r) => r.data.data)
+
+export const updateTemplate = (id: number, data: {
+  name: string
+  description?: string
+  body?: string
+  default_priority?: string
+  workflow_id?: number | null
+}) => api.put<ApiResponse<IssueTemplate>>(`/templates/${id}`, data).then((r) => r.data.data)
+
+export const deleteTemplate = (id: number) =>
+  api.delete(`/templates/${id}`)
 
 export const updateIssue = (
   projectId: string,

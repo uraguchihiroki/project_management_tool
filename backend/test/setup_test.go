@@ -49,6 +49,7 @@ func newTestServer(t *testing.T) *testServer {
 		&model.Comment{},
 		&model.Workflow{},
 		&model.WorkflowStep{},
+		&model.IssueTemplate{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
@@ -60,6 +61,7 @@ func newTestServer(t *testing.T) *testServer {
 	commentRepo := repository.NewCommentRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
+	templateRepo := repository.NewTemplateRepository(db)
 
 	userSvc := service.NewUserService(userRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
@@ -67,6 +69,7 @@ func newTestServer(t *testing.T) *testServer {
 	commentSvc := service.NewCommentService(commentRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo)
+	templateSvc := service.NewTemplateService(templateRepo)
 
 	userH := handler.NewUserHandler(userSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
@@ -74,6 +77,7 @@ func newTestServer(t *testing.T) *testServer {
 	commentH := handler.NewCommentHandler(commentSvc)
 	roleH := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowH := handler.NewWorkflowHandler(workflowSvc)
+	templateH := handler.NewTemplateHandler(templateSvc)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -99,6 +103,12 @@ func newTestServer(t *testing.T) *testServer {
 	api.PUT("/workflows/:id/steps/:stepId", workflowH.UpdateStep)
 	api.DELETE("/workflows/:id/steps/:stepId", workflowH.DeleteStep)
 	api.GET("/projects/:projectId/workflows", workflowH.ListByProject)
+	api.GET("/templates", templateH.List)
+	api.POST("/templates", templateH.Create)
+	api.GET("/templates/:id", templateH.Get)
+	api.PUT("/templates/:id", templateH.Update)
+	api.DELETE("/templates/:id", templateH.Delete)
+	api.GET("/projects/:projectId/templates", templateH.ListByProject)
 	api.GET("/admin/users", userH.ListWithRoles)
 	api.GET("/projects", projectH.List)
 	api.POST("/projects", projectH.Create)

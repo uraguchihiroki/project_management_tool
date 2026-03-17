@@ -1,12 +1,12 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getProject, getIssues, createIssue, getUsers } from '@/lib/api'
+import { getProject, getIssues, createIssue, getUsers, getProjectTemplates } from '@/lib/api'
 import { useState, use } from 'react'
 import Link from 'next/link'
-import { Plus, Circle } from 'lucide-react'
+import { Plus, Circle, FileText } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
-import type { Issue, Status } from '@/types'
+import type { Issue, Status, IssueTemplate } from '@/types'
 import { formatDistanceToNow } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { useRequireAuth } from '@/context/AuthContext'
@@ -17,6 +17,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const currentUser = useRequireAuth()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<IssueTemplate | null>(null)
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -39,14 +40,31 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     queryFn: getUsers,
   })
 
+  const { data: templates = [] } = useQuery({
+    queryKey: ['project-templates', id],
+    queryFn: () => getProjectTemplates(id),
+  })
+
   const createMutation = useMutation({
     mutationFn: (data: Parameters<typeof createIssue>[1]) => createIssue(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issues', id] })
       setShowForm(false)
+      setSelectedTemplate(null)
       setForm({ title: '', description: '', status_id: '', priority: 'medium', assignee_id: '' })
     },
   })
+
+  const handleTemplateSelect = (tmpl: IssueTemplate | null) => {
+    setSelectedTemplate(tmpl)
+    if (tmpl) {
+      setForm((prev) => ({
+        ...prev,
+        description: tmpl.body || prev.description,
+        priority: tmpl.default_priority,
+      }))
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -60,6 +78,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       priority: form.priority,
       assignee_id: form.assignee_id || undefined,
       reporter_id: currentUser.id,
+      template_id: selectedTemplate?.id,
+      workflow_id: selectedTemplate?.workflow_id,
     })
   }
 
@@ -152,6 +172,49 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           <div className="bg-white rounded-xl w-full max-w-lg p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-900 mb-4">Issue作成</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* テンプレート選択 */}
+              {templates.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    テンプレート
+                    <span className="ml-1 text-xs font-normal text-gray-400">（任意）</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleTemplateSelect(null)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+                        selectedTemplate === null
+                          ? 'bg-gray-100 border-gray-300 text-gray-700 font-medium'
+                          : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                      }`}
+                    >
+                      なし
+                    </button>
+                    {templates.map((tmpl: IssueTemplate) => (
+                      <button
+                        key={tmpl.id}
+                        type="button"
+                        onClick={() => handleTemplateSelect(tmpl)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+                          selectedTemplate?.id === tmpl.id
+                            ? 'bg-blue-50 border-blue-400 text-blue-700 font-medium'
+                            : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                        }`}
+                      >
+                        <FileText className="w-3 h-3" />
+                        {tmpl.name}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedTemplate?.workflow_id && (
+                    <p className="text-xs text-blue-500 mt-1.5 flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400" />
+                      承認フロー「{selectedTemplate.workflow?.name ?? `ID:${selectedTemplate.workflow_id}`}」が適用されます
+                    </p>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   タイトル <span className="text-red-500">*</span>

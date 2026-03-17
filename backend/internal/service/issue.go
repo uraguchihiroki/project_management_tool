@@ -15,6 +15,8 @@ type CreateIssueInput struct {
 	Priority    string
 	AssigneeID  *uuid.UUID
 	ReporterID  uuid.UUID
+	TemplateID  *uint
+	WorkflowID  *uint
 }
 
 type UpdateIssueInput struct {
@@ -73,6 +75,8 @@ func (s *issueService) Create(projectID uuid.UUID, input CreateIssueInput) (*mod
 		AssigneeID:  input.AssigneeID,
 		ReporterID:  input.ReporterID,
 		ProjectID:   projectID,
+		TemplateID:  input.TemplateID,
+		WorkflowID:  input.WorkflowID,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}

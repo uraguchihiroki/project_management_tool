@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Settings, Users, Shield, GitBranch } from 'lucide-react'
+import { Settings, Users, Shield, GitBranch, FileText } from 'lucide-react'
 import Header from '@/components/Header'
 import { useRequireAdmin } from '@/context/AuthContext'
 
@@ -10,6 +10,7 @@ const navItems = [
   { href: '/admin/roles', label: '役職管理', icon: Shield },
   { href: '/admin/users', label: 'ユーザー管理', icon: Users },
   { href: '/admin/workflows', label: 'ワークフロー', icon: GitBranch },
+  { href: '/admin/templates', label: 'Issueテンプレート', icon: FileText },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

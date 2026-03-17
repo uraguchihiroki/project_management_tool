@@ -37,6 +37,19 @@ export interface Status {
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical'
 
+export interface IssueTemplate {
+  id: number
+  project_id: string
+  project?: Project
+  name: string
+  description: string
+  body: string
+  default_priority: Priority
+  workflow_id?: number
+  workflow?: Workflow
+  created_at: string
+}
+
 export interface Issue {
   id: string
   number: number
@@ -51,6 +64,8 @@ export interface Issue {
   reporter: User
   project_id: string
   due_date?: string
+  template_id?: number
+  workflow_id?: number
   comments?: Comment[]
   created_at: string
   updated_at: string

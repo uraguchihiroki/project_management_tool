@@ -57,9 +57,24 @@ type Issue struct {
 	Reporter    User       `gorm:"foreignKey:ReporterID" json:"reporter,omitempty"`
 	ProjectID   uuid.UUID  `gorm:"type:uuid;not null" json:"project_id"`
 	DueDate     *time.Time `json:"due_date,omitempty"`
+	TemplateID  *uint      `json:"template_id,omitempty"`
+	WorkflowID  *uint      `json:"workflow_id,omitempty"`
 	Comments    []Comment  `gorm:"foreignKey:IssueID" json:"comments,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+type IssueTemplate struct {
+	ID              uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	ProjectID       uuid.UUID `gorm:"type:uuid;not null" json:"project_id"`
+	Project         Project   `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
+	Name            string    `gorm:"size:200;not null" json:"name"`
+	Description     string    `gorm:"size:500" json:"description"`
+	Body            string    `gorm:"type:text" json:"body"`
+	DefaultPriority string    `gorm:"size:20;not null;default:'medium'" json:"default_priority"`
+	WorkflowID      *uint     `json:"workflow_id,omitempty"`
+	Workflow        *Workflow `gorm:"foreignKey:WorkflowID" json:"workflow,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type Comment struct {
