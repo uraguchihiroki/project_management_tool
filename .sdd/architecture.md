@@ -9,28 +9,22 @@ Go 製 REST API + Next.js フロントエンド + PostgreSQL の3層構成。
 
 ## システム構成図
 
-```
-┌─────────────────────────────────────────────────┐
-│                   Browser                        │
-│              Next.js (React/TS)                  │
-│           http://localhost:3000                  │
-└───────────────────┬─────────────────────────────┘
-                    │ REST API (JSON)
-                    ▼
-┌─────────────────────────────────────────────────┐
-│              Go API Server (Echo)                │
-│           http://localhost:8080                  │
-│                                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Handler  │→ │ Service  │→ │  Repository  │  │
-│  └──────────┘  └──────────┘  └──────────────┘  │
-└───────────────────┬─────────────────────────────┘
-                    │ SQL (GORM)
-                    ▼
-┌─────────────────────────────────────────────────┐
-│              PostgreSQL                          │
-│           localhost:5432                         │
-└─────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    Browser["Browser / Next.js (React/TS)<br/>localhost:3000"]
+
+    subgraph Backend["Go API Server (Echo) — localhost:8080"]
+        Handler["Handler<br/>(ルーティング・リクエスト処理)"]
+        Service["Service<br/>(ビジネスロジック)"]
+        Repository["Repository<br/>(DB操作)"]
+        Handler --> Service
+        Service --> Repository
+    end
+
+    DB[("PostgreSQL<br/>localhost:5432")]
+
+    Browser -->|"REST API (JSON)"| Handler
+    Repository -->|"SQL (GORM)"| DB
 ```
 
 ---

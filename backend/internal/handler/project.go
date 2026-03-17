@@ -86,7 +86,12 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 		}
 		h.statusRepo.Create(status)
 	}
-	return c.JSON(http.StatusCreated, map[string]interface{}{"data": project})
+	// ステータスを含めて再取得してレスポンスを返す
+	created, err := h.projectRepo.FindByID(project.ID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusCreated, map[string]interface{}{"data": created})
 }
 
 func (h *ProjectHandler) Update(c echo.Context) error {
