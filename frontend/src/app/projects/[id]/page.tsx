@@ -4,14 +4,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProject, getIssues, createIssue, getUsers } from '@/lib/api'
 import { useState, use } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Circle } from 'lucide-react'
+import { Plus, Circle } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
 import type { Issue, Status } from '@/types'
 import { formatDistanceToNow } from 'date-fns'
 import { ja } from 'date-fns/locale'
+import { useRequireAuth } from '@/context/AuthContext'
+import Header from '@/components/Header'
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const currentUser = useRequireAuth()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
@@ -47,7 +50,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!users[0]) return alert('先にユーザーを作成してください')
+    if (!currentUser) return
     const statusId = form.status_id || project?.statuses?.[0]?.id
     if (!statusId) return alert('ステータスが取得できませんでした')
     createMutation.mutate({
@@ -56,10 +59,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       status_id: statusId,
       priority: form.priority,
       assignee_id: form.assignee_id || undefined,
-      reporter_id: users[0].id,
+      reporter_id: currentUser.id,
     })
   }
 
+  if (!currentUser) return null
   if (projectLoading) return <div className="flex items-center justify-center h-screen text-gray-500">読み込み中...</div>
   if (!project) return <div className="flex items-center justify-center h-screen text-gray-500">プロジェクトが見つかりません</div>
 
@@ -70,25 +74,22 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-full mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/projects" className="text-gray-400 hover:text-gray-600">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                  {project.key}
-                </span>
-                <h1 className="text-xl font-bold text-gray-900">{project.name}</h1>
-              </div>
-              {project.description && (
-                <p className="text-sm text-gray-500 mt-0.5">{project.description}</p>
-              )}
+      <Header
+        backHref="/projects"
+        title={
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                {project.key}
+              </span>
+              <h1 className="text-lg font-bold text-gray-900">{project.name}</h1>
             </div>
+            {project.description && (
+              <p className="text-sm text-gray-500">{project.description}</p>
+            )}
           </div>
+        }
+        actions={
           <button
             onClick={() => setShowForm(true)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -96,8 +97,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             <Plus className="w-4 h-4" />
             Issue作成
           </button>
-        </div>
-      </header>
+        }
+      />
 
       {/* Board */}
       <main className="p-6 overflow-x-auto">

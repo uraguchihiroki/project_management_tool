@@ -4,14 +4,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProject, getIssue, createComment, getUsers, updateIssue } from '@/lib/api'
 import { useState, use } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Circle, MessageSquare, Send } from 'lucide-react'
+import { Circle, MessageSquare, Send } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
 import type { Status, Comment } from '@/types'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
+import { useRequireAuth } from '@/context/AuthContext'
+import Header from '@/components/Header'
 
 export default function IssuePage({ params }: { params: Promise<{ id: string; number: string }> }) {
   const { id, number } = use(params)
+  const currentUser = useRequireAuth()
   const queryClient = useQueryClient()
   const [comment, setComment] = useState('')
   const [editingStatus, setEditingStatus] = useState(false)
@@ -33,7 +36,7 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
 
   const commentMutation = useMutation({
     mutationFn: (body: string) =>
-      createComment(issue!.id, { author_id: users[0]?.id, body }),
+      createComment(issue!.id, { author_id: currentUser?.id ?? '', body }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue', id, number] })
       setComment('')
@@ -49,26 +52,22 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
     },
   })
 
+  if (!currentUser) return null
   if (isLoading) return <div className="flex items-center justify-center h-screen text-gray-500">読み込み中...</div>
   if (!issue) return <div className="flex items-center justify-center h-screen text-gray-500">Issueが見つかりません</div>
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
-          <Link href={`/projects/${id}`} className="text-gray-400 hover:text-gray-600">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Link href="/projects" className="hover:text-blue-600">{project?.name}</Link>
-              <span>/</span>
-              <span className="font-mono">{project?.key}-{issue.number}</span>
-            </div>
+      <Header
+        backHref={`/projects/${id}`}
+        title={
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <Link href="/projects" className="hover:text-blue-600">{project?.name}</Link>
+            <span>/</span>
+            <span className="font-mono">{project?.key}-{issue.number}</span>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       <main className="max-w-5xl mx-auto px-6 py-8">
         <div className="grid grid-cols-3 gap-6">
@@ -115,7 +114,7 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
               <div className="mt-6 flex gap-3">
                 <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-bold text-gray-500">
-                    {users[0]?.name?.[0]?.toUpperCase() || '?'}
+                    {currentUser.name[0]?.toUpperCase()}
                   </span>
                 </div>
                 <div className="flex-1 flex gap-2">
