@@ -141,6 +141,22 @@ Get-Content backend/seed.sql | docker exec -i pmt_db psql -U pmt_user -d pmt_db
 
 ---
 
+### 6. ローカル環境の停止手順
+
+```powershell
+# [Terminal 2] バックエンド → Ctrl+C で停止
+
+# [Terminal 3] フロントエンド → Ctrl+C で停止
+
+# [Terminal 1] Docker（PostgreSQL）を停止
+docker-compose stop db
+```
+
+> **データを消さずに止める場合** は `stop`。  
+> **コンテナごと削除する場合**（DB データも消える）は `docker-compose down`。
+
+---
+
 ## アクセス先一覧
 
 | サービス | URL |
