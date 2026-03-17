@@ -66,6 +66,26 @@ export interface Comment {
   updated_at: string
 }
 
+export interface WorkflowStep {
+  id: number
+  workflow_id: number
+  order: number
+  name: string
+  required_level: number
+  status_id?: string
+  status?: Status
+}
+
+export interface Workflow {
+  id: number
+  project_id: string
+  project?: Project
+  name: string
+  description: string
+  steps?: WorkflowStep[]
+  created_at: string
+}
+
 export interface ApiResponse<T> {
   data: T
   message?: string

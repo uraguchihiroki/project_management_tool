@@ -33,6 +33,8 @@ func main() {
 		&model.Status{},
 		&model.Issue{},
 		&model.Comment{},
+		&model.Workflow{},
+		&model.WorkflowStep{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
 	}
@@ -44,6 +46,7 @@ func main() {
 	issueRepo := repository.NewIssueRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
+	workflowRepo := repository.NewWorkflowRepository(db)
 
 	// Services
 	userSvc := service.NewUserService(userRepo)
@@ -51,6 +54,7 @@ func main() {
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
 	commentSvc := service.NewCommentService(commentRepo)
 	roleSvc := service.NewRoleService(roleRepo)
+	workflowSvc := service.NewWorkflowService(workflowRepo)
 
 	// Handlers
 	userHandler := handler.NewUserHandler(userSvc)
@@ -58,6 +62,7 @@ func main() {
 	issueHandler := handler.NewIssueHandler(issueSvc)
 	commentHandler := handler.NewCommentHandler(commentSvc)
 	roleHandler := handler.NewRoleHandler(roleSvc, userSvc)
+	workflowHandler := handler.NewWorkflowHandler(workflowSvc)
 
 	// Echo
 	e := echo.New()
@@ -85,6 +90,17 @@ func main() {
 	api.POST("/roles", roleHandler.Create)
 	api.PUT("/roles/:id", roleHandler.Update)
 	api.DELETE("/roles/:id", roleHandler.Delete)
+
+	// Workflows
+	api.GET("/workflows", workflowHandler.List)
+	api.POST("/workflows", workflowHandler.Create)
+	api.GET("/workflows/:id", workflowHandler.Get)
+	api.PUT("/workflows/:id", workflowHandler.Update)
+	api.DELETE("/workflows/:id", workflowHandler.Delete)
+	api.POST("/workflows/:id/steps", workflowHandler.AddStep)
+	api.PUT("/workflows/:id/steps/:stepId", workflowHandler.UpdateStep)
+	api.DELETE("/workflows/:id/steps/:stepId", workflowHandler.DeleteStep)
+	api.GET("/projects/:projectId/workflows", workflowHandler.ListByProject)
 
 	// Admin
 	api.GET("/admin/users", userHandler.ListWithRoles)

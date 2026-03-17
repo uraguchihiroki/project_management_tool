@@ -71,3 +71,23 @@ type Comment struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+type Workflow struct {
+	ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	ProjectID   uuid.UUID      `gorm:"type:uuid;not null" json:"project_id"`
+	Project     Project        `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
+	Name        string         `gorm:"size:200;not null" json:"name"`
+	Description string         `gorm:"size:500" json:"description"`
+	Steps       []WorkflowStep `gorm:"foreignKey:WorkflowID" json:"steps,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+}
+
+type WorkflowStep struct {
+	ID            uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	WorkflowID    uint       `gorm:"not null" json:"workflow_id"`
+	Order         int        `gorm:"not null;default:1" json:"order"`
+	Name          string     `gorm:"size:200;not null" json:"name"`
+	RequiredLevel int        `gorm:"not null;default:1" json:"required_level"`
+	StatusID      *uuid.UUID `gorm:"type:uuid" json:"status_id,omitempty"`
+	Status        *Status    `gorm:"foreignKey:StatusID" json:"status,omitempty"`
+}
