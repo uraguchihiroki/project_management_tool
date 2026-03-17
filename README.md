@@ -186,14 +186,20 @@ Remove-Item frontend\.next\dev\lock -ErrorAction SilentlyContinue
 
 ## ドキュメント
 
-設計資料は [.sdd/](.sdd/) フォルダを参照。
+設計資料は [.sdd/](.sdd/) フォルダを参照。[.sdd/README.md](.sdd/README.md) にナビゲーションあり。
 
 | ドキュメント | 内容 |
 |---|---|
+| [.sdd/README.md](.sdd/README.md) | ドキュメント一覧・ナビゲーション |
 | [architecture.md](.sdd/architecture.md) | システムアーキテクチャ |
 | [layer-responsibility.md](.sdd/layer-responsibility.md) | Handler / Service / Repository の責務分担 |
 | [db-schema.md](.sdd/db-schema.md) | DB 設計・テーブル定義 |
 | [api-spec.md](.sdd/api-spec.md) | REST API 仕様 |
+| [key-flows.md](.sdd/key-flows.md) | 認証・マルチテナント・承認の主要フロー |
+| [testing.md](.sdd/testing.md) | テスト方針・実行方法 |
+| [dev-guide.md](.sdd/dev-guide.md) | 新機能追加の手順・規約 |
+
+**AI アシスタント用**: [AGENTS.md](AGENTS.md) にプロジェクト概要と設計ドキュメントへのリンクを記載。
 
 ---
 
