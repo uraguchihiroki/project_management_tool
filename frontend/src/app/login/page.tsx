@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [asAdmin, setAsAdmin] = useState(false)
 
   // ログイン済みなら /projects へ
   useEffect(() => {
@@ -27,8 +28,8 @@ export default function LoginPage() {
     setLoading(true)
 
     const result = mode === 'login'
-      ? await login(email)
-      : await register(name, email)
+      ? await login(email, asAdmin)
+      : await register(name, email, asAdmin)
 
     setLoading(false)
 
@@ -102,6 +103,17 @@ export default function LoginPage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+
+            {/* 管理者チェックボックス */}
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={asAdmin}
+                onChange={(e) => setAsAdmin(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+              <span className="text-sm text-gray-600">管理者としてログイン</span>
+            </label>
 
             {error && (
               <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>

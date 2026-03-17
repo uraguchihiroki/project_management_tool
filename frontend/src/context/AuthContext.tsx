@@ -8,9 +8,9 @@ const SESSION_KEY = 'currentUser'
 
 interface AuthContextType {
   currentUser: User | null
-  login: (email: string) => Promise<{ ok: boolean; error?: string }>
+  login: (email: string, asAdmin?: boolean) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
-  register: (name: string, email: string) => Promise<{ ok: boolean; error?: string }>
+  register: (name: string, email: string, asAdmin?: boolean) => Promise<{ ok: boolean; error?: string }>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -29,18 +29,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const login = useCallback(async (email: string): Promise<{ ok: boolean; error?: string }> => {
+  const login = useCallback(async (email: string, asAdmin?: boolean): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/users`
-      )
+      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
+      const res = await fetch(`${base}/users`)
       if (!res.ok) throw new Error('APIエラー')
       const json = await res.json()
       const users: User[] = json.data ?? []
       const found = users.find((u) => u.email === email)
       if (!found) return { ok: false, error: 'メールアドレスが見つかりません' }
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(found))
-      setCurrentUser(found)
+      // DBのis_adminも更新する
+      await fetch(`${base}/users/${found.id}/admin`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_admin: asAdmin ?? false }),
+      })
+      const user = { ...found, is_admin: asAdmin ?? false }
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
+      setCurrentUser(user)
       return { ok: true }
     } catch {
       return { ok: false, error: 'ログインに失敗しました' }
@@ -53,22 +59,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/login')
   }, [router])
 
-  const register = useCallback(async (name: string, email: string): Promise<{ ok: boolean; error?: string }> => {
+  const register = useCallback(async (name: string, email: string, asAdmin?: boolean): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/users`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email }),
-        }
-      )
+      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
+      const res = await fetch(`${base}/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email }),
+      })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
         return { ok: false, error: json.message ?? 'ユーザー登録に失敗しました' }
       }
       const json = await res.json()
-      const user: User = json.data
+      const created: User = json.data
+      // チェックボックスの状態でDBのis_adminも更新する
+      if (asAdmin !== undefined) {
+        await fetch(`${base}/users/${created.id}/admin`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_admin: asAdmin }),
+        })
+      }
+      const user = { ...created, is_admin: asAdmin ?? created.is_admin }
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
       setCurrentUser(user)
       return { ok: true }
