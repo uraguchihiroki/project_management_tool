@@ -8,6 +8,7 @@ import (
 
 type CommentRepository interface {
 	FindByIssue(issueID uuid.UUID) ([]model.Comment, error)
+	FindByID(id uuid.UUID, comment *model.Comment) error
 	Create(comment *model.Comment) error
 	Update(comment *model.Comment) error
 	Delete(id uuid.UUID) error
@@ -19,6 +20,10 @@ type commentRepository struct {
 
 func NewCommentRepository(db *gorm.DB) CommentRepository {
 	return &commentRepository{db: db}
+}
+
+func (r *commentRepository) FindByID(id uuid.UUID, comment *model.Comment) error {
+	return r.db.Preload("Author").First(comment, "id = ?", id).Error
 }
 
 func (r *commentRepository) FindByIssue(issueID uuid.UUID) ([]model.Comment, error) {

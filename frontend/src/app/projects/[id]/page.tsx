@@ -39,7 +39,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const createMutation = useMutation({
     mutationFn: (data: Parameters<typeof createIssue>[1]) => createIssue(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issues', params.id] })
+      queryClient.invalidateQueries({ queryKey: ['issues', id] })
       setShowForm(false)
       setForm({ title: '', description: '', status_id: '', priority: 'medium', assignee_id: '' })
     },

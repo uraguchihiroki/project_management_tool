@@ -58,6 +58,9 @@ func (h *CommentHandler) Create(c echo.Context) error {
 	if err := h.commentRepo.Create(comment); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
+	if err := h.commentRepo.FindByID(comment.ID, comment); err == nil {
+		// reload with author
+	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": comment})
 }
 
@@ -73,8 +76,16 @@ func (h *CommentHandler) Update(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	_ = id
-	return c.JSON(http.StatusOK, map[string]interface{}{"message": "updated"})
+	comment := &model.Comment{}
+	if err = h.commentRepo.FindByID(id, comment); err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "comment not found")
+	}
+	comment.Body = req.Body
+	comment.UpdatedAt = time.Now()
+	if err := h.commentRepo.Update(comment); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": comment})
 }
 
 func (h *CommentHandler) Delete(c echo.Context) error {

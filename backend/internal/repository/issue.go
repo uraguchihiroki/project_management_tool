@@ -55,7 +55,15 @@ func (r *issueRepository) Create(issue *model.Issue) error {
 }
 
 func (r *issueRepository) Update(issue *model.Issue) error {
-	return r.db.Save(issue).Error
+	return r.db.Model(&model.Issue{}).Where("id = ?", issue.ID).Updates(map[string]interface{}{
+		"title":       issue.Title,
+		"description": issue.Description,
+		"status_id":   issue.StatusID,
+		"priority":    issue.Priority,
+		"assignee_id": issue.AssigneeID,
+		"due_date":    issue.DueDate,
+		"updated_at":  issue.UpdatedAt,
+	}).Error
 }
 
 func (r *issueRepository) Delete(id uuid.UUID) error {

@@ -24,7 +24,7 @@ func NewStatusRepository(db *gorm.DB) StatusRepository {
 
 func (r *statusRepository) FindByProject(projectID uuid.UUID) ([]model.Status, error) {
 	var statuses []model.Status
-	err := r.db.Where("project_id = ?", projectID).Order("`order` asc").Find(&statuses).Error
+	err := r.db.Where("project_id = ?", projectID).Order(`"order" asc`).Find(&statuses).Error
 	return statuses, err
 }
 
