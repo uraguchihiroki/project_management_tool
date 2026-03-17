@@ -1,0 +1,64 @@
+# ==================
+# Go
+# ==================
+backend/vendor/
+backend/*.exe
+backend/*.exe~
+backend/*.dll
+backend/*.so
+backend/*.dylib
+backend/tmp/
+
+# テストキャッシュ
+backend/*.test
+backend/*.out
+
+# ==================
+# Node.js / Next.js
+# ==================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.npm
+frontend/.eslintcache
+frontend/.vercel
+
+# ==================
+# 環境変数
+# ==================
+.env
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+backend/.env
+backend/.env.local
+
+# ==================
+# Docker
+# ==================
+docker-compose.override.yml
+
+# ==================
+# OS
+# ==================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ==================
+# IDE / Editor
+# ==================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ==================
+# Logs
+# ==================
+*.log
+logs/

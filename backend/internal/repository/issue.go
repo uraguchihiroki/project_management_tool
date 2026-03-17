@@ -1,0 +1,69 @@
+package repository
+
+import (
+	"github.com/google/uuid"
+	"github.com/uraguchihiroki/project_management_tool/internal/model"
+	"gorm.io/gorm"
+)
+
+type IssueRepository interface {
+	FindByProject(projectID uuid.UUID) ([]model.Issue, error)
+	FindByNumber(projectID uuid.UUID, number int) (*model.Issue, error)
+	Create(issue *model.Issue) error
+	Update(issue *model.Issue) error
+	Delete(id uuid.UUID) error
+	NextNumber(projectID uuid.UUID) (int, error)
+}
+
+type issueRepository struct {
+	db *gorm.DB
+}
+
+func NewIssueRepository(db *gorm.DB) IssueRepository {
+	return &issueRepository{db: db}
+}
+
+func (r *issueRepository) FindByProject(projectID uuid.UUID) ([]model.Issue, error) {
+	var issues []model.Issue
+	err := r.db.
+		Preload("Status").
+		Preload("Assignee").
+		Preload("Reporter").
+		Where("project_id = ?", projectID).
+		Order("number desc").
+		Find(&issues).Error
+	return issues, err
+}
+
+func (r *issueRepository) FindByNumber(projectID uuid.UUID, number int) (*model.Issue, error) {
+	var issue model.Issue
+	err := r.db.
+		Preload("Status").
+		Preload("Assignee").
+		Preload("Reporter").
+		Preload("Comments.Author").
+		Where("project_id = ? AND number = ?", projectID, number).
+		First(&issue).Error
+	if err != nil {
+		return nil, err
+	}
+	return &issue, nil
+}
+
+func (r *issueRepository) Create(issue *model.Issue) error {
+	return r.db.Create(issue).Error
+}
+
+func (r *issueRepository) Update(issue *model.Issue) error {
+	return r.db.Save(issue).Error
+}
+
+func (r *issueRepository) Delete(id uuid.UUID) error {
+	return r.db.Delete(&model.Issue{}, "id = ?", id).Error
+}
+
+func (r *issueRepository) NextNumber(projectID uuid.UUID) (int, error) {
+	var maxNumber int
+	r.db.Model(&model.Issue{}).Where("project_id = ?", projectID).Select("COALESCE(MAX(number), 0)").Scan(&maxNumber)
+	return maxNumber + 1, nil
+}
