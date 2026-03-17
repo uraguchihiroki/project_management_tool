@@ -1,0 +1,108 @@
+package service
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/uraguchihiroki/project_management_tool/internal/model"
+	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+)
+
+type CreateProjectInput struct {
+	Key         string
+	Name        string
+	Description *string
+	OwnerID     uuid.UUID
+}
+
+type UpdateProjectInput struct {
+	Name        *string
+	Description *string
+}
+
+type ProjectService interface {
+	List() ([]model.Project, error)
+	Get(id uuid.UUID) (*model.Project, error)
+	Create(input CreateProjectInput) (*model.Project, error)
+	Update(id uuid.UUID, input UpdateProjectInput) (*model.Project, error)
+	Delete(id uuid.UUID) error
+}
+
+type projectService struct {
+	projectRepo repository.ProjectRepository
+	statusRepo  repository.StatusRepository
+}
+
+func NewProjectService(projectRepo repository.ProjectRepository, statusRepo repository.StatusRepository) ProjectService {
+	return &projectService{projectRepo: projectRepo, statusRepo: statusRepo}
+}
+
+func (s *projectService) List() ([]model.Project, error) {
+	return s.projectRepo.FindAll()
+}
+
+func (s *projectService) Get(id uuid.UUID) (*model.Project, error) {
+	return s.projectRepo.FindByID(id)
+}
+
+func (s *projectService) Create(input CreateProjectInput) (*model.Project, error) {
+	project := &model.Project{
+		ID:          uuid.New(),
+		Key:         input.Key,
+		Name:        input.Name,
+		Description: input.Description,
+		OwnerID:     input.OwnerID,
+		CreatedAt:   time.Now(),
+	}
+	if err := s.projectRepo.Create(project); err != nil {
+		return nil, err
+	}
+
+	// デフォルトステータスを生成
+	defaultStatuses := []struct {
+		Name  string
+		Color string
+		Order int
+	}{
+		{"未着手", "#6B7280", 1},
+		{"進行中", "#3B82F6", 2},
+		{"レビュー中", "#F59E0B", 3},
+		{"完了", "#10B981", 4},
+	}
+	for _, ds := range defaultStatuses {
+		status := &model.Status{
+			ID:        uuid.New(),
+			ProjectID: project.ID,
+			Name:      ds.Name,
+			Color:     ds.Color,
+			Order:     ds.Order,
+		}
+		if err := s.statusRepo.Create(status); err != nil {
+			return nil, err
+		}
+	}
+
+	// ステータスを含めて再取得
+	return s.projectRepo.FindByID(project.ID)
+}
+
+func (s *projectService) Update(id uuid.UUID, input UpdateProjectInput) (*model.Project, error) {
+	project, err := s.projectRepo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if input.Name != nil {
+		project.Name = *input.Name
+	}
+	if input.Description != nil {
+		project.Description = input.Description
+	}
+	if err := s.projectRepo.Update(project); err != nil {
+		return nil, err
+	}
+	return project, nil
+}
+
+func (s *projectService) Delete(id uuid.UUID) error {
+	return s.projectRepo.Delete(id)
+}

@@ -17,6 +17,7 @@ import (
 	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"github.com/uraguchihiroki/project_management_tool/internal/service"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -55,10 +56,15 @@ func newTestServer(t *testing.T) *testServer {
 	issueRepo := repository.NewIssueRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 
-	userH := handler.NewUserHandler(userRepo)
-	projectH := handler.NewProjectHandler(projectRepo, statusRepo)
-	issueH := handler.NewIssueHandler(issueRepo, projectRepo)
-	commentH := handler.NewCommentHandler(commentRepo)
+	userSvc := service.NewUserService(userRepo)
+	projectSvc := service.NewProjectService(projectRepo, statusRepo)
+	issueSvc := service.NewIssueService(issueRepo, projectRepo)
+	commentSvc := service.NewCommentService(commentRepo)
+
+	userH := handler.NewUserHandler(userSvc)
+	projectH := handler.NewProjectHandler(projectSvc)
+	issueH := handler.NewIssueHandler(issueSvc)
+	commentH := handler.NewCommentHandler(commentSvc)
 
 	e := echo.New()
 	e.HideBanner = true

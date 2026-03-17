@@ -2,24 +2,22 @@ package handler
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/uraguchihiroki/project_management_tool/internal/model"
-	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"github.com/uraguchihiroki/project_management_tool/internal/service"
 )
 
 type UserHandler struct {
-	userRepo repository.UserRepository
+	userService service.UserService
 }
 
-func NewUserHandler(userRepo repository.UserRepository) *UserHandler {
-	return &UserHandler{userRepo: userRepo}
+func NewUserHandler(userService service.UserService) *UserHandler {
+	return &UserHandler{userService: userService}
 }
 
 func (h *UserHandler) List(c echo.Context) error {
-	users, err := h.userRepo.FindAll()
+	users, err := h.userService.List()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -31,7 +29,7 @@ func (h *UserHandler) Get(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
 	}
-	user, err := h.userRepo.FindByID(id)
+	user, err := h.userService.Get(id)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "user not found")
 	}
@@ -47,13 +45,8 @@ func (h *UserHandler) Create(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	user := &model.User{
-		ID:        uuid.New(),
-		Name:      req.Name,
-		Email:     req.Email,
-		CreatedAt: time.Now(),
-	}
-	if err := h.userRepo.Create(user); err != nil {
+	user, err := h.userService.Create(req.Name, req.Email)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": user})

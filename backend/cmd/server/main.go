@@ -9,6 +9,7 @@ import (
 	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"github.com/uraguchihiroki/project_management_tool/internal/service"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -42,11 +43,17 @@ func main() {
 	issueRepo := repository.NewIssueRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 
+	// Services
+	userSvc := service.NewUserService(userRepo)
+	projectSvc := service.NewProjectService(projectRepo, statusRepo)
+	issueSvc := service.NewIssueService(issueRepo, projectRepo)
+	commentSvc := service.NewCommentService(commentRepo)
+
 	// Handlers
-	userHandler := handler.NewUserHandler(userRepo)
-	projectHandler := handler.NewProjectHandler(projectRepo, statusRepo)
-	issueHandler := handler.NewIssueHandler(issueRepo, projectRepo)
-	commentHandler := handler.NewCommentHandler(commentRepo)
+	userHandler := handler.NewUserHandler(userSvc)
+	projectHandler := handler.NewProjectHandler(projectSvc)
+	issueHandler := handler.NewIssueHandler(issueSvc)
+	commentHandler := handler.NewCommentHandler(commentSvc)
 
 	// Echo
 	e := echo.New()

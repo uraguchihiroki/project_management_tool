@@ -3,21 +3,18 @@ package handler
 import (
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/uraguchihiroki/project_management_tool/internal/model"
-	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"github.com/uraguchihiroki/project_management_tool/internal/service"
 )
 
 type IssueHandler struct {
-	issueRepo   repository.IssueRepository
-	projectRepo repository.ProjectRepository
+	issueService service.IssueService
 }
 
-func NewIssueHandler(issueRepo repository.IssueRepository, projectRepo repository.ProjectRepository) *IssueHandler {
-	return &IssueHandler{issueRepo: issueRepo, projectRepo: projectRepo}
+func NewIssueHandler(issueService service.IssueService) *IssueHandler {
+	return &IssueHandler{issueService: issueService}
 }
 
 func (h *IssueHandler) List(c echo.Context) error {
@@ -25,7 +22,7 @@ func (h *IssueHandler) List(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
 	}
-	issues, err := h.issueRepo.FindByProject(projectID)
+	issues, err := h.issueService.List(projectID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -41,7 +38,7 @@ func (h *IssueHandler) Get(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid issue number")
 	}
-	issue, err := h.issueRepo.FindByNumber(projectID, number)
+	issue, err := h.issueService.Get(projectID, number)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
 	}
@@ -60,7 +57,6 @@ func (h *IssueHandler) Create(c echo.Context) error {
 		Priority    string  `json:"priority"`
 		AssigneeID  *string `json:"assignee_id"`
 		ReporterID  string  `json:"reporter_id" validate:"required,uuid"`
-		DueDate     *string `json:"due_date"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -74,30 +70,21 @@ func (h *IssueHandler) Create(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid reporter_id")
 	}
-	priority := req.Priority
-	if priority == "" {
-		priority = "medium"
-	}
-	nextNum, _ := h.issueRepo.NextNumber(projectID)
-	issue := &model.Issue{
-		ID:          uuid.New(),
-		Number:      nextNum,
+	input := service.CreateIssueInput{
 		Title:       req.Title,
 		Description: req.Description,
 		StatusID:    statusID,
-		Priority:    priority,
+		Priority:    req.Priority,
 		ReporterID:  reporterID,
-		ProjectID:   projectID,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
 	}
 	if req.AssigneeID != nil {
 		aid, err := uuid.Parse(*req.AssigneeID)
 		if err == nil {
-			issue.AssigneeID = &aid
+			input.AssigneeID = &aid
 		}
 	}
-	if err := h.issueRepo.Create(issue); err != nil {
+	issue, err := h.issueService.Create(projectID, input)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": issue})
@@ -112,10 +99,6 @@ func (h *IssueHandler) Update(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid issue number")
 	}
-	issue, err := h.issueRepo.FindByNumber(projectID, number)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
-	}
 	type Request struct {
 		Title       *string `json:"title"`
 		Description *string `json:"description"`
@@ -127,30 +110,26 @@ func (h *IssueHandler) Update(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	if req.Title != nil {
-		issue.Title = *req.Title
-	}
-	if req.Description != nil {
-		issue.Description = req.Description
+	input := service.UpdateIssueInput{
+		Title:       req.Title,
+		Description: req.Description,
+		Priority:    req.Priority,
 	}
 	if req.StatusID != nil {
 		sid, err := uuid.Parse(*req.StatusID)
 		if err == nil {
-			issue.StatusID = sid
+			input.StatusID = &sid
 		}
-	}
-	if req.Priority != nil {
-		issue.Priority = *req.Priority
 	}
 	if req.AssigneeID != nil {
 		aid, err := uuid.Parse(*req.AssigneeID)
 		if err == nil {
-			issue.AssigneeID = &aid
+			input.AssigneeID = &aid
 		}
 	}
-	issue.UpdatedAt = time.Now()
-	if err := h.issueRepo.Update(issue); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	issue, err := h.issueService.Update(projectID, number, input)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": issue})
 }
@@ -164,11 +143,7 @@ func (h *IssueHandler) Delete(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid issue number")
 	}
-	issue, err := h.issueRepo.FindByNumber(projectID, number)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
-	}
-	if err := h.issueRepo.Delete(issue.ID); err != nil {
+	if err := h.issueService.Delete(projectID, number); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"message": "deleted"})

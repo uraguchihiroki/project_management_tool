@@ -2,20 +2,18 @@ package handler
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/uraguchihiroki/project_management_tool/internal/model"
-	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"github.com/uraguchihiroki/project_management_tool/internal/service"
 )
 
 type CommentHandler struct {
-	commentRepo repository.CommentRepository
+	commentService service.CommentService
 }
 
-func NewCommentHandler(commentRepo repository.CommentRepository) *CommentHandler {
-	return &CommentHandler{commentRepo: commentRepo}
+func NewCommentHandler(commentService service.CommentService) *CommentHandler {
+	return &CommentHandler{commentService: commentService}
 }
 
 func (h *CommentHandler) List(c echo.Context) error {
@@ -23,7 +21,7 @@ func (h *CommentHandler) List(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid issue id")
 	}
-	comments, err := h.commentRepo.FindByIssue(issueID)
+	comments, err := h.commentService.List(issueID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -47,19 +45,9 @@ func (h *CommentHandler) Create(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid author_id")
 	}
-	comment := &model.Comment{
-		ID:        uuid.New(),
-		IssueID:   issueID,
-		AuthorID:  authorID,
-		Body:      req.Body,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	if err := h.commentRepo.Create(comment); err != nil {
+	comment, err := h.commentService.Create(issueID, authorID, req.Body)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-	if err := h.commentRepo.FindByID(comment.ID, comment); err == nil {
-		// reload with author
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": comment})
 }
@@ -76,14 +64,9 @@ func (h *CommentHandler) Update(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	comment := &model.Comment{}
-	if err = h.commentRepo.FindByID(id, comment); err != nil {
+	comment, err := h.commentService.Update(id, req.Body)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "comment not found")
-	}
-	comment.Body = req.Body
-	comment.UpdatedAt = time.Now()
-	if err := h.commentRepo.Update(comment); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": comment})
 }
@@ -93,7 +76,7 @@ func (h *CommentHandler) Delete(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid comment id")
 	}
-	if err := h.commentRepo.Delete(id); err != nil {
+	if err := h.commentService.Delete(id); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"message": "deleted"})
