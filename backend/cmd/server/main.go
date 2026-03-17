@@ -27,6 +27,7 @@ func main() {
 
 	// AutoMigrate
 	if err := db.AutoMigrate(
+		&model.Role{},
 		&model.User{},
 		&model.Project{},
 		&model.Status{},
@@ -42,18 +43,21 @@ func main() {
 	statusRepo := repository.NewStatusRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
 
 	// Services
 	userSvc := service.NewUserService(userRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
 	commentSvc := service.NewCommentService(commentRepo)
+	roleSvc := service.NewRoleService(roleRepo)
 
 	// Handlers
 	userHandler := handler.NewUserHandler(userSvc)
 	projectHandler := handler.NewProjectHandler(projectSvc)
 	issueHandler := handler.NewIssueHandler(issueSvc)
 	commentHandler := handler.NewCommentHandler(commentSvc)
+	roleHandler := handler.NewRoleHandler(roleSvc, userSvc)
 
 	// Echo
 	e := echo.New()
@@ -72,6 +76,18 @@ func main() {
 	api.GET("/users", userHandler.List)
 	api.POST("/users", userHandler.Create)
 	api.GET("/users/:id", userHandler.Get)
+	api.PUT("/users/:id/admin", userHandler.SetAdmin)
+	api.GET("/users/:id/roles", roleHandler.GetUserRoles)
+	api.PUT("/users/:id/roles", roleHandler.AssignRoles)
+
+	// Roles
+	api.GET("/roles", roleHandler.List)
+	api.POST("/roles", roleHandler.Create)
+	api.PUT("/roles/:id", roleHandler.Update)
+	api.DELETE("/roles/:id", roleHandler.Delete)
+
+	// Admin
+	api.GET("/admin/users", userHandler.ListWithRoles)
 
 	// Projects
 	api.GET("/projects", projectHandler.List)

@@ -1,8 +1,18 @@
+export interface Role {
+  id: number
+  name: string
+  level: number
+  description: string
+  created_at: string
+}
+
 export interface User {
   id: string
   name: string
   email: string
   avatar_url?: string
+  is_admin: boolean
+  roles?: Role[]
   created_at: string
 }
 

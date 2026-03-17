@@ -105,3 +105,23 @@ export function useRequireAuth(): User {
 
   return currentUser as User
 }
+
+// 管理者でない場合は /projects へリダイレクトするフック
+export function useRequireAdmin(): User {
+  const { currentUser } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem(SESSION_KEY)
+    if (!stored) {
+      router.push('/login')
+      return
+    }
+    const user: User = JSON.parse(stored)
+    if (!user.is_admin) {
+      router.push('/projects')
+    }
+  }, [currentUser, router])
+
+  return currentUser as User
+}

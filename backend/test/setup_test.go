@@ -41,6 +41,7 @@ func newTestServer(t *testing.T) *testServer {
 	}
 
 	if err := db.AutoMigrate(
+		&model.Role{},
 		&model.User{},
 		&model.Project{},
 		&model.Status{},
@@ -55,16 +56,19 @@ func newTestServer(t *testing.T) *testServer {
 	statusRepo := repository.NewStatusRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
 
 	userSvc := service.NewUserService(userRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
 	commentSvc := service.NewCommentService(commentRepo)
+	roleSvc := service.NewRoleService(roleRepo)
 
 	userH := handler.NewUserHandler(userSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
 	issueH := handler.NewIssueHandler(issueSvc)
 	commentH := handler.NewCommentHandler(commentSvc)
+	roleH := handler.NewRoleHandler(roleSvc, userSvc)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -74,6 +78,14 @@ func newTestServer(t *testing.T) *testServer {
 	api.GET("/users", userH.List)
 	api.POST("/users", userH.Create)
 	api.GET("/users/:id", userH.Get)
+	api.PUT("/users/:id/admin", userH.SetAdmin)
+	api.GET("/users/:id/roles", roleH.GetUserRoles)
+	api.PUT("/users/:id/roles", roleH.AssignRoles)
+	api.GET("/roles", roleH.List)
+	api.POST("/roles", roleH.Create)
+	api.PUT("/roles/:id", roleH.Update)
+	api.DELETE("/roles/:id", roleH.Delete)
+	api.GET("/admin/users", userH.ListWithRoles)
 	api.GET("/projects", projectH.List)
 	api.POST("/projects", projectH.Create)
 	api.GET("/projects/:id", projectH.Get)

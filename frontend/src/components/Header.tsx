@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { FolderKanban, User, LogOut, ArrowLeft } from 'lucide-react'
+import { FolderKanban, User, LogOut, ArrowLeft, Settings } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 
 interface HeaderProps {
@@ -39,9 +39,22 @@ export default function Header({ backHref, title, actions }: HeaderProps) {
           {actions}
           {currentUser && (
             <>
+              {currentUser.is_admin && (
+                <Link
+                  href="/admin"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="管理画面"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span className="hidden sm:block">管理</span>
+                </Link>
+              )}
               <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
                 <User className="w-4 h-4" />
                 <span className="font-medium">{currentUser.name}</span>
+                {currentUser.is_admin && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">管理者</span>
+                )}
               </div>
               <button
                 onClick={logout}

@@ -51,3 +51,31 @@ func (h *UserHandler) Create(c echo.Context) error {
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": user})
 }
+
+// GET /api/v1/admin/users （ロール付きユーザー一覧）
+func (h *UserHandler) ListWithRoles(c echo.Context) error {
+	users, err := h.userService.ListWithRoles()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": users})
+}
+
+// PUT /api/v1/users/:id/admin
+func (h *UserHandler) SetAdmin(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
+	}
+	type Request struct {
+		IsAdmin bool `json:"is_admin"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := h.userService.SetAdmin(id, req.IsAdmin); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"message": "updated"})
+}

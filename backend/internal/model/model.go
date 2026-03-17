@@ -11,7 +11,17 @@ type User struct {
 	Name      string    `gorm:"size:100;not null" json:"name"`
 	Email     string    `gorm:"size:255;uniqueIndex;not null" json:"email"`
 	AvatarURL *string   `json:"avatar_url,omitempty"`
+	IsAdmin   bool      `gorm:"default:false" json:"is_admin"`
+	Roles     []Role    `gorm:"many2many:user_roles;" json:"roles,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type Role struct {
+	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name        string    `gorm:"size:100;not null;uniqueIndex" json:"name"`
+	Level       int       `gorm:"not null;default:1" json:"level"`
+	Description string    `gorm:"size:500" json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type Project struct {
