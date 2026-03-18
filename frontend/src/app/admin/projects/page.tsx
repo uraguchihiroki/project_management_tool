@@ -94,7 +94,7 @@ export default function AdminProjectsPage() {
           {projects.map((project: Project) => (
             <Link
               key={project.id}
-              href={`/projects/${project.id}`}
+              href={`/admin/projects/${project.id}`}
               className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:shadow-md transition-all group flex items-center justify-between"
             >
               <div>

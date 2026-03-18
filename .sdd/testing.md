@@ -23,7 +23,7 @@ go test ./test/... -v
 |----------|------------|
 | [setup_test.go](backend/test/setup_test.go) | テストサーバー起動、共通ヘルパー（req, createTestUser, createTestProject 等） |
 | [user_test.go](backend/test/user_test.go) | ユーザー CRUD（Create, List, Get） |
-| [project_test.go](backend/test/project_test.go) | プロジェクト CRUD |
+| [project_test.go](backend/test/project_test.go) | プロジェクト CRUD、正常系フロー（一覧→作成→取得→更新→削除） |
 | [issue_test.go](backend/test/issue_test.go) | Issue CRUD |
 | [comment_test.go](backend/test/comment_test.go) | コメント CRUD |
 | [role_test.go](backend/test/role_test.go) | 役職 CRUD、ユーザーへの役職割り当て、管理者一覧 |
