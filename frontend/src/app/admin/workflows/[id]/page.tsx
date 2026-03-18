@@ -17,7 +17,7 @@ async function fetchWorkflow(id: string): Promise<Workflow> {
 }
 
 async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
-  const res = await fetch(`${API}/organizations/${orgId}/statuses`)
+  const res = await fetch(`${API}/organizations/${orgId}/statuses?type=issue`)
   const json = await res.json()
   return json.data ?? []
 }

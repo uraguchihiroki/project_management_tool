@@ -72,6 +72,7 @@ func main() {
 	workflowSvc := service.NewWorkflowService(workflowRepo)
 	templateSvc := service.NewTemplateService(templateRepo)
 	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
+	statusSvc := service.NewStatusService(statusRepo)
 
 	// Handlers
 	userHandler := handler.NewUserHandler(userSvc)
@@ -85,6 +86,7 @@ func main() {
 	orgHandler := handler.NewOrganizationHandler(orgSvc)
 	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
 	departmentHandler := handler.NewDepartmentHandler(departmentSvc)
+	statusHandler := handler.NewStatusHandler(statusSvc)
 
 	// Echo
 	e := echo.New()
@@ -171,6 +173,9 @@ func main() {
 	// Projects
 	api.GET("/projects", projectHandler.List)
 	api.GET("/organizations/:orgId/statuses", projectHandler.ListStatusesByOrg)
+	api.POST("/organizations/:orgId/statuses", statusHandler.Create)
+	api.PUT("/statuses/:id", statusHandler.Update)
+	api.DELETE("/statuses/:id", statusHandler.Delete)
 	api.POST("/projects", projectHandler.Create)
 	api.PUT("/projects/reorder", projectHandler.Reorder)
 	api.GET("/projects/:id", projectHandler.Get)

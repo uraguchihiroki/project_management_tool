@@ -91,6 +91,7 @@ func newTestServer(t *testing.T) *testServer {
 			Name:           ds.Name,
 			Color:          ds.Color,
 			Order:          ds.Order,
+			Type:           "issue",
 		})
 	}
 
@@ -117,6 +118,7 @@ func newTestServer(t *testing.T) *testServer {
 	workflowSvc := service.NewWorkflowService(workflowRepo)
 	templateSvc := service.NewTemplateService(templateRepo)
 	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
+	statusSvc := service.NewStatusService(statusRepo)
 
 	userH := handler.NewUserHandler(userSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
@@ -129,6 +131,7 @@ func newTestServer(t *testing.T) *testServer {
 	orgH := handler.NewOrganizationHandler(orgSvc)
 	superAdminH := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
 	departmentH := handler.NewDepartmentHandler(departmentSvc)
+	statusH := handler.NewStatusHandler(statusSvc)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -188,6 +191,9 @@ func newTestServer(t *testing.T) *testServer {
 	api.DELETE("/admin/users/:id", userH.RemoveFromOrg)
 	api.GET("/projects", projectH.List)
 	api.GET("/organizations/:orgId/statuses", projectH.ListStatusesByOrg)
+	api.POST("/organizations/:orgId/statuses", statusH.Create)
+	api.PUT("/statuses/:id", statusH.Update)
+	api.DELETE("/statuses/:id", statusH.Delete)
 	api.POST("/projects", projectH.Create)
 	api.PUT("/projects/reorder", projectH.Reorder)
 	api.GET("/projects/:id", projectH.Get)

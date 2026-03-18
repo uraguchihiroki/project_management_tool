@@ -9,10 +9,12 @@ import (
 type StatusRepository interface {
 	FindByProject(projectID uuid.UUID) ([]model.Status, error)
 	FindByOrganizationID(orgID uuid.UUID) ([]model.Status, error)
+	FindByOrganizationIDAndType(orgID uuid.UUID, statusType string) ([]model.Status, error)
 	FindByID(id uuid.UUID) (*model.Status, error)
 	Create(status *model.Status) error
 	Update(status *model.Status) error
 	Delete(id uuid.UUID) error
+	CountInUse(id uuid.UUID) (int64, error)
 }
 
 type statusRepository struct {
@@ -30,12 +32,19 @@ func (r *statusRepository) FindByProject(projectID uuid.UUID) ([]model.Status, e
 }
 
 func (r *statusRepository) FindByOrganizationID(orgID uuid.UUID) ([]model.Status, error) {
+	return r.FindByOrganizationIDAndType(orgID, "")
+}
+
+func (r *statusRepository) FindByOrganizationIDAndType(orgID uuid.UUID, statusType string) ([]model.Status, error) {
 	var statuses []model.Status
-	// プロジェクト所属 + 組織直下のステータス
-	err := r.db.Where(
+	q := r.db.Where(
 		"project_id IN (SELECT id FROM projects WHERE organization_id = ?) OR organization_id = ?",
 		orgID, orgID,
-	).Order(`"order" asc`).Find(&statuses).Error
+	)
+	if statusType == "issue" || statusType == "project" {
+		q = q.Where("type = ?", statusType)
+	}
+	err := q.Order(`"order" asc`).Find(&statuses).Error
 	return statuses, err
 }
 
@@ -58,4 +67,15 @@ func (r *statusRepository) Update(status *model.Status) error {
 
 func (r *statusRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&model.Status{}, "id = ?", id).Error
+}
+
+func (r *statusRepository) CountInUse(id uuid.UUID) (int64, error) {
+	var issueCount, stepCount int64
+	if err := r.db.Model(&model.Issue{}).Where("status_id = ?", id).Count(&issueCount).Error; err != nil {
+		return 0, err
+	}
+	if err := r.db.Model(&model.WorkflowStep{}).Where("status_id = ?", id).Count(&stepCount).Error; err != nil {
+		return 0, err
+	}
+	return issueCount + stepCount, nil
 }

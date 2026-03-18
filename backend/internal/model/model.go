@@ -90,6 +90,7 @@ type Status struct {
 	Name           string     `gorm:"size:50;not null" json:"name"`
 	Color          string     `gorm:"size:7;not null" json:"color"`
 	Order          int        `gorm:"not null" json:"order"`
+	Type           string     `gorm:"size:20;not null;default:'issue'" json:"type"` // issue | project
 }
 
 type Issue struct {

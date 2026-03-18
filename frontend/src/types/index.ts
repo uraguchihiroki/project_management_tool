@@ -61,6 +61,7 @@ export interface Status {
   name: string
   color: string
   order: number
+  type?: 'issue' | 'project'
 }
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical'

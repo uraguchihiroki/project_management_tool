@@ -212,7 +212,8 @@ func (h *ProjectHandler) ListStatusesByOrg(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
 	}
-	statuses, err := h.projectService.ListStatusesByOrg(orgID)
+	statusType := c.QueryParam("type") // issue | project | "" (all)
+	statuses, err := h.projectService.ListStatusesByOrg(orgID, statusType)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}

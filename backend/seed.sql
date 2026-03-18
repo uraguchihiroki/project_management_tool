@@ -115,6 +115,16 @@ SELECT gen_random_uuid(), NULL, '00000000-0000-0000-0000-000000000001', n, c, o
 FROM (VALUES ('未着手', '#6B7280', 1), ('進行中', '#3B82F6', 2), ('完了', '#10B981', 3)) AS t(n, c, o)
 WHERE NOT EXISTS (SELECT 1 FROM statuses WHERE organization_id = '00000000-0000-0000-0000-000000000001' AND project_id IS NULL LIMIT 1);
 
+-- 13a. Status: add type column (issue | project)
+ALTER TABLE statuses ADD COLUMN IF NOT EXISTS type VARCHAR(20) NOT NULL DEFAULT 'issue';
+UPDATE statuses SET type = 'issue' WHERE type IS NULL OR type = '';
+UPDATE statuses SET type = 'issue' WHERE type NOT IN ('issue', 'project');
+-- 組織用デフォルト Project ステータス（計画中, 進行中, 完了）
+INSERT INTO statuses (id, project_id, organization_id, name, color, "order", type)
+SELECT gen_random_uuid(), NULL, '00000000-0000-0000-0000-000000000001', n, c, o, 'project'
+FROM (VALUES ('計画中', '#6B7280', 1), ('進行中', '#3B82F6', 2), ('完了', '#10B981', 3)) AS t(n, c, o)
+WHERE NOT EXISTS (SELECT 1 FROM statuses WHERE organization_id = '00000000-0000-0000-0000-000000000001' AND project_id IS NULL AND type = 'project' LIMIT 1);
+
 -- 13. WorkflowStep: Phase 5 承認対象拡張
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS approver_type VARCHAR(20) DEFAULT 'role';
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS approver_user_id UUID;
