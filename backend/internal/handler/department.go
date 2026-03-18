@@ -44,7 +44,13 @@ func (h *DepartmentHandler) Create(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "部署名は必須です")
+	}
+	if len(req.Name) > 200 {
+		return echo.NewHTTPError(http.StatusBadRequest, "部署名は200文字以内で指定してください")
+	}
+	if req.Order < 0 || req.Order > 9999 {
+		return echo.NewHTTPError(http.StatusBadRequest, "表示順は0～9999の範囲で指定してください")
 	}
 	dept, err := h.deptService.Create(orgID, req.Name, req.Order)
 	if err != nil {
@@ -77,6 +83,15 @@ func (h *DepartmentHandler) Update(c echo.Context) error {
 	}
 	if dept.OrganizationID != orgID {
 		return echo.NewHTTPError(http.StatusNotFound, "department not found")
+	}
+	if req.Name == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "部署名は必須です")
+	}
+	if len(req.Name) > 200 {
+		return echo.NewHTTPError(http.StatusBadRequest, "部署名は200文字以内で指定してください")
+	}
+	if req.Order < 0 || req.Order > 9999 {
+		return echo.NewHTTPError(http.StatusBadRequest, "表示順は0～9999の範囲で指定してください")
 	}
 	updated, err := h.deptService.Update(id, req.Name, req.Order)
 	if err != nil {

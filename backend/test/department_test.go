@@ -115,6 +115,28 @@ func TestDepartment_NormalFlow(t *testing.T) {
 	}
 }
 
+func TestDepartment_OrderValidation(t *testing.T) {
+	ts := newTestServer(t)
+
+	// 表示順が範囲外（負の数）は400
+	status, _ := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{
+		"name":  "テスト",
+		"order": -1,
+	})
+	if status != http.StatusBadRequest {
+		t.Errorf("order -1 should be 400, got %d", status)
+	}
+
+	// 表示順が範囲外（10000以上）は400
+	status, _ = ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{
+		"name":  "テスト",
+		"order": 10000,
+	})
+	if status != http.StatusBadRequest {
+		t.Errorf("order 10000 should be 400, got %d", status)
+	}
+}
+
 func TestDepartment_UserDepartments(t *testing.T) {
 	ts := newTestServer(t)
 	userID := createTestUser(t, ts, "User1", "user1@example.com")

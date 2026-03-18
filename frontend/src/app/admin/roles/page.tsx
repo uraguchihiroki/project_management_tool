@@ -88,6 +88,10 @@ export default function RolesPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name.trim()) { setError('名前は必須です'); return }
+    if (form.level < 0 || form.level > 9999) {
+      setError('レベルは0～9999の範囲で指定してください')
+      return
+    }
     if (editingId !== null) {
       updateMutation.mutate({ id: editingId, data: form })
     } else {
@@ -133,15 +137,15 @@ export default function RolesPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
-                  レベル *
-                  <span className="ml-1 font-normal text-gray-400">（大きいほど上位）</span>
+                  レベル（0～9999、大きいほど上位） *
                 </label>
                 <input
                   type="number"
-                  min={1}
-                  max={99}
+                  min={0}
+                  max={9999}
                   value={form.level}
                   onChange={(e) => setForm({ ...form, level: parseInt(e.target.value) || 1 })}
+                  placeholder="1"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

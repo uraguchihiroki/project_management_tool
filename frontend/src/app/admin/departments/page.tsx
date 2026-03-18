@@ -111,7 +111,15 @@ export default function DepartmentsPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name.trim()) {
-      setError('名前は必須です')
+      setError('部署名は必須です')
+      return
+    }
+    if (form.name.length > 200) {
+      setError('部署名は200文字以内で指定してください')
+      return
+    }
+    if (form.order < 0 || form.order > 9999) {
+      setError('表示順は0～9999の範囲で指定してください')
       return
     }
     if (editingId !== null) {
@@ -162,17 +170,20 @@ export default function DepartmentsPage() {
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="例: 開発部、予算委員会"
+                  placeholder="例: 開発部、予算委員会（200文字以内）"
+                  maxLength={200}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">表示順</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">表示順（0～9999、小さいほど上）</label>
                 <input
                   type="number"
-                  min={0}
                   value={form.order}
                   onChange={(e) => setForm({ ...form, order: parseInt(e.target.value) || 0 })}
+                  min={0}
+                  max={9999}
+                  placeholder="0"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

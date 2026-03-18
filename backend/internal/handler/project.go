@@ -60,6 +60,21 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+	if req.Key == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "プロジェクトキーは必須です")
+	}
+	if len(req.Key) > 10 {
+		return echo.NewHTTPError(http.StatusBadRequest, "プロジェクトキーは10文字以内で指定してください")
+	}
+	if req.Name == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "プロジェクト名は必須です")
+	}
+	if len(req.Name) > 200 {
+		return echo.NewHTTPError(http.StatusBadRequest, "プロジェクト名は200文字以内で指定してください")
+	}
+	if req.Status != "" && req.Status != "none" && req.Status != "planning" && req.Status != "active" && req.Status != "completed" {
+		return echo.NewHTTPError(http.StatusBadRequest, "ステータスは none, planning, active, completed のいずれかを指定してください")
+	}
 	ownerID, err := uuid.Parse(req.OwnerID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid owner_id")
@@ -114,6 +129,12 @@ func (h *ProjectHandler) Update(c echo.Context) error {
 	var req Request
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if req.Name != nil && len(*req.Name) > 200 {
+		return echo.NewHTTPError(http.StatusBadRequest, "プロジェクト名は200文字以内で指定してください")
+	}
+	if req.Status != "" && req.Status != "none" && req.Status != "planning" && req.Status != "active" && req.Status != "completed" {
+		return echo.NewHTTPError(http.StatusBadRequest, "ステータスは none, planning, active, completed のいずれかを指定してください")
 	}
 	var startDate, endDate *time.Time
 	if req.StartDate != "" {

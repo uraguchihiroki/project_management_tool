@@ -43,8 +43,15 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const [stepForm, setStepForm] = useState(emptyStep)
   const [error, setError] = useState('')
 
+  const validateStepForm = (data: typeof emptyStep) => {
+    if (data.required_level < 0 || data.required_level > 9999) {
+      throw new Error('必要レベルは0～9999の範囲で指定してください')
+    }
+  }
+
   const addStepMutation = useMutation({
     mutationFn: async (data: typeof emptyStep) => {
+      validateStepForm(data)
       const body: Record<string, unknown> = {
         name: data.name,
         required_level: data.required_level,
@@ -55,7 +62,10 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error('追加に失敗しました')
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.message ?? '追加に失敗しました')
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow', id] })
@@ -68,6 +78,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
 
   const updateStepMutation = useMutation({
     mutationFn: async ({ stepId, data, order }: { stepId: number; data: typeof emptyStep; order: number }) => {
+      validateStepForm(data)
+      if (order < 0 || order > 9999) throw new Error('表示順は0～9999の範囲で指定してください')
       const body: Record<string, unknown> = {
         name: data.name,
         required_level: data.required_level,
@@ -79,7 +91,10 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error('更新に失敗しました')
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.message ?? '更新に失敗しました')
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow', id] })
@@ -155,15 +170,15 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       </div>
       <div className="col-span-3">
         <label className="block text-xs font-medium text-gray-500 mb-1">
-          必要Lv *
-          <span className="ml-1 font-normal text-gray-400">（以上）</span>
+          必要Lv（0～9999、以上） *
         </label>
         <input
           type="number"
-          min={1}
-          max={99}
+          min={0}
+          max={9999}
           value={stepForm.required_level}
-          onChange={(e) => setStepForm({ ...stepForm, required_level: parseInt(e.target.value) || 1 })}
+          onChange={(e) => setStepForm({ ...stepForm, required_level: parseInt(e.target.value) || 0 })}
+          placeholder="1"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>

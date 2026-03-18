@@ -136,6 +136,12 @@ func (h *WorkflowHandler) AddStep(c echo.Context) error {
 	if req.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
+	if req.RequiredLevel < 0 || req.RequiredLevel > 9999 {
+		return echo.NewHTTPError(http.StatusBadRequest, "必要レベルは0～9999の範囲で指定してください")
+	}
+	if req.MinApprovers < 0 || req.MinApprovers > 9999 {
+		return echo.NewHTTPError(http.StatusBadRequest, "最小承認人数は0～9999の範囲で指定してください")
+	}
 	var statusID *uuid.UUID
 	if req.StatusID != nil && *req.StatusID != "" {
 		parsed, err := uuid.Parse(*req.StatusID)
@@ -192,6 +198,15 @@ func (h *WorkflowHandler) UpdateStep(c echo.Context) error {
 	}
 	if req.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+	}
+	if req.RequiredLevel < 0 || req.RequiredLevel > 9999 {
+		return echo.NewHTTPError(http.StatusBadRequest, "必要レベルは0～9999の範囲で指定してください")
+	}
+	if req.Order < 0 || req.Order > 9999 {
+		return echo.NewHTTPError(http.StatusBadRequest, "表示順は0～9999の範囲で指定してください")
+	}
+	if req.MinApprovers < 0 || req.MinApprovers > 9999 {
+		return echo.NewHTTPError(http.StatusBadRequest, "最小承認人数は0～9999の範囲で指定してください")
 	}
 	var statusID *uuid.UUID
 	if req.StatusID != nil && *req.StatusID != "" {
