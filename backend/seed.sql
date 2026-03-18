@@ -193,6 +193,39 @@ CREATE TABLE IF NOT EXISTS approval_objects (
   exclude_assignee BOOLEAN DEFAULT false
 );
 
+-- 14f. 論理削除: 全テーブルに deleted_at 追加
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE organization_users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE organization_user_departments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE roles ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE statuses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE workflows ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE approval_objects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE issue_templates ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE issue_approvals ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_organizations_deleted_at ON organizations(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_organization_users_deleted_at ON organization_users(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_departments_deleted_at ON departments(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_organization_user_departments_deleted_at ON organization_user_departments(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_roles_deleted_at ON roles(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_projects_deleted_at ON projects(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_statuses_deleted_at ON statuses(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_issues_deleted_at ON issues(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_comments_deleted_at ON comments(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_workflows_deleted_at ON workflows(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_workflow_steps_deleted_at ON workflow_steps(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_approval_objects_deleted_at ON approval_objects(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_issue_templates_deleted_at ON issue_templates(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_issue_approvals_deleted_at ON issue_approvals(deleted_at);
+
 -- 15. Create initial super admin account
 --    Email: superadmin@frs.example.com  (change as needed)
 INSERT INTO super_admins (id, name, email, created_at)

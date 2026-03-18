@@ -59,6 +59,7 @@ func newTestServer(t *testing.T) *testServer {
 		&model.Comment{},
 		&model.Workflow{},
 		&model.WorkflowStep{},
+		&model.ApprovalObject{},
 		&model.IssueTemplate{},
 		&model.IssueApproval{},
 	); err != nil {
@@ -156,6 +157,7 @@ func newTestServer(t *testing.T) *testServer {
 	api.PUT("/workflows/:id", workflowH.Update)
 	api.DELETE("/workflows/:id", workflowH.Delete)
 	api.POST("/workflows/:id/steps", workflowH.AddStep)
+	api.GET("/workflows/:id/steps/:stepId", workflowH.GetStep)
 	api.PUT("/workflows/:id/steps/reorder", workflowH.ReorderSteps)
 	api.PUT("/workflows/:id/steps/:stepId", workflowH.UpdateStep)
 	api.DELETE("/workflows/:id/steps/:stepId", workflowH.DeleteStep)
