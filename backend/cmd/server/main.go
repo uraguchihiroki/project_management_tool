@@ -118,17 +118,18 @@ func main() {
 	api.DELETE("/roles/:id", roleHandler.Delete)
 
 	// Workflows（組織に属さない、グローバル）
+	// /workflows/:id より具体的な /workflows/:id/steps/... を先に登録（Echoは先に登録したルートを優先）
 	api.GET("/workflows", workflowHandler.List)
 	api.POST("/workflows", workflowHandler.Create)
 	api.PUT("/workflows/reorder", workflowHandler.Reorder)
-	api.GET("/workflows/:id", workflowHandler.Get)
-	api.PUT("/workflows/:id", workflowHandler.Update)
-	api.DELETE("/workflows/:id", workflowHandler.Delete)
 	api.POST("/workflows/:id/steps", workflowHandler.AddStep)
 	api.GET("/workflows/:id/steps/:stepId", workflowHandler.GetStep)
 	api.PUT("/workflows/:id/steps/reorder", workflowHandler.ReorderSteps)
 	api.PUT("/workflows/:id/steps/:stepId", workflowHandler.UpdateStep)
 	api.DELETE("/workflows/:id/steps/:stepId", workflowHandler.DeleteStep)
+	api.GET("/workflows/:id", workflowHandler.Get)
+	api.PUT("/workflows/:id", workflowHandler.Update)
+	api.DELETE("/workflows/:id", workflowHandler.Delete)
 
 	// Templates
 	api.GET("/templates", templateHandler.List)

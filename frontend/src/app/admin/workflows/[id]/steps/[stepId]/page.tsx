@@ -128,10 +128,10 @@ export default function StepEditPage({
           .filter((ao) => (ao.type === 'role' && ao.role_id) || (ao.type === 'user' && ao.user_id))
           .map((ao) => ({
             type: ao.type,
-            role_id: ao.role_id,
+            role_id: ao.role_id != null && ao.role_id !== '' ? Number(ao.role_id) : undefined,
             role_operator: ao.role_operator ?? 'gte',
-            user_id: ao.user_id,
-            points: ao.points >= 1 ? ao.points : 1,
+            user_id: ao.user_id || undefined,
+            points: Math.max(1, Number(ao.points) || 1),
             exclude_reporter: ao.exclude_reporter,
             exclude_assignee: ao.exclude_assignee,
           })),
@@ -144,7 +144,10 @@ export default function StepEditPage({
       setError('')
       router.push(`/admin/workflows/${id}`)
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error & { response?: { data?: { message?: string } } }) => {
+      const msg = e.response?.data?.message ?? e.message
+      setError(msg)
+    },
   })
 
   const isGoal = !form.next_status_id
