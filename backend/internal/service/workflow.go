@@ -9,33 +9,21 @@ import (
 )
 
 type AddStepInput struct {
-	StepType       string
-	Name           string
-	Description    string
-	Threshold      int
-	StatusID       *uuid.UUID
+	StatusID        uuid.UUID  // このステップのステータス
+	NextStatusID    *uuid.UUID // 承認後ステータス（ゴールでは nil）
+	Description     string
+	Threshold       int
 	ApprovalObjects []ApprovalObjectInput
-	// 旧設計
-	RequiredLevel   int
-	ApproverType    string
-	ApproverUserID  *uuid.UUID
-	MinApprovers    int
 	ExcludeReporter bool
 	ExcludeAssignee bool
 }
 
 type UpdateStepInput struct {
-	StepType       string
-	Name           string
-	Description    string
-	Threshold      int
-	StatusID       *uuid.UUID
+	StatusID        *uuid.UUID
+	NextStatusID    *uuid.UUID
+	Description     string
+	Threshold       int
 	ApprovalObjects []ApprovalObjectInput
-	// 旧設計
-	RequiredLevel   int
-	ApproverType    string
-	ApproverUserID  *uuid.UUID
-	MinApprovers    int
 	ExcludeReporter bool
 	ExcludeAssignee bool
 }
@@ -66,10 +54,11 @@ type WorkflowService interface {
 
 type workflowService struct {
 	workflowRepo repository.WorkflowRepository
+	statusRepo   repository.StatusRepository
 }
 
-func NewWorkflowService(workflowRepo repository.WorkflowRepository) WorkflowService {
-	return &workflowService{workflowRepo: workflowRepo}
+func NewWorkflowService(workflowRepo repository.WorkflowRepository, statusRepo repository.StatusRepository) WorkflowService {
+	return &workflowService{workflowRepo: workflowRepo, statusRepo: statusRepo}
 }
 
 func (s *workflowService) ListAll() ([]model.Workflow, error) {
@@ -131,41 +120,23 @@ func (s *workflowService) AddStep(workflowID uint, input AddStepInput) (*model.W
 	if err != nil {
 		return nil, err
 	}
-	stepType := input.StepType
-	if stepType == "" {
-		stepType = "normal"
-	}
 	threshold := input.Threshold
 	if threshold < 1 {
-		threshold = 1
-	}
-	approverType := input.ApproverType
-	if approverType == "" {
-		approverType = "role"
-	}
-	minApprovers := input.MinApprovers
-	if minApprovers < 1 {
-		minApprovers = 1
+		threshold = 10
 	}
 	step := &model.WorkflowStep{
 		WorkflowID:      workflowID,
 		Order:           int(count) + 1,
-		StepType:        stepType,
-		Name:            input.Name,
+		StatusID:        input.StatusID,
+		NextStatusID:    input.NextStatusID,
 		Description:     input.Description,
 		Threshold:       threshold,
-		StatusID:        input.StatusID,
-		RequiredLevel:   input.RequiredLevel,
-		ApproverType:    approverType,
-		ApproverUserID:  input.ApproverUserID,
-		MinApprovers:    minApprovers,
 		ExcludeReporter: input.ExcludeReporter,
 		ExcludeAssignee: input.ExcludeAssignee,
 	}
 	if err := s.workflowRepo.CreateStep(step); err != nil {
 		return nil, err
 	}
-	// 承認オブジェクトを追加
 	for i, ao := range input.ApprovalObjects {
 		obj := s.approvalObjectInputToModel(ao, step.ID, i+1)
 		if obj != nil {
@@ -208,29 +179,21 @@ func (s *workflowService) UpdateStep(stepID uint, input UpdateStepInput) (*model
 	if err != nil {
 		return nil, err
 	}
-	if input.StepType != "" {
-		step.StepType = input.StepType
+	if input.StatusID != nil {
+		step.StatusID = *input.StatusID
 	}
-	step.Name = input.Name
+	if input.NextStatusID != nil {
+		step.NextStatusID = input.NextStatusID
+	}
 	step.Description = input.Description
 	if input.Threshold >= 1 {
 		step.Threshold = input.Threshold
-	}
-	step.StatusID = input.StatusID
-	step.RequiredLevel = input.RequiredLevel
-	if input.ApproverType != "" {
-		step.ApproverType = input.ApproverType
-	}
-	step.ApproverUserID = input.ApproverUserID
-	if input.MinApprovers >= 1 {
-		step.MinApprovers = input.MinApprovers
 	}
 	step.ExcludeReporter = input.ExcludeReporter
 	step.ExcludeAssignee = input.ExcludeAssignee
 	if err := s.workflowRepo.UpdateStep(step); err != nil {
 		return nil, err
 	}
-	// 承認オブジェクトを置き換え（削除して再作成）
 	if input.ApprovalObjects != nil {
 		_ = s.workflowRepo.DeleteApprovalObjectsByStepID(stepID)
 		for i, ao := range input.ApprovalObjects {

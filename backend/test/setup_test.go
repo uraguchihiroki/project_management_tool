@@ -76,24 +76,34 @@ func newTestServer(t *testing.T) *testServer {
 
 	// 組織用デフォルトステータス（プロジェクト未割当Issue用）
 	statusRepo := repository.NewStatusRepository(db)
+	stsStartID := uuid.MustParse("30000000-0000-0000-0000-000000000001")
+	stsGoalID := uuid.MustParse("30000000-0000-0000-0000-000000000002")
 	for _, ds := range []struct {
+		ID    uuid.UUID
 		Name  string
 		Color string
 		Order int
+		Key   string
 	}{
-		{"未着手", "#6B7280", 1},
-		{"進行中", "#3B82F6", 2},
-		{"完了", "#10B981", 3},
+		{stsStartID, "sts_start", "#9CA3AF", 0, "sts_start"},
+		{stsGoalID, "sts_goal", "#9CA3AF", 99, "sts_goal"},
+		{uuid.New(), "未着手", "#6B7280", 1, ""},
+		{uuid.New(), "進行中", "#3B82F6", 2, ""},
+		{uuid.New(), "完了", "#10B981", 3, ""},
 	} {
-		statusRepo.Create(&model.Status{
-			ID:             uuid.New(),
+		s := &model.Status{
+			ID:             ds.ID,
 			ProjectID:      nil,
 			OrganizationID: &frsOrg.ID,
 			Name:           ds.Name,
 			Color:          ds.Color,
 			Order:          ds.Order,
 			Type:           "issue",
-		})
+		}
+		if ds.Key != "" {
+			s.StatusKey = ds.Key
+		}
+		statusRepo.Create(s)
 	}
 
 	userRepo := repository.NewUserRepository(db)
@@ -116,7 +126,7 @@ func newTestServer(t *testing.T) *testServer {
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
 	commentSvc := service.NewCommentService(commentRepo)
 	roleSvc := service.NewRoleService(roleRepo)
-	workflowSvc := service.NewWorkflowService(workflowRepo)
+	workflowSvc := service.NewWorkflowService(workflowRepo, statusRepo)
 	templateSvc := service.NewTemplateService(templateRepo)
 	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
 	statusSvc := service.NewStatusService(statusRepo)
@@ -351,4 +361,18 @@ func getFirstStatusID(t *testing.T, ts *testServer, projectID string) string {
 		t.Fatal("project has no statuses")
 	}
 	return statuses[0].(map[string]interface{})["id"].(string)
+}
+
+// getStatusIDs はプロジェクトのステータスIDを返します
+func getStatusIDs(t *testing.T, ts *testServer, projectID string) []string {
+	t.Helper()
+	status, resp := ts.req(t, "GET", "/api/v1/projects/"+projectID, nil)
+	assertStatus(t, status, http.StatusOK, "getProject for status")
+	data := resp["data"].(map[string]interface{})
+	statuses := data["statuses"].([]interface{})
+	ids := make([]string, len(statuses))
+	for i, s := range statuses {
+		ids[i] = s.(map[string]interface{})["id"].(string)
+	}
+	return ids
 }

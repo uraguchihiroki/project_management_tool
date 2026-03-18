@@ -59,6 +59,7 @@ export interface Status {
   color: string
   order: number
   type?: 'issue' | 'project'
+  status_key?: string // sts_start, sts_goal。空=ユーザー定義
 }
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical'
@@ -140,17 +141,13 @@ export interface WorkflowStep {
   id: number
   workflow_id: number
   order: number
-  step_type?: 'start' | 'normal' | 'goal'
-  name: string
+  status_id: string
+  status?: Status
+  next_status_id?: string
+  next_status?: Status
   description?: string
   threshold?: number
-  status_id?: string
-  status?: Status
   approval_objects?: ApprovalObject[]
-  required_level?: number
-  approver_type?: 'role' | 'user' | 'multiple'
-  approver_user_id?: string
-  min_approvers?: number
   exclude_reporter?: boolean
   exclude_assignee?: boolean
 }

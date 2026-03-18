@@ -156,8 +156,8 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
                               {step?.order}
                             </div>
                             <div>
-                              <p className="text-sm font-semibold text-gray-900">{step?.name}</p>
-                              <p className="text-xs text-gray-500">必要レベル: {step?.required_level}</p>
+                              <p className="text-sm font-semibold text-gray-900">{step?.status?.name ?? step?.status_id}</p>
+                              <p className="text-xs text-gray-500">閾値: {step?.threshold ?? 10}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">

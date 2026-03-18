@@ -11,6 +11,7 @@ type StatusRepository interface {
 	FindByOrganizationID(orgID uuid.UUID) ([]model.Status, error)
 	FindByOrganizationIDAndType(orgID uuid.UUID, statusType string) ([]model.Status, error)
 	FindByID(id uuid.UUID) (*model.Status, error)
+	FindByStatusKey(key string) (*model.Status, error)
 	Create(status *model.Status) error
 	Update(status *model.Status) error
 	Delete(id uuid.UUID) error
@@ -57,6 +58,15 @@ func (r *statusRepository) FindByID(id uuid.UUID) (*model.Status, error) {
 	return &status, nil
 }
 
+func (r *statusRepository) FindByStatusKey(key string) (*model.Status, error) {
+	var status model.Status
+	err := r.db.First(&status, "status_key = ?", key).Error
+	if err != nil {
+		return nil, err
+	}
+	return &status, nil
+}
+
 func (r *statusRepository) Create(status *model.Status) error {
 	return r.db.Create(status).Error
 }
@@ -74,7 +84,7 @@ func (r *statusRepository) CountInUse(id uuid.UUID) (int64, error) {
 	if err := r.db.Model(&model.Issue{}).Where("status_id = ?", id).Count(&issueCount).Error; err != nil {
 		return 0, err
 	}
-	if err := r.db.Model(&model.WorkflowStep{}).Where("status_id = ?", id).Count(&stepCount).Error; err != nil {
+	if err := r.db.Model(&model.WorkflowStep{}).Where("status_id = ? OR next_status_id = ?", id, id).Count(&stepCount).Error; err != nil {
 		return 0, err
 	}
 	return issueCount + stepCount, nil

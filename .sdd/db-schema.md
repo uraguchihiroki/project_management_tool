@@ -104,22 +104,13 @@ workflows
 ├── description
 └── created_at
 
-workflow_steps
+workflow_steps（ステータス参照の双方向リスト）
 ├── id (PK, auto)
 ├── workflow_id (FK → workflows.id)
-├── order
-├── step_type (start / normal / goal) # スタート/通常/ゴール。ワークフローは start→goal で構成
-├── name
-├── description (nullable)           # ステップの説明（goal でも有効）
-├── threshold (default 1)             # 閾値（点数合計>=で遷移）。goal では無効
-├── status_id (FK → statuses.id, nullable)  # 承認後ステータス。goal では無効
-├── required_level (deprecated)      # 旧設計・後方互換用
-├── approver_type (deprecated)
-├── approver_user_id (deprecated)
-├── min_approvers (deprecated)
-├── exclude_reporter (deprecated)
-└── exclude_assignee (deprecated)
-
+├── status_id (FK → statuses.id, NOT NULL)   # このステップのステータス。表示名は status.name を使用
+├── next_status_id (FK → statuses.id, nullable) # 承認後ステータス。ゴールでは NULL
+├── description (nullable)           # ステップの説明
+├── threshold (default 10)           # 閾値（点数合計>=で遷移）。ゴールでは無効
 approval_objects (承認オブジェクト, 1ステップ:N。goal ステップには紐づかない)
 ├── id (PK, auto)
 ├── workflow_step_id (FK → workflow_steps.id)
@@ -225,10 +216,13 @@ issue_approvals
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | UUID | PK | ステータスID |
-| project_id | UUID | FK | 所属プロジェクト |
+| project_id | UUID | FK, nullable | 所属プロジェクト（組織用は NULL） |
+| organization_id | UUID | FK, nullable | 所属組織 |
 | name | VARCHAR(50) | NOT NULL | ステータス名 |
 | color | VARCHAR(7) | NOT NULL | HEXカラー (#RRGGBB) |
 | order | INTEGER | NOT NULL | 表示順 |
+| type | VARCHAR(20) | NOT NULL | issue / project |
+| status_key | VARCHAR(50) | nullable, UNIQUE | システム用: sts_start, sts_goal。NULL=ユーザー定義 |
 
 ### issues
 
@@ -271,24 +265,20 @@ issue_approvals
 
 > **Note:** ワークフローは組織に属さない（グローバル）。
 
-### workflow_steps
+### workflow_steps（ステータス参照の双方向リスト）
+
+表示順は意味を持たない。status_id → next_status_id のリンクで辿る。
 
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | SERIAL | PK | ステップID |
 | workflow_id | INTEGER | FK | 所属ワークフロー |
-| order | INTEGER | NOT NULL, DEFAULT 1 | 表示順 |
-| step_type | VARCHAR(20) | NOT NULL, DEFAULT 'normal' | start / normal / goal。ワークフローは start で始まり goal で終わる |
-| name | VARCHAR(200) | NOT NULL | ステップ名 |
-| description | TEXT | nullable | ステップの説明（goal でも編集可） |
-| threshold | INTEGER | NOT NULL, DEFAULT 1 | 閾値（点数合計>=で遷移）。goal では無効 |
-| status_id | UUID | FK, nullable | 承認後ステータス。goal では無効 |
-| required_level | INTEGER | (deprecated) | 旧設計・後方互換用 |
-| approver_type | VARCHAR(20) | (deprecated) | 旧設計 |
-| approver_user_id | UUID | (deprecated) | 旧設計 |
-| min_approvers | INTEGER | (deprecated) | 旧設計 |
-| exclude_reporter | BOOLEAN | (deprecated) | 旧設計 |
-| exclude_assignee | BOOLEAN | (deprecated) | 旧設計 |
+| status_id | UUID | FK, NOT NULL | このステップのステータス。表示名は status.name |
+| next_status_id | UUID | FK, nullable | 承認後ステータス。ゴールでは NULL |
+| description | TEXT | nullable | ステップの説明 |
+| threshold | INTEGER | NOT NULL, DEFAULT 10 | 閾値（点数合計>=で遷移）。ゴールでは無効 |
+
+**システムステータス（ユーザー変更不可）:** sts_start（最初のステップ）, sts_goal（最後のステップ）
 
 ### approval_objects（承認オブジェクト）
 
@@ -330,6 +320,21 @@ issue_approvals
 | comment | TEXT | | コメント |
 | acted_at | TIMESTAMP | nullable | 承認/却下日時 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
+
+---
+
+## ワークフローステップ（ステータス参照の双方向リスト）
+
+表示順は意味を持たない。`status_id` → `next_status_id` のリンクで辿る。
+
+| IDX | status | 説明 | 閾値 | 承認後ステータス |
+|:----|:-------|:-----|:-----|:----------------|
+| 1 | sts_start | 最初のステップ。ユーザー変更不可 | 10 | 未着手 |
+| 2 | 未着手 | ユーザーで変更可能 | 10 | 進行中 |
+| 3 | 進行中 | ユーザーで変更可能 | 10 | sts_goal |
+| 4 | sts_goal | 最後のステップ。ユーザー変更不可 | - | - |
+
+**システムステータス:** `sts_start`, `sts_goal` は `status_key` で識別し、編集・削除不可。
 
 ---
 

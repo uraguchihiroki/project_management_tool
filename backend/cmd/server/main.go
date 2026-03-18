@@ -70,7 +70,7 @@ func main() {
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
 	commentSvc := service.NewCommentService(commentRepo)
 	roleSvc := service.NewRoleService(roleRepo)
-	workflowSvc := service.NewWorkflowService(workflowRepo)
+	workflowSvc := service.NewWorkflowService(workflowRepo, statusRepo)
 	templateSvc := service.NewTemplateService(templateRepo)
 	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
 	statusSvc := service.NewStatusService(statusRepo)

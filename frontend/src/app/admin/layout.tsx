@@ -43,7 +43,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 key={href}
                 href={href}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  pathname === href || (href === '/admin/projects' && pathname.startsWith('/admin/projects/'))
+                  pathname === href ||
+                  (href === '/admin/projects' && pathname.startsWith('/admin/projects/')) ||
+                  (href === '/admin/workflows' && pathname.startsWith('/admin/workflows'))
                     ? 'bg-blue-50 text-blue-700 font-medium'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}

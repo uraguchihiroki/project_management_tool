@@ -4,6 +4,7 @@ import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
   headers: { 'Content-Type': 'application/json' },
+  timeout: 30000,
 })
 
 // Users
@@ -159,11 +160,10 @@ export const getWorkflowStep = (workflowId: string, stepId: string) =>
 export const createWorkflowStep = (
   workflowId: string,
   data: {
-    step_type?: string
-    name: string
+    status_id: string
+    next_status_id?: string
     description?: string
     threshold?: number
-    status_id?: string
     approval_objects?: Array<{
       type: 'role' | 'user'
       role_id?: number
@@ -180,11 +180,10 @@ export const updateWorkflowStep = (
   workflowId: string,
   stepId: string,
   data: {
-    step_type?: string
-    name: string
+    status_id?: string
+    next_status_id?: string
     description?: string
     threshold?: number
-    status_id?: string
     approval_objects?: Array<{
       type: 'role' | 'user'
       role_id?: number

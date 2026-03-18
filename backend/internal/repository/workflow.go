@@ -44,7 +44,7 @@ func (r *workflowRepository) FindByID(id uint) (*model.Workflow, error) {
 	var workflow model.Workflow
 	err := r.db.
 		Preload("Steps", func(db *gorm.DB) *gorm.DB {
-			return db.Order("\"order\" ASC").Preload("Status").Preload("ApprovalObjects", func(d *gorm.DB) *gorm.DB {
+			return db.Preload("Status").Preload("NextStatus").Preload("ApprovalObjects", func(d *gorm.DB) *gorm.DB {
 				return d.Order("sort_order ASC").Preload("Role").Preload("User")
 			})
 		}).
@@ -89,15 +89,10 @@ func (r *workflowRepository) CreateStep(step *model.WorkflowStep) error {
 
 func (r *workflowRepository) UpdateStep(step *model.WorkflowStep) error {
 	return r.db.Model(&model.WorkflowStep{}).Where("id = ?", step.ID).Updates(map[string]interface{}{
-		"step_type":        step.StepType,
-		"name":             step.Name,
-		"description":      step.Description,
-		"threshold":        step.Threshold,
 		"status_id":        step.StatusID,
-		"required_level":   step.RequiredLevel,
-		"approver_type":    step.ApproverType,
-		"approver_user_id": step.ApproverUserID,
-		"min_approvers":    step.MinApprovers,
+		"next_status_id":   step.NextStatusID,
+		"description":     step.Description,
+		"threshold":       step.Threshold,
 		"exclude_reporter": step.ExcludeReporter,
 		"exclude_assignee": step.ExcludeAssignee,
 	}).Error
@@ -114,6 +109,7 @@ func (r *workflowRepository) FindStepByID(id uint) (*model.WorkflowStep, error) 
 	var step model.WorkflowStep
 	err := r.db.
 		Preload("Status").
+		Preload("NextStatus").
 		Preload("ApprovalObjects", func(db *gorm.DB) *gorm.DB {
 			return db.Order("sort_order ASC").Preload("Role").Preload("User")
 		}).

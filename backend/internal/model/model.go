@@ -97,8 +97,9 @@ type Status struct {
 	OrganizationID *uuid.UUID     `gorm:"type:uuid" json:"organization_id,omitempty"`
 	Name           string         `gorm:"size:50;not null" json:"name"`
 	Color          string         `gorm:"size:7;not null" json:"color"`
-	Order          int             `gorm:"not null" json:"order"`
-	Type           string          `gorm:"size:20;not null;default:'issue'" json:"type"` // issue | project
+	Order          int            `gorm:"not null" json:"order"`
+	Type           string         `gorm:"size:20;not null;default:'issue'" json:"type"` // issue | project
+	StatusKey      string         `gorm:"size:50;index" json:"status_key,omitempty"` // sts_start, sts_goal。空=ユーザー定義
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
@@ -176,24 +177,20 @@ type Workflow struct {
 }
 
 type WorkflowStep struct {
-	ID             uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	WorkflowID     uint       `gorm:"not null" json:"workflow_id"`
-	Order          int        `gorm:"not null;default:1" json:"order"`
-	StepType       string     `gorm:"size:20;not null;default:'normal'" json:"step_type"` // start / normal / goal
-	Name           string     `gorm:"size:200;not null" json:"name"`
-	Description    string     `gorm:"type:text" json:"description"`
-	Threshold      int        `gorm:"not null;default:1" json:"threshold"`
-	StatusID       *uuid.UUID `gorm:"type:uuid" json:"status_id,omitempty"`
-	Status         *Status    `gorm:"foreignKey:StatusID" json:"status,omitempty"`
-	ApprovalObjects []ApprovalObject `gorm:"foreignKey:WorkflowStepID" json:"approval_objects,omitempty"`
-	// 旧設計（後方互換）
-	RequiredLevel   int        `gorm:"not null;default:1" json:"required_level"`
-	ApproverType    string     `gorm:"size:20;not null;default:'role'" json:"approver_type"`
-	ApproverUserID  *uuid.UUID `gorm:"type:uuid" json:"approver_user_id,omitempty"`
-	MinApprovers    int        `gorm:"not null;default:1" json:"min_approvers"`
-	ExcludeReporter bool           `gorm:"default:false" json:"exclude_reporter"`
-	ExcludeAssignee bool           `gorm:"default:false" json:"exclude_assignee"`
-	DeletedAt      gorm.DeletedAt  `gorm:"index" json:"-"`
+	ID               uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	WorkflowID       uint       `gorm:"not null" json:"workflow_id"`
+	StatusID         uuid.UUID  `gorm:"type:uuid;not null" json:"status_id"` // このステップのステータス。表示名は Status.Name
+	Status           *Status    `gorm:"foreignKey:StatusID" json:"status,omitempty"`
+	NextStatusID     *uuid.UUID `gorm:"type:uuid" json:"next_status_id,omitempty"` // 承認後ステータス。ゴールでは NULL
+	NextStatus       *Status    `gorm:"foreignKey:NextStatusID" json:"next_status,omitempty"`
+	Description      string     `gorm:"type:text" json:"description"`
+	Threshold        int        `gorm:"not null;default:10" json:"threshold"`
+	ApprovalObjects  []ApprovalObject `gorm:"foreignKey:WorkflowStepID" json:"approval_objects,omitempty"`
+	ExcludeReporter  bool       `gorm:"default:false" json:"exclude_reporter"`
+	ExcludeAssignee  bool       `gorm:"default:false" json:"exclude_assignee"`
+	// 後方互換（Order は status チェーンで辿るため未使用だが既存データ用に残す）
+	Order            int        `gorm:"not null;default:1" json:"order"`
+	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 type ApprovalObject struct {

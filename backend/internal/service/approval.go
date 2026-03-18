@@ -43,27 +43,22 @@ func (s *approvalService) GetApprovals(issueID uuid.UUID) ([]model.IssueApproval
 }
 
 // InitializeForIssue はWorkflowのステップに基づいてIssue承認レコードを生成する
-// min_approvers=1 のステップのみ 1 件の pending を作成。min_approvers>1 は作成しない
+// 各ステップに1件の pending を作成（承認オブジェクトありのステップ用）
 func (s *approvalService) InitializeForIssue(issueID uuid.UUID, workflowID uint) error {
 	workflow, err := s.workflowRepo.FindByID(workflowID)
 	if err != nil {
 		return fmt.Errorf("workflow not found: %w", err)
 	}
 	for _, step := range workflow.Steps {
-		if step.MinApprovers < 1 {
-			step.MinApprovers = 1
+		approval := &model.IssueApproval{
+			ID:             uuid.New(),
+			IssueID:        issueID,
+			WorkflowStepID: step.ID,
+			Status:         "pending",
+			CreatedAt:      time.Now(),
 		}
-		if step.MinApprovers == 1 {
-			approval := &model.IssueApproval{
-				ID:             uuid.New(),
-				IssueID:        issueID,
-				WorkflowStepID: step.ID,
-				Status:         "pending",
-				CreatedAt:      time.Now(),
-			}
-			if err := s.approvalRepo.Create(approval); err != nil {
-				return err
-			}
+		if err := s.approvalRepo.Create(approval); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -91,18 +86,22 @@ func (s *approvalService) act(approvalID uuid.UUID, approverID uuid.UUID, commen
 		return nil, fmt.Errorf("workflow step not found: %w", err)
 	}
 
-	// 前のステップがすべて承認済みかチェック
+	// 前のステップ（next_status_id == このステップの status_id）が承認済みかチェック
 	workflow, err := s.workflowRepo.FindByID(step.WorkflowID)
 	if err != nil {
 		return nil, err
 	}
 	for i := range workflow.Steps {
 		otherStep := &workflow.Steps[i]
-		if otherStep.Order >= step.Order {
+		if otherStep.NextStatusID == nil || *otherStep.NextStatusID != step.StatusID {
 			continue
 		}
 		if !s.isStepComplete(approval.IssueID, otherStep) {
-			return nil, fmt.Errorf("前のステップ「%s」がまだ承認されていません", otherStep.Name)
+			prevName := otherStep.StatusID.String()
+			if otherStep.Status != nil {
+				prevName = otherStep.Status.Name
+			}
+			return nil, fmt.Errorf("前のステップ「%s」がまだ承認されていません", prevName)
 		}
 	}
 
@@ -123,10 +122,10 @@ func (s *approvalService) act(approvalID uuid.UUID, approverID uuid.UUID, commen
 		return nil, err
 	}
 
-	// 承認時: ステップ完了なら status_id を更新
-	if action == "approved" && step.StatusID != nil {
+	// 承認時: ステップ完了なら next_status_id へ遷移
+	if action == "approved" && step.NextStatusID != nil {
 		if s.isStepComplete(approval.IssueID, step) {
-			_ = s.issueRepo.UpdateStatus(approval.IssueID, *step.StatusID)
+			_ = s.issueRepo.UpdateStatus(approval.IssueID, *step.NextStatusID)
 		}
 	}
 
@@ -144,30 +143,41 @@ func (s *approvalService) checkApproverEligible(issueID uuid.UUID, step *model.W
 	if step.ExcludeAssignee && issue.AssigneeID != nil && *issue.AssigneeID == approverID {
 		return fmt.Errorf("担当者は承認者になれません")
 	}
-	switch step.ApproverType {
-	case "user":
-		if step.ApproverUserID == nil || *step.ApproverUserID != approverID {
-			return fmt.Errorf("このステップは指定ユーザーのみ承認可能です")
+	// approval_objects の role/user で承認者チェック
+	if len(step.ApprovalObjects) == 0 {
+		return nil // 承認オブジェクトなし＝誰でも可
+	}
+	eligible := false
+	for _, ao := range step.ApprovalObjects {
+		if ao.Type == "user" && ao.UserID != nil && *ao.UserID == approverID {
+			eligible = true
+			break
 		}
-	case "role", "":
-		roles, err := s.roleRepo.FindRolesByUserID(approverID)
-		if err != nil {
-			return err
-		}
-		maxLevel := 0
-		for _, r := range roles {
-			if r.Level > maxLevel {
-				maxLevel = r.Level
+		if ao.Type == "role" && ao.RoleID != nil {
+			reqRole, err := s.roleRepo.FindByID(*ao.RoleID)
+			if err != nil {
+				continue
+			}
+			roles, err := s.roleRepo.FindRolesByUserID(approverID)
+			if err != nil {
+				continue
+			}
+			for _, r := range roles {
+				if r.ID == *ao.RoleID {
+					if ao.RoleOperator == "eq" && r.Level == reqRole.Level {
+						eligible = true
+						break
+					}
+					if (ao.RoleOperator == "gte" || ao.RoleOperator == "") && r.Level >= reqRole.Level {
+						eligible = true
+						break
+					}
+				}
 			}
 		}
-		if maxLevel < step.RequiredLevel {
-			return fmt.Errorf("承認権限が不足しています（必要Level: %d、あなたのLevel: %d）", step.RequiredLevel, maxLevel)
-		}
-	case "multiple":
-		// 複数人: 誰でも可（exclude チェックは上で済み）
-		break
-	default:
-		return fmt.Errorf("不明な承認タイプ: %s", step.ApproverType)
+	}
+	if !eligible {
+		return fmt.Errorf("このステップの承認者として登録されていません")
 	}
 	return nil
 }
@@ -177,13 +187,49 @@ func (s *approvalService) isStepComplete(issueID uuid.UUID, step *model.Workflow
 	if err != nil {
 		return false
 	}
-	count := 0
-	for _, a := range all {
-		if a.WorkflowStepID == step.ID && a.Status == "approved" {
-			count++
+	if len(step.ApprovalObjects) == 0 {
+		// 承認オブジェクトなし＝1件でも承認あれば完了
+		for _, a := range all {
+			if a.WorkflowStepID == step.ID && a.Status == "approved" {
+				return true
+			}
 		}
+		return false
 	}
-	return count >= step.MinApprovers
+	// 承認者ごとの最大 points を加算し、合計が threshold 以上で完了
+	sum := 0
+	for _, a := range all {
+		if a.WorkflowStepID != step.ID || a.Status != "approved" || a.ApproverID == nil {
+			continue
+		}
+		maxPoints := 0
+		for _, ao := range step.ApprovalObjects {
+			if ao.Type == "user" && ao.UserID != nil && *a.ApproverID == *ao.UserID && ao.Points > maxPoints {
+				maxPoints = ao.Points
+			}
+			if ao.Type == "role" && ao.RoleID != nil {
+				reqRole, err := s.roleRepo.FindByID(*ao.RoleID)
+				if err != nil {
+					continue
+				}
+				roles, _ := s.roleRepo.FindRolesByUserID(*a.ApproverID)
+				for _, r := range roles {
+					if r.ID == *ao.RoleID {
+						ok := ao.RoleOperator == "gte" || ao.RoleOperator == ""
+						if ao.RoleOperator == "eq" && r.Level == reqRole.Level {
+							ok = true
+						}
+						if ok && ao.Points > maxPoints {
+							maxPoints = ao.Points
+						}
+						break
+					}
+				}
+			}
+		}
+		sum += maxPoints
+	}
+	return sum >= step.Threshold
 }
 
 // ApproveStep はステップに対する承認を行う。min_approvers>1 の場合は新規 IssueApproval を作成
@@ -199,14 +245,22 @@ func (s *approvalService) ApproveStep(issueID uuid.UUID, stepID uint, approverID
 	if err != nil {
 		return nil, err
 	}
-	// 前ステップ完了チェック
-	for _, a := range allApprovals {
-		otherStep, err := s.workflowRepo.FindStepByID(a.WorkflowStepID)
-		if err != nil {
+	// 前ステップ（next_status_id == このステップの status_id）完了チェック
+	workflow, err := s.workflowRepo.FindByID(step.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range workflow.Steps {
+		otherStep := &workflow.Steps[i]
+		if otherStep.NextStatusID == nil || *otherStep.NextStatusID != step.StatusID {
 			continue
 		}
-		if otherStep.Order < step.Order && !s.isStepComplete(issueID, otherStep) {
-			return nil, fmt.Errorf("前のステップ「%s」がまだ承認されていません", otherStep.Name)
+		if !s.isStepComplete(issueID, otherStep) {
+			prevName := otherStep.StatusID.String()
+			if otherStep.Status != nil {
+				prevName = otherStep.Status.Name
+			}
+			return nil, fmt.Errorf("前のステップ「%s」がまだ承認されていません", prevName)
 		}
 	}
 	// 同一ユーザー重複チェック
@@ -236,8 +290,8 @@ func (s *approvalService) ApproveStep(issueID uuid.UUID, stepID uint, approverID
 	if err := s.approvalRepo.Create(approval); err != nil {
 		return nil, err
 	}
-	if step.StatusID != nil && s.isStepComplete(issueID, step) {
-		_ = s.issueRepo.UpdateStatus(issueID, *step.StatusID)
+	if step.NextStatusID != nil && s.isStepComplete(issueID, step) {
+		_ = s.issueRepo.UpdateStatus(issueID, *step.NextStatusID)
 	}
 	return s.approvalRepo.FindByID(approval.ID)
 }

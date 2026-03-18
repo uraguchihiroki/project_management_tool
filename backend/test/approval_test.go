@@ -23,29 +23,53 @@ func createIssueWithWorkflow(t *testing.T, ts *testServer, projectID, statusID, 
 }
 
 // setupApprovalFixture は承認テスト用の共通フィクスチャを作成します
-func setupApprovalFixture(t *testing.T, ts *testServer) (projectID, statusID, ownerID, wfID, issueID string) {
+// ownerID=課長(level5), directorID=部長(level7)
+func setupApprovalFixture(t *testing.T, ts *testServer) (projectID, statusID, ownerID, directorID, wfID, issueID string) {
 	t.Helper()
 	ownerID = createTestUser(t, ts, "承認者", "approver@example.com")
 	projectID = createTestProject(t, ts, "AP", "承認テスト", ownerID)
-	statusID = getFirstStatusID(t, ts, projectID)
+	statusIDs := getStatusIDs(t, ts, projectID)
+	statusID = statusIDs[0]
+	if len(statusIDs) < 3 {
+		t.Fatal("project needs at least 3 statuses")
+	}
 
 	// 役職を作成してownerIDに割り当て（level 5 = 課長級）
-	_, roleResp := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{
+	_, kachoResp := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{
 		"name": "課長", "level": 5, "organization_id": testOrgID,
 	})
-	roleID := mustGetFloat(t, roleResp, "data", "id")
+	_, buchoResp := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{
+		"name": "部長", "level": 7, "organization_id": testOrgID,
+	})
+	kachoID := uint(mustGetFloat(t, kachoResp, "data", "id"))
+	buchoID := uint(mustGetFloat(t, buchoResp, "data", "id"))
 	ts.req(t, "PUT", "/api/v1/users/"+ownerID+"/roles", map[string]interface{}{
-		"role_ids": []float64{roleID},
+		"role_ids": []float64{float64(kachoID)},
 	})
 
 	wfID = createTestWorkflow(t, ts, "テスト承認フロー")
-	// Step 1: Level 5 が承認 → status変更
+	// Step 1: 課長が承認 → 進行中へ
 	ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"name": "課長承認", "required_level": 5, "status_id": statusID,
+		"status_id":     statusIDs[0],
+		"next_status_id": statusIDs[1],
+		"threshold":     10,
+		"approval_objects": []map[string]interface{}{
+			{"type": "role", "role_id": kachoID, "role_operator": "gte", "points": 10},
+		},
 	})
-	// Step 2: Level 7 が承認
+	// Step 2: 部長が承認 → 完了へ
 	ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"name": "部長承認", "required_level": 7,
+		"status_id":     statusIDs[1],
+		"next_status_id": statusIDs[2],
+		"threshold":     10,
+		"approval_objects": []map[string]interface{}{
+			{"type": "role", "role_id": buchoID, "role_operator": "gte", "points": 10},
+		},
+	})
+
+	directorID = createTestUser(t, ts, "部長", "director@example.com")
+	ts.req(t, "PUT", "/api/v1/users/"+directorID+"/roles", map[string]interface{}{
+		"role_ids": []float64{float64(buchoID)},
 	})
 
 	issueID = createIssueWithWorkflow(t, ts, projectID, statusID, ownerID, wfID)
@@ -54,10 +78,11 @@ func setupApprovalFixture(t *testing.T, ts *testServer) (projectID, statusID, ow
 
 func TestApproval_AutoInitialize(t *testing.T) {
 	ts := newTestServer(t)
-	projectID, statusID, ownerID, wfID, issueID := setupApprovalFixture(t, ts)
+	projectID, statusID, ownerID, directorID, wfID, issueID := setupApprovalFixture(t, ts)
 	_ = projectID
 	_ = statusID
 	_ = ownerID
+	_ = directorID
 	_ = wfID
 
 	t.Run("ワークフロー付きIssue作成で承認レコードが自動生成される", func(t *testing.T) {
@@ -83,9 +108,10 @@ func TestApproval_AutoInitialize(t *testing.T) {
 
 func TestApproval_Approve(t *testing.T) {
 	ts := newTestServer(t)
-	projectID, statusID, ownerID, wfID, issueID := setupApprovalFixture(t, ts)
+	projectID, statusID, ownerID, directorID, wfID, issueID := setupApprovalFixture(t, ts)
 	_ = projectID
 	_ = statusID
+	_ = directorID
 	_ = wfID
 
 	_, approvalsResp := ts.req(t, "GET", "/api/v1/issues/"+issueID+"/approvals", nil)
@@ -130,7 +156,7 @@ func TestApproval_Approve(t *testing.T) {
 
 func TestApproval_LevelCheck(t *testing.T) {
 	ts := newTestServer(t)
-	projectID, statusID, _, wfID, issueID := setupApprovalFixture(t, ts)
+	projectID, statusID, _, _, wfID, issueID := setupApprovalFixture(t, ts)
 	_ = projectID
 	_ = statusID
 	_ = wfID
@@ -167,20 +193,10 @@ func TestApproval_LevelCheck(t *testing.T) {
 
 func TestApproval_OrderCheck(t *testing.T) {
 	ts := newTestServer(t)
-	projectID, statusID, ownerID, wfID, issueID := setupApprovalFixture(t, ts)
+	projectID, statusID, ownerID, directorID, wfID, issueID := setupApprovalFixture(t, ts)
 	_ = projectID
 	_ = statusID
 	_ = wfID
-
-	// 部長ユーザー（level 7）を作成
-	directorID := createTestUser(t, ts, "部長", "director@example.com")
-	_, dirResp := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{
-		"name": "部長", "level": 7, "organization_id": testOrgID,
-	})
-	dirRoleID := mustGetFloat(t, dirResp, "data", "id")
-	ts.req(t, "PUT", "/api/v1/users/"+directorID+"/roles", map[string]interface{}{
-		"role_ids": []float64{dirRoleID},
-	})
 
 	_, approvalsResp := ts.req(t, "GET", "/api/v1/issues/"+issueID+"/approvals", nil)
 	approvals := mustGetArray(t, approvalsResp, "data")
@@ -219,9 +235,10 @@ func TestApproval_OrderCheck(t *testing.T) {
 
 func TestApproval_Reject(t *testing.T) {
 	ts := newTestServer(t)
-	projectID, statusID, ownerID, wfID, issueID := setupApprovalFixture(t, ts)
+	projectID, statusID, ownerID, directorID, wfID, issueID := setupApprovalFixture(t, ts)
 	_ = projectID
 	_ = statusID
+	_ = directorID
 	_ = wfID
 
 	_, approvalsResp := ts.req(t, "GET", "/api/v1/issues/"+issueID+"/approvals", nil)

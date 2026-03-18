@@ -3,12 +3,12 @@
 import { useState, useCallback, useEffect } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, Check, Plus, Trash2 } from 'lucide-react'
 import type { WorkflowStep, Status, Role, User, ApprovalObject } from '@/types'
 import { getWorkflowStep, updateWorkflowStep } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
-import Header from '@/components/Header'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -49,6 +49,7 @@ export default function StepEditPage({
   params: Promise<{ id: string; stepId: string }>
 }) {
   const { id, stepId } = use(params)
+  const router = useRouter()
   const queryClient = useQueryClient()
   const { currentOrg } = useAuth()
 
@@ -77,11 +78,10 @@ export default function StepEditPage({
   })
 
   const [form, setForm] = useState({
-    name: '',
-    description: '',
-    step_type: 'normal' as 'start' | 'normal' | 'goal',
-    threshold: 1,
     status_id: '',
+    next_status_id: '',
+    description: '',
+    threshold: 10,
   })
   const [approvalObjects, setApprovalObjects] = useState<(ApprovalObject & { _new?: boolean })[]>([])
   const [error, setError] = useState('')
@@ -89,11 +89,10 @@ export default function StepEditPage({
 
   const updateFormFromStep = useCallback((s: WorkflowStep) => {
     setForm({
-      name: s.name,
-      description: s.description ?? '',
-      step_type: (s.step_type as 'start' | 'normal' | 'goal') ?? 'normal',
-      threshold: s.threshold ?? 1,
       status_id: s.status_id ?? '',
+      next_status_id: s.next_status_id ?? '',
+      description: s.description ?? '',
+      threshold: s.threshold ?? 10,
     })
     setApprovalObjects((s.approval_objects ?? []).map((ao) => ({ ...ao, _new: false })))
   }, [])
@@ -105,17 +104,25 @@ export default function StepEditPage({
     }
   }, [step, initialized, updateFormFromStep])
 
+  type StepFormData = typeof form
+  type ApprovalObjectsData = typeof approvalObjects
+
   const updateMutation = useMutation({
-    mutationFn: async () => {
-      if (!form.name.trim()) throw new Error('ステップ名は必須です')
-      if (form.threshold < 1) throw new Error('閾値は1以上で指定してください')
+    mutationFn: async ({
+      formData,
+      approvalObjectsData,
+    }: {
+      formData: StepFormData
+      approvalObjectsData: ApprovalObjectsData
+    }) => {
+      if (!formData.status_id) throw new Error('ステータスは必須です')
+      if (formData.threshold < 1) throw new Error('閾値は1以上で指定してください')
       const payload = {
-        name: form.name,
-        description: form.description,
-        step_type: form.step_type,
-        threshold: form.threshold,
-        status_id: form.status_id || undefined,
-        approval_objects: approvalObjects
+        status_id: formData.status_id,
+        next_status_id: formData.next_status_id || undefined,
+        description: formData.description,
+        threshold: formData.threshold,
+        approval_objects: approvalObjectsData
           .filter((ao) => (ao.type === 'role' && ao.role_id) || (ao.type === 'user' && ao.user_id))
           .map((ao) => ({
             type: ao.type,
@@ -129,33 +136,28 @@ export default function StepEditPage({
       }
       return updateWorkflowStep(id, stepId, payload)
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow', id] })
       queryClient.invalidateQueries({ queryKey: ['workflow-step', id, stepId] })
-      updateFormFromStep(data)
       setError('')
+      router.push(`/admin/workflows/${id}`)
     },
     onError: (e: Error) => setError(e.message),
   })
 
-  const isGoal = form.step_type === 'goal'
+  const isGoal = !form.next_status_id
 
   if (isLoading || !step) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="max-w-2xl mx-auto px-6 py-8">
-          <div className="text-gray-400 text-sm">読み込み中...</div>
-        </div>
+      <div className="max-w-2xl">
+        <div className="text-gray-400 text-sm">読み込み中...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
-      <main className="max-w-2xl mx-auto px-6 py-8">
-        <div className="flex items-center gap-3 mb-6">
+    <div className="max-w-2xl">
+      <div className="flex items-center gap-3 mb-6">
           <Link
             href={`/admin/workflows/${id}`}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
@@ -164,13 +166,13 @@ export default function StepEditPage({
             ワークフローに戻る
           </Link>
           <span className="text-gray-300">/</span>
-          <h1 className="text-xl font-bold text-gray-900">ステップを編集: {step.name}</h1>
+          <h1 className="text-xl font-bold text-gray-900">ステップを編集: {step.status?.name ?? step.status_id}</h1>
         </div>
 
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            updateMutation.mutate()
+            updateMutation.mutate({ formData: form, approvalObjectsData: approvalObjects })
           }}
           className="space-y-6"
         >
@@ -180,30 +182,35 @@ export default function StepEditPage({
 
           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">ステップタイプ</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">ステータス *</label>
               <select
-                value={form.step_type}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, step_type: e.target.value as 'start' | 'normal' | 'goal' }))
-                }
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.status_id}
+                onChange={(e) => setForm((prev) => ({ ...prev, status_id: e.target.value }))}
+                disabled={step.status?.status_key === 'sts_start' || step.status?.status_key === 'sts_goal'}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
-                <option value="start">スタート</option>
-                <option value="normal">通常</option>
-                <option value="goal">ゴール</option>
+                <option value="">選択</option>
+                {statuses.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
               </select>
+              {(step.status?.status_key === 'sts_start' || step.status?.status_key === 'sts_goal') && (
+                <p className="text-xs text-gray-500 mt-1">システムステータスは変更できません</p>
+              )}
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">ステップ名 *</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="例: 上司承認"
+              <label className="block text-xs font-medium text-gray-600 mb-1">承認後ステータス</label>
+              <select
+                value={form.next_status_id}
+                onChange={(e) => setForm((prev) => ({ ...prev, next_status_id: e.target.value }))}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
+              >
+                <option value="">（なし・ゴール）</option>
+                {statuses.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -231,22 +238,6 @@ export default function StepEditPage({
                     }
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">承認後ステータス</label>
-                  <select
-                    value={form.status_id}
-                    onChange={(e) => setForm((prev) => ({ ...prev, status_id: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">（変更なし）</option>
-                    {statuses.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div>
@@ -452,7 +443,6 @@ export default function StepEditPage({
             </Link>
           </div>
         </form>
-      </main>
     </div>
   )
 }

@@ -159,50 +159,35 @@ func (h *WorkflowHandler) AddStep(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid workflow id")
 	}
 	type Request struct {
-		StepType        string             `json:"step_type"`
-		Name            string             `json:"name"`
+		StatusID        string             `json:"status_id"` // このステップのステータス（必須）
+		NextStatusID    *string            `json:"next_status_id"`
 		Description     string             `json:"description"`
 		Threshold       int                `json:"threshold"`
-		StatusID        *string             `json:"status_id"`
 		ApprovalObjects []approvalObjectReq `json:"approval_objects"`
-		RequiredLevel   int                 `json:"required_level"`
-		ApproverType    string              `json:"approver_type"`
-		ApproverUserID  *string             `json:"approver_user_id"`
-		MinApprovers    int                 `json:"min_approvers"`
-		ExcludeReporter bool                `json:"exclude_reporter"`
-		ExcludeAssignee bool                `json:"exclude_assignee"`
+		ExcludeReporter bool               `json:"exclude_reporter"`
+		ExcludeAssignee bool               `json:"exclude_assignee"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+	if req.StatusID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "status_id is required")
 	}
-	if req.RequiredLevel < 0 || req.RequiredLevel > 9999 {
-		return echo.NewHTTPError(http.StatusBadRequest, "必要レベルは0～9999の範囲で指定してください")
+	statusID, err := uuid.Parse(req.StatusID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid status_id")
 	}
 	if req.Threshold < 0 || req.Threshold > 99999 {
 		return echo.NewHTTPError(http.StatusBadRequest, "閾値は0～99999の範囲で指定してください")
 	}
-	if req.MinApprovers < 0 || req.MinApprovers > 9999 {
-		return echo.NewHTTPError(http.StatusBadRequest, "最小承認人数は0～9999の範囲で指定してください")
-	}
-	var statusID *uuid.UUID
-	if req.StatusID != nil && *req.StatusID != "" {
-		parsed, err := uuid.Parse(*req.StatusID)
+	var nextStatusID *uuid.UUID
+	if req.NextStatusID != nil && *req.NextStatusID != "" {
+		parsed, err := uuid.Parse(*req.NextStatusID)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid status_id")
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid next_status_id")
 		}
-		statusID = &parsed
-	}
-	var approverUserID *uuid.UUID
-	if req.ApproverUserID != nil && *req.ApproverUserID != "" {
-		parsed, err := uuid.Parse(*req.ApproverUserID)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid approver_user_id")
-		}
-		approverUserID = &parsed
+		nextStatusID = &parsed
 	}
 	aos := make([]service.ApprovalObjectInput, 0, len(req.ApprovalObjects))
 	for _, ao := range req.ApprovalObjects {
@@ -229,16 +214,11 @@ func (h *WorkflowHandler) AddStep(c echo.Context) error {
 		})
 	}
 	input := service.AddStepInput{
-		StepType:        req.StepType,
-		Name:            req.Name,
+		StatusID:        statusID,
+		NextStatusID:    nextStatusID,
 		Description:     req.Description,
 		Threshold:       req.Threshold,
-		StatusID:        statusID,
 		ApprovalObjects: aos,
-		RequiredLevel:   req.RequiredLevel,
-		ApproverType:    req.ApproverType,
-		ApproverUserID:  approverUserID,
-		MinApprovers:    req.MinApprovers,
 		ExcludeReporter: req.ExcludeReporter,
 		ExcludeAssignee: req.ExcludeAssignee,
 	}
@@ -256,36 +236,22 @@ func (h *WorkflowHandler) UpdateStep(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid step id")
 	}
 	type Request struct {
-		StepType        string             `json:"step_type"`
-		Name            string             `json:"name"`
+		StatusID        *string            `json:"status_id"`
+		NextStatusID    *string            `json:"next_status_id"`
 		Description     string             `json:"description"`
 		Threshold       int                `json:"threshold"`
-		StatusID        *string             `json:"status_id"`
 		ApprovalObjects []approvalObjectReq `json:"approval_objects"`
-		RequiredLevel   int                 `json:"required_level"`
-		ApproverType    string              `json:"approver_type"`
-		ApproverUserID  *string             `json:"approver_user_id"`
-		MinApprovers    int                 `json:"min_approvers"`
-		ExcludeReporter bool                `json:"exclude_reporter"`
-		ExcludeAssignee bool                `json:"exclude_assignee"`
+		ExcludeReporter bool               `json:"exclude_reporter"`
+		ExcludeAssignee bool               `json:"exclude_assignee"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
-	}
-	if req.RequiredLevel < 0 || req.RequiredLevel > 9999 {
-		return echo.NewHTTPError(http.StatusBadRequest, "必要レベルは0～9999の範囲で指定してください")
-	}
 	if req.Threshold < 0 || req.Threshold > 99999 {
 		return echo.NewHTTPError(http.StatusBadRequest, "閾値は0～99999の範囲で指定してください")
 	}
-	if req.MinApprovers < 0 || req.MinApprovers > 9999 {
-		return echo.NewHTTPError(http.StatusBadRequest, "最小承認人数は0～9999の範囲で指定してください")
-	}
-	var statusID *uuid.UUID
+	var statusID, nextStatusID *uuid.UUID
 	if req.StatusID != nil && *req.StatusID != "" {
 		parsed, err := uuid.Parse(*req.StatusID)
 		if err != nil {
@@ -293,13 +259,12 @@ func (h *WorkflowHandler) UpdateStep(c echo.Context) error {
 		}
 		statusID = &parsed
 	}
-	var approverUserID *uuid.UUID
-	if req.ApproverUserID != nil && *req.ApproverUserID != "" {
-		parsed, err := uuid.Parse(*req.ApproverUserID)
+	if req.NextStatusID != nil && *req.NextStatusID != "" {
+		parsed, err := uuid.Parse(*req.NextStatusID)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid approver_user_id")
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid next_status_id")
 		}
-		approverUserID = &parsed
+		nextStatusID = &parsed
 	}
 	var aos []service.ApprovalObjectInput
 	if req.ApprovalObjects != nil {
@@ -329,16 +294,11 @@ func (h *WorkflowHandler) UpdateStep(c echo.Context) error {
 		}
 	}
 	input := service.UpdateStepInput{
-		StepType:        req.StepType,
-		Name:            req.Name,
+		StatusID:        statusID,
+		NextStatusID:    nextStatusID,
 		Description:     req.Description,
 		Threshold:       req.Threshold,
-		StatusID:        statusID,
 		ApprovalObjects: aos,
-		RequiredLevel:   req.RequiredLevel,
-		ApproverType:    req.ApproverType,
-		ApproverUserID:  approverUserID,
-		MinApprovers:    req.MinApprovers,
 		ExcludeReporter: req.ExcludeReporter,
 		ExcludeAssignee: req.ExcludeAssignee,
 	}

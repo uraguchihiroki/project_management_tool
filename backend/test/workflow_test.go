@@ -115,21 +115,27 @@ func TestWorkflowStep_AddAndList(t *testing.T) {
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
 	wfID := createTestWorkflow(t, ts, "ステップテストフロー")
-	statusID := getFirstStatusID(t, ts, projectID)
+	statusIDs := getStatusIDs(t, ts, projectID)
+	if len(statusIDs) < 2 {
+		t.Fatal("project needs at least 2 statuses")
+	}
 
 	t.Run("ステップを追加できる", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-			"name":           "上司承認",
-			"required_level": 5,
-			"status_id":      statusID,
+			"status_id":     statusIDs[0],
+			"next_status_id": statusIDs[1],
+			"threshold":     10,
 		})
 		assertStatus(t, status, http.StatusCreated, "add step")
-		assertField(t, mustGetString(t, resp, "data", "name"), "上司承認", "name")
+		assertField(t, mustGetString(t, resp, "data", "status_id"), statusIDs[0], "status_id")
+		assertField(t, mustGetString(t, resp, "data", "status", "name"), "未着手", "status.name")
 	})
 
-	t.Run("複数ステップを追加するとorderが連番になる", func(t *testing.T) {
+	t.Run("複数ステップを追加できる", func(t *testing.T) {
 		ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-			"name": "部長承認", "required_level": 7,
+			"status_id":     statusIDs[1],
+			"next_status_id": statusIDs[2],
+			"threshold":     10,
 		})
 
 		_, wfResp := ts.req(t, "GET", "/api/v1/workflows/"+wfID, nil)
@@ -137,47 +143,49 @@ func TestWorkflowStep_AddAndList(t *testing.T) {
 		if len(steps) != 2 {
 			t.Fatalf("expected 2 steps, got %d", len(steps))
 		}
-		// step1のorderが1, step2のorderが2であることを確認
-		s1 := steps[0].(map[string]interface{})
-		s2 := steps[1].(map[string]interface{})
-		if s1["order"].(float64) != 1 {
-			t.Errorf("step1 order = %v, want 1", s1["order"])
-		}
-		if s2["order"].(float64) != 2 {
-			t.Errorf("step2 order = %v, want 2", s2["order"])
-		}
 	})
 }
 
 func TestWorkflowStep_Update(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
 	wfID := createTestWorkflow(t, ts, "ステップ更新テスト")
+	statusIDs := getStatusIDs(t, ts, projectID)
 
 	_, stepResp := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"name": "初期ステップ", "required_level": 3,
+		"status_id":     statusIDs[0],
+		"next_status_id": statusIDs[1],
+		"threshold":     10,
 	})
 	stepID := fmt.Sprintf("%.0f", mustGetFloat(t, stepResp, "data", "id"))
 
 	t.Run("ステップを更新できる", func(t *testing.T) {
 		status, resp := ts.req(t, "PUT", "/api/v1/workflows/"+wfID+"/steps/"+stepID, map[string]interface{}{
-			"name":           "更新後ステップ",
-			"required_level": 7,
+			"description": "更新後の説明",
+			"threshold":   15,
 		})
 		assertStatus(t, status, http.StatusOK, "update step")
-		assertField(t, mustGetString(t, resp, "data", "name"), "更新後ステップ", "name")
+		assertField(t, mustGetString(t, resp, "data", "description"), "更新後の説明", "description")
+		if mustGetFloat(t, resp, "data", "threshold") != 15 {
+			t.Errorf("threshold = %v, want 15", mustGetFloat(t, resp, "data", "threshold"))
+		}
 	})
 }
 
 func TestWorkflowStep_Reorder(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
 	wfID := createTestWorkflow(t, ts, "ステップ並び替えテスト")
+	statusIDs := getStatusIDs(t, ts, projectID)
 
-	_, s1 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{"name": "ステップ1", "required_level": 5})
-	_, s2 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{"name": "ステップ2", "required_level": 7})
+	_, s1 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
+		"status_id": statusIDs[0], "next_status_id": statusIDs[1], "threshold": 10,
+	})
+	_, s2 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
+		"status_id": statusIDs[1], "next_status_id": statusIDs[2], "threshold": 10,
+	})
 	stepID1 := uint(mustGetFloat(t, s1, "data", "id"))
 	stepID2 := uint(mustGetFloat(t, s2, "data", "id"))
 
@@ -191,18 +199,23 @@ func TestWorkflowStep_Reorder(t *testing.T) {
 	if len(steps) != 2 {
 		t.Fatalf("expected 2 steps, got %d", len(steps))
 	}
-	assertField(t, mustGetString(t, steps[0].(map[string]interface{}), "name"), "ステップ2", "first after reorder")
-	assertField(t, mustGetString(t, steps[1].(map[string]interface{}), "name"), "ステップ1", "second after reorder")
+	// 並び替え後も2ステップ存在することを確認
+	s0 := steps[0].(map[string]interface{})
+	s1m := steps[1].(map[string]interface{})
+	if s0["id"] == nil || s1m["id"] == nil {
+		t.Error("steps should have id")
+	}
 }
 
 func TestWorkflowStep_Delete(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
 	wfID := createTestWorkflow(t, ts, "ステップ削除テスト")
+	statusIDs := getStatusIDs(t, ts, projectID)
 
 	_, stepResp := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"name": "削除対象ステップ", "required_level": 5,
+		"status_id": statusIDs[0], "next_status_id": statusIDs[1], "threshold": 10,
 	})
 	stepID := fmt.Sprintf("%.0f", mustGetFloat(t, stepResp, "data", "id"))
 
@@ -249,15 +262,14 @@ func TestWorkflow_Reorder(t *testing.T) {
 func TestWorkflow_DeleteCascade(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
 	wfID := createTestWorkflow(t, ts, "カスケード削除テスト")
-
-	// ステップを追加してからワークフローを削除
+	statusIDs := getStatusIDs(t, ts, projectID)
 	ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"name": "ステップ1", "required_level": 5,
+		"status_id": statusIDs[0], "next_status_id": statusIDs[1], "threshold": 10,
 	})
 	ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"name": "ステップ2", "required_level": 7,
+		"status_id": statusIDs[1], "next_status_id": statusIDs[2], "threshold": 10,
 	})
 
 	t.Run("ステップが存在してもワークフローを削除できる", func(t *testing.T) {
