@@ -83,7 +83,6 @@ comments
 
 workflows
 ├── id (PK, auto)
-├── organization_id (FK → organizations.id)
 ├── name
 ├── description
 └── created_at
@@ -234,10 +233,11 @@ issue_approvals
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | SERIAL | PK | ワークフローID |
-| organization_id | UUID | FK | 所属組織 |
 | name | VARCHAR(200) | NOT NULL | ワークフロー名 |
 | description | VARCHAR(500) | | 説明 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
+
+> **Note:** ワークフローは組織に属さない（グローバル）。
 
 ### workflow_steps
 

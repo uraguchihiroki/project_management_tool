@@ -26,25 +26,11 @@ func (h *WorkflowHandler) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": workflows})
 }
 
-// GET /api/v1/organizations/:orgId/workflows
-func (h *WorkflowHandler) ListByOrganization(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
-	}
-	workflows, err := h.workflowService.ListByOrganization(orgID)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"data": workflows})
-}
-
 // POST /api/v1/workflows
 func (h *WorkflowHandler) Create(c echo.Context) error {
 	type Request struct {
-		OrganizationID string `json:"organization_id"`
-		Name           string `json:"name"`
-		Description    string `json:"description"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -53,11 +39,7 @@ func (h *WorkflowHandler) Create(c echo.Context) error {
 	if req.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
-	orgID, err := uuid.Parse(req.OrganizationID)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
-	}
-	workflow, err := h.workflowService.CreateWorkflow(orgID, req.Name, req.Description)
+	workflow, err := h.workflowService.CreateWorkflow(req.Name, req.Description)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -101,12 +83,8 @@ func (h *WorkflowHandler) Update(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": workflow})
 }
 
-// PUT /api/v1/organizations/:orgId/workflows/reorder
+// PUT /api/v1/workflows/reorder
 func (h *WorkflowHandler) Reorder(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
-	}
 	type Request struct {
 		IDs []uint `json:"ids"`
 	}
@@ -114,7 +92,7 @@ func (h *WorkflowHandler) Reorder(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	if err := h.workflowService.Reorder(orgID, req.IDs); err != nil {
+	if err := h.workflowService.Reorder(req.IDs); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.NoContent(http.StatusNoContent)

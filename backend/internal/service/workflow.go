@@ -32,12 +32,11 @@ type UpdateStepInput struct {
 
 type WorkflowService interface {
 	ListAll() ([]model.Workflow, error)
-	ListByOrganization(orgID uuid.UUID) ([]model.Workflow, error)
 	GetWorkflow(id uint) (*model.Workflow, error)
-	CreateWorkflow(organizationID uuid.UUID, name, description string) (*model.Workflow, error)
+	CreateWorkflow(name, description string) (*model.Workflow, error)
 	UpdateWorkflow(id uint, name, description string) (*model.Workflow, error)
 	DeleteWorkflow(id uint) error
-	Reorder(orgID uuid.UUID, ids []uint) error
+	Reorder(ids []uint) error
 	ReorderSteps(workflowID uint, ids []uint) error
 	AddStep(workflowID uint, input AddStepInput) (*model.WorkflowStep, error)
 	UpdateStep(stepID uint, input UpdateStepInput) (*model.WorkflowStep, error)
@@ -56,25 +55,20 @@ func (s *workflowService) ListAll() ([]model.Workflow, error) {
 	return s.workflowRepo.FindAll()
 }
 
-func (s *workflowService) ListByOrganization(orgID uuid.UUID) ([]model.Workflow, error) {
-	return s.workflowRepo.FindByOrganizationID(orgID)
-}
-
 func (s *workflowService) GetWorkflow(id uint) (*model.Workflow, error) {
 	return s.workflowRepo.FindByID(id)
 }
 
-func (s *workflowService) CreateWorkflow(organizationID uuid.UUID, name, description string) (*model.Workflow, error) {
-	maxOrder, err := s.workflowRepo.GetMaxOrder(organizationID)
+func (s *workflowService) CreateWorkflow(name, description string) (*model.Workflow, error) {
+	maxOrder, err := s.workflowRepo.GetMaxOrder()
 	if err != nil {
 		return nil, err
 	}
 	workflow := &model.Workflow{
-		OrganizationID: organizationID,
-		Name:           name,
-		Description:    description,
-		Order:          maxOrder + 1,
-		CreatedAt:      time.Now(),
+		Name:      name,
+		Description: description,
+		Order:     maxOrder + 1,
+		CreatedAt: time.Now(),
 	}
 	if err := s.workflowRepo.Create(workflow); err != nil {
 		return nil, err
@@ -82,8 +76,8 @@ func (s *workflowService) CreateWorkflow(organizationID uuid.UUID, name, descrip
 	return s.workflowRepo.FindByID(workflow.ID)
 }
 
-func (s *workflowService) Reorder(orgID uuid.UUID, ids []uint) error {
-	return s.workflowRepo.Reorder(orgID, ids)
+func (s *workflowService) Reorder(ids []uint) error {
+	return s.workflowRepo.Reorder(ids)
 }
 
 func (s *workflowService) ReorderSteps(workflowID uint, ids []uint) error {

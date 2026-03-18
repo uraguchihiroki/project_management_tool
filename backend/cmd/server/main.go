@@ -116,9 +116,10 @@ func main() {
 	api.PUT("/roles/:id", roleHandler.Update)
 	api.DELETE("/roles/:id", roleHandler.Delete)
 
-	// Workflows
+	// Workflows（組織に属さない、グローバル）
 	api.GET("/workflows", workflowHandler.List)
 	api.POST("/workflows", workflowHandler.Create)
+	api.PUT("/workflows/reorder", workflowHandler.Reorder)
 	api.GET("/workflows/:id", workflowHandler.Get)
 	api.PUT("/workflows/:id", workflowHandler.Update)
 	api.DELETE("/workflows/:id", workflowHandler.Delete)
@@ -126,8 +127,6 @@ func main() {
 	api.PUT("/workflows/:id/steps/reorder", workflowHandler.ReorderSteps)
 	api.PUT("/workflows/:id/steps/:stepId", workflowHandler.UpdateStep)
 	api.DELETE("/workflows/:id/steps/:stepId", workflowHandler.DeleteStep)
-	api.GET("/organizations/:orgId/workflows", workflowHandler.ListByOrganization)
-	api.PUT("/organizations/:orgId/workflows/reorder", workflowHandler.Reorder)
 
 	// Templates
 	api.GET("/templates", templateHandler.List)

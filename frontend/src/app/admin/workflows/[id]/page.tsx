@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, X, Check, ChevronLeft } from 'lucide-react'
 import type { Workflow, Status } from '@/types'
 import { SortableList, DragHandle } from '@/components/SortableList'
+import { useAuth } from '@/context/AuthContext'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -20,7 +21,7 @@ async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
   const res = await fetch(`${API}/organizations/${orgId}/statuses?type=issue`)
   const json = await res.json()
   const data: Status[] = json.data ?? []
-  // ワークフローは組織スコープなので、組織用ステータスのみ表示（プロジェクト固有を除外）
+  // 組織用ステータスのみ表示（プロジェクト固有を除外）
   return data.filter((s) => s.organization_id && !s.project_id)
 }
 
@@ -29,6 +30,7 @@ const emptyStep = { name: '', required_level: 1, status_id: '' }
 export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const queryClient = useQueryClient()
+  const { currentOrg } = useAuth()
 
   const { data: workflow, isLoading } = useQuery({
     queryKey: ['workflow', id],
@@ -36,9 +38,9 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   })
 
   const { data: statuses = [] } = useQuery({
-    queryKey: ['org-statuses', workflow?.organization_id],
-    queryFn: () => fetchOrgStatuses(workflow!.organization_id),
-    enabled: !!workflow?.organization_id,
+    queryKey: ['org-statuses', currentOrg?.id],
+    queryFn: () => fetchOrgStatuses(currentOrg!.id),
+    enabled: !!currentOrg?.id,
   })
 
   const [showAddForm, setShowAddForm] = useState(false)

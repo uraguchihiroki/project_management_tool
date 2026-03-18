@@ -150,6 +150,9 @@ ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS exclude_assignee BOOLEAN DEF
 -- 13c. projects.status カラム削除（ステータステーブル参照に移行したため未使用）
 ALTER TABLE projects DROP COLUMN IF EXISTS status;
 
+-- 13d. workflows.organization_id 削除（ワークフローは組織に属さない）
+ALTER TABLE workflows DROP COLUMN IF EXISTS organization_id;
+
 -- 14. Display order columns for drag-and-drop reordering
 ALTER TABLE roles ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 1;
 UPDATE roles r SET display_order = sub.rn FROM (
@@ -163,7 +166,7 @@ UPDATE projects p SET display_order = sub.rn FROM (
 
 ALTER TABLE workflows ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 1;
 UPDATE workflows w SET display_order = sub.rn FROM (
-  SELECT id, ROW_NUMBER() OVER (PARTITION BY organization_id ORDER BY created_at) AS rn FROM workflows
+  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn FROM workflows
 ) sub WHERE w.id = sub.id;
 
 ALTER TABLE issue_templates ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 1;

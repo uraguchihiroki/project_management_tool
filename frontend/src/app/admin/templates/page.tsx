@@ -118,11 +118,8 @@ export default function TemplatesPage() {
     }
   }
 
-  // プロジェクトの組織に属するワークフローを絞り込み
-  const selectedProject = projects.find((p: Project) => p.id === form.project_id)
-  const filteredWorkflows = selectedProject?.organization_id
-    ? workflows.filter((w) => w.organization_id === selectedProject.organization_id)
-    : workflows
+  // ワークフローは組織に属さないため全件表示
+  const filteredWorkflows = workflows
 
   const getProjectName = (id: string) => {
     const p = projects.find((p: Project) => p.id === id)

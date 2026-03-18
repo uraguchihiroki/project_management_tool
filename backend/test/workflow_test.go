@@ -8,12 +8,11 @@ import (
 )
 
 // createTestWorkflow はテスト用ワークフローを作成しそのIDを返します
-func createTestWorkflow(t *testing.T, ts *testServer, orgID, name string) string {
+func createTestWorkflow(t *testing.T, ts *testServer, name string) string {
 	t.Helper()
 	status, resp := ts.req(t, "POST", "/api/v1/workflows", map[string]interface{}{
-		"organization_id": orgID,
-		"name":            name,
-		"description":     "テスト用ワークフロー",
+		"name":        name,
+		"description": "テスト用ワークフロー",
 	})
 	assertStatus(t, status, http.StatusCreated, fmt.Sprintf("createWorkflow(%s)", name))
 	return fmt.Sprintf("%.0f", mustGetFloat(t, resp, "data", "id"))
@@ -26,9 +25,8 @@ func TestWorkflow_Create(t *testing.T) {
 
 	t.Run("ワークフローを作成できる", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/workflows", map[string]interface{}{
-			"organization_id": testOrgID,
-			"name":           "通常承認フロー",
-			"description":    "一般的な承認フロー",
+			"name":        "通常承認フロー",
+			"description": "一般的な承認フロー",
 		})
 		assertStatus(t, status, http.StatusCreated, "create workflow")
 		assertField(t, mustGetString(t, resp, "data", "name"), "通常承認フロー", "name")
@@ -37,7 +35,7 @@ func TestWorkflow_Create(t *testing.T) {
 
 	t.Run("name未指定は400", func(t *testing.T) {
 		status, _ := ts.req(t, "POST", "/api/v1/workflows", map[string]interface{}{
-			"organization_id": testOrgID,
+			"description": "説明のみ",
 		})
 		assertStatus(t, status, http.StatusBadRequest, "create without name")
 	})
@@ -48,8 +46,8 @@ func TestWorkflow_List(t *testing.T) {
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
 
-	createTestWorkflow(t, ts, testOrgID, "フロー1")
-	createTestWorkflow(t, ts, testOrgID, "フロー2")
+	createTestWorkflow(t, ts, "フロー1")
+	createTestWorkflow(t, ts, "フロー2")
 
 	t.Run("全ワークフロー一覧を取得できる", func(t *testing.T) {
 		status, resp := ts.req(t, "GET", "/api/v1/workflows", nil)
@@ -59,22 +57,13 @@ func TestWorkflow_List(t *testing.T) {
 			t.Fatalf("expected 2 workflows, got %d", len(workflows))
 		}
 	})
-
-	t.Run("組織別ワークフロー一覧を取得できる", func(t *testing.T) {
-		status, resp := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/workflows", nil)
-		assertStatus(t, status, http.StatusOK, "list by org")
-		workflows := mustGetArray(t, resp, "data")
-		if len(workflows) != 2 {
-			t.Fatalf("expected 2 workflows for org, got %d", len(workflows))
-		}
-	})
 }
 
 func TestWorkflow_Get(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, testOrgID, "取得テストフロー")
+	wfID := createTestWorkflow(t, ts, "取得テストフロー")
 
 	t.Run("IDでワークフローを取得できる", func(t *testing.T) {
 		status, resp := ts.req(t, "GET", "/api/v1/workflows/"+wfID, nil)
@@ -92,7 +81,7 @@ func TestWorkflow_Update(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, testOrgID, "更新前フロー")
+	wfID := createTestWorkflow(t, ts, "更新前フロー")
 
 	t.Run("ワークフロー名を更新できる", func(t *testing.T) {
 		status, resp := ts.req(t, "PUT", "/api/v1/workflows/"+wfID, map[string]interface{}{
@@ -108,7 +97,7 @@ func TestWorkflow_Delete(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, testOrgID, "削除テストフロー")
+	wfID := createTestWorkflow(t, ts, "削除テストフロー")
 
 	t.Run("ワークフローを削除できる", func(t *testing.T) {
 		status, _ := ts.req(t, "DELETE", "/api/v1/workflows/"+wfID, nil)
@@ -125,7 +114,7 @@ func TestWorkflowStep_AddAndList(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, testOrgID, "ステップテストフロー")
+	wfID := createTestWorkflow(t, ts, "ステップテストフロー")
 	statusID := getFirstStatusID(t, ts, projectID)
 
 	t.Run("ステップを追加できる", func(t *testing.T) {
@@ -164,7 +153,7 @@ func TestWorkflowStep_Update(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, testOrgID, "ステップ更新テスト")
+	wfID := createTestWorkflow(t, ts, "ステップ更新テスト")
 
 	_, stepResp := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
 		"name": "初期ステップ", "required_level": 3,
@@ -185,7 +174,7 @@ func TestWorkflowStep_Reorder(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, testOrgID, "ステップ並び替えテスト")
+	wfID := createTestWorkflow(t, ts, "ステップ並び替えテスト")
 
 	_, s1 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{"name": "ステップ1", "required_level": 5})
 	_, s2 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{"name": "ステップ2", "required_level": 7})
@@ -210,7 +199,7 @@ func TestWorkflowStep_Delete(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, testOrgID, "ステップ削除テスト")
+	wfID := createTestWorkflow(t, ts, "ステップ削除テスト")
 
 	_, stepResp := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
 		"name": "削除対象ステップ", "required_level": 5,
@@ -236,18 +225,18 @@ func TestWorkflow_Reorder(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID1 := createTestWorkflow(t, ts, testOrgID, "フロー1")
-	wfID2 := createTestWorkflow(t, ts, testOrgID, "フロー2")
+	wfID1 := createTestWorkflow(t, ts, "フロー1")
+	wfID2 := createTestWorkflow(t, ts, "フロー2")
 
 	id1, _ := strconv.ParseUint(wfID1, 10, 64)
 	id2, _ := strconv.ParseUint(wfID2, 10, 64)
 
-	status, _ := ts.req(t, "PUT", "/api/v1/organizations/"+testOrgID+"/workflows/reorder", map[string]interface{}{
+	status, _ := ts.req(t, "PUT", "/api/v1/workflows/reorder", map[string]interface{}{
 		"ids": []uint{uint(id2), uint(id1)},
 	})
 	assertStatus(t, status, http.StatusNoContent, "reorder workflows")
 
-	status, listResp := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/workflows", nil)
+	status, listResp := ts.req(t, "GET", "/api/v1/workflows", nil)
 	assertStatus(t, status, http.StatusOK, "list after reorder")
 	wfs := mustGetArray(t, listResp, "data")
 	if len(wfs) != 2 {
@@ -261,7 +250,7 @@ func TestWorkflow_DeleteCascade(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, testOrgID, "カスケード削除テスト")
+	wfID := createTestWorkflow(t, ts, "カスケード削除テスト")
 
 	// ステップを追加してからワークフローを削除
 	ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{

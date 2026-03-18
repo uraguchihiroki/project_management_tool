@@ -1,14 +1,12 @@
 package repository
 
 import (
-	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"gorm.io/gorm"
 )
 
 type WorkflowRepository interface {
 	FindAll() ([]model.Workflow, error)
-	FindByOrganizationID(orgID uuid.UUID) ([]model.Workflow, error)
 	FindByID(id uint) (*model.Workflow, error)
 	Create(workflow *model.Workflow) error
 	Update(workflow *model.Workflow) error
@@ -18,9 +16,9 @@ type WorkflowRepository interface {
 	DeleteStep(id uint) error
 	FindStepByID(id uint) (*model.WorkflowStep, error)
 	CountSteps(workflowID uint) (int64, error)
-	Reorder(orgID uuid.UUID, ids []uint) error
+	Reorder(ids []uint) error
 	ReorderSteps(workflowID uint, ids []uint) error
-	GetMaxOrder(orgID uuid.UUID) (int, error)
+	GetMaxOrder() (int, error)
 }
 
 type workflowRepository struct {
@@ -33,20 +31,13 @@ func NewWorkflowRepository(db *gorm.DB) WorkflowRepository {
 
 func (r *workflowRepository) FindAll() ([]model.Workflow, error) {
 	var workflows []model.Workflow
-	err := r.db.Preload("Organization").Order("display_order ASC").Find(&workflows).Error
-	return workflows, err
-}
-
-func (r *workflowRepository) FindByOrganizationID(orgID uuid.UUID) ([]model.Workflow, error) {
-	var workflows []model.Workflow
-	err := r.db.Where("organization_id = ?", orgID).Order("display_order ASC").Find(&workflows).Error
+	err := r.db.Order("display_order ASC").Find(&workflows).Error
 	return workflows, err
 }
 
 func (r *workflowRepository) FindByID(id uint) (*model.Workflow, error) {
 	var workflow model.Workflow
 	err := r.db.
-		Preload("Organization").
 		Preload("Steps", func(db *gorm.DB) *gorm.DB {
 			return db.Order("\"order\" ASC").Preload("Status")
 		}).
@@ -112,18 +103,16 @@ func (r *workflowRepository) CountSteps(workflowID uint) (int64, error) {
 	return count, err
 }
 
-func (r *workflowRepository) GetMaxOrder(orgID uuid.UUID) (int, error) {
+func (r *workflowRepository) GetMaxOrder() (int, error) {
 	var maxOrder int
-	err := r.db.Model(&model.Workflow{}).Where("organization_id = ?", orgID).
-		Select("COALESCE(MAX(display_order), 0)").Scan(&maxOrder).Error
+	err := r.db.Model(&model.Workflow{}).Select("COALESCE(MAX(display_order), 0)").Scan(&maxOrder).Error
 	return maxOrder, err
 }
 
-func (r *workflowRepository) Reorder(orgID uuid.UUID, ids []uint) error {
+func (r *workflowRepository) Reorder(ids []uint) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		for i, id := range ids {
-			if err := tx.Model(&model.Workflow{}).
-				Where("id = ? AND organization_id = ?", id, orgID).
+			if err := tx.Model(&model.Workflow{}).Where("id = ?", id).
 				Update("display_order", i+1).Error; err != nil {
 				return err
 			}

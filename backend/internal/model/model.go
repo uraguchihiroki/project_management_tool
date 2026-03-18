@@ -153,8 +153,6 @@ type Comment struct {
 
 type Workflow struct {
 	ID             uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	OrganizationID uuid.UUID      `gorm:"type:uuid;not null" json:"organization_id"`
-	Organization   Organization   `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
 	Name           string         `gorm:"size:200;not null" json:"name"`
 	Description    string         `gorm:"size:500" json:"description"`
 	Order          int            `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示

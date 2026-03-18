@@ -138,8 +138,6 @@ export interface WorkflowStep {
 
 export interface Workflow {
   id: number
-  organization_id: string
-  organization?: Organization
   name: string
   description: string
   steps?: WorkflowStep[]
