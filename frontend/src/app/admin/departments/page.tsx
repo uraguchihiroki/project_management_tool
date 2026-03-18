@@ -10,7 +10,9 @@ import { useAuth } from '@/context/AuthContext'
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
 async function fetchDepartments(orgId: string): Promise<Department[]> {
+  if (!orgId) return []
   const res = await fetch(`${API}/organizations/${orgId}/departments`)
+  if (!res.ok) return []
   const json = await res.json()
   return json.data ?? []
 }
@@ -31,14 +33,20 @@ export default function DepartmentsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof form) => {
-      const res = await fetch(`${API}/organizations/${currentOrg?.id}/departments`, {
+      const orgId = currentOrg?.id
+      if (!orgId) throw new Error('組織が選択されていません')
+      const res = await fetch(`${API}/organizations/${orgId}/departments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
+      const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const json = await res.json()
-        throw new Error(json.message ?? '作成に失敗しました')
+        const msg = json.message ?? '作成に失敗しました'
+        if (res.status === 404) {
+          throw new Error(`${msg}（API エンドポイントが見つかりません。バックエンドが起動しているか確認してください）`)
+        }
+        throw new Error(msg)
       }
     },
     onSuccess: () => {
@@ -52,14 +60,20 @@ export default function DepartmentsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof form }) => {
-      const res = await fetch(`${API}/organizations/${currentOrg?.id}/departments/${id}`, {
+      const orgId = currentOrg?.id
+      if (!orgId) throw new Error('組織が選択されていません')
+      const res = await fetch(`${API}/organizations/${orgId}/departments/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
+      const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const json = await res.json()
-        throw new Error(json.message ?? '更新に失敗しました')
+        const msg = json.message ?? '更新に失敗しました'
+        if (res.status === 404) {
+          throw new Error(`${msg}（API エンドポイントが見つかりません）`)
+        }
+        throw new Error(msg)
       }
     },
     onSuccess: () => {
@@ -73,9 +87,18 @@ export default function DepartmentsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await fetch(`${API}/organizations/${currentOrg?.id}/departments/${id}`, { method: 'DELETE' })
+      const orgId = currentOrg?.id
+      if (!orgId) throw new Error('組織が選択されていません')
+      const res = await fetch(`${API}/organizations/${orgId}/departments/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        const msg = json.message ?? '削除に失敗しました'
+        if (res.status === 404) throw new Error(`${msg}（API エンドポイントが見つかりません）`)
+        throw new Error(msg)
+      }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['departments'] }),
+    onError: (e: Error) => setError(e.message),
   })
 
   const startEdit = (dept: Department) => {
