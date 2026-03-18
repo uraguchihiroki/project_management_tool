@@ -10,10 +10,29 @@
 
 ## 実行方法
 
+### バックエンド単体テスト
+
 ```powershell
 cd backend
 go test ./test/... -v
 ```
+
+### E2E テスト（Playwright）
+
+役職のドラッグ並び替えを検証する E2E テストがあります。
+
+**前提条件**:
+- バックエンド（`localhost:8080`）が起動していること
+- フロントエンド（`localhost:3000`）が起動していること
+- `seed.sql` 実行済みで組織（FRS）が存在すること
+
+**実行**:
+```powershell
+cd frontend
+npm run test:e2e
+```
+
+**注意**: ルート変更（例: `/roles/reorder` → `/roles/bulk/reorder`）を行った場合は、**バックエンドを再起動**してください。
 
 ---
 

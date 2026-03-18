@@ -83,8 +83,8 @@ export default function RolesPage() {
   const reorderMutation = useMutation({
     mutationFn: async (ids: number[]) => {
       const url = currentOrg?.id
-        ? `${API}/roles/reorder?org_id=${currentOrg.id}`
-        : `${API}/roles/reorder`
+        ? `${API}/roles/bulk/reorder?org_id=${currentOrg.id}`
+        : `${API}/roles/bulk/reorder`
       const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -227,8 +227,8 @@ export default function RolesPage() {
                 itemId={(r) => String(r.id)}
                 onReorder={(ids) => reorderMutation.mutate(ids.map(Number))}
                 disabled={reorderPending}
-                renderItem={(role, handleProps) => (
-                  <tr className="hover:bg-gray-50 transition-colors">
+                renderItem={(role, { handleProps, setNodeRef, style }) => (
+                  <tr ref={setNodeRef} style={style} className="hover:bg-gray-50 transition-colors">
                     <td className="px-2 py-3">
                       <DragHandle handleProps={handleProps} />
                     </td>

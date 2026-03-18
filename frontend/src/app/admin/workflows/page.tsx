@@ -232,8 +232,8 @@ export default function WorkflowsPage() {
                   itemId={(w) => String(w.id)}
                   onReorder={(ids) => reorderMutation.mutate({ orgId, ids: ids.map(Number) })}
                   disabled={reorderPending === orgId}
-                  renderItem={(wf, handleProps) => (
-                    <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-t border-gray-100 first:border-t-0">
+                  renderItem={(wf, { handleProps, setNodeRef, style }) => (
+                    <div ref={setNodeRef} style={style} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-t border-gray-100 first:border-t-0">
                       <DragHandle handleProps={handleProps} />
                       <GitBranch className="w-4 h-4 text-blue-500 flex-shrink-0" />
                       <div className="flex-1 min-w-0">

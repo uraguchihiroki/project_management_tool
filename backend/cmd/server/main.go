@@ -110,7 +110,7 @@ func main() {
 	// Roles
 	api.GET("/roles", roleHandler.List)
 	api.POST("/roles", roleHandler.Create)
-	api.PUT("/roles/reorder", roleHandler.Reorder)
+	api.PUT("/roles/bulk/reorder", roleHandler.Reorder)
 	api.PUT("/roles/:id", roleHandler.Update)
 	api.DELETE("/roles/:id", roleHandler.Delete)
 

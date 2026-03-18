@@ -59,6 +59,9 @@ Desktop.ini
 *.swo
 *~
 
+frontend/playwright-report/
+frontend/test-results/
+
 # ==================
 # Logs
 # ==================

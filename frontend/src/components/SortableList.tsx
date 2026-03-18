@@ -19,11 +19,17 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical } from 'lucide-react'
 
+export interface SortableItemRenderProps {
+  handleProps: React.HTMLAttributes<HTMLDivElement>
+  setNodeRef: (element: HTMLElement | null) => void
+  style: React.CSSProperties
+}
+
 export interface SortableListProps<T> {
   items: T[]
   itemId: (item: T) => string
   onReorder: (ids: string[]) => void | Promise<void>
-  renderItem: (item: T, handleProps: React.HTMLAttributes<HTMLDivElement>) => React.ReactNode
+  renderItem: (item: T, props: SortableItemRenderProps) => React.ReactNode
   disabled?: boolean
 }
 
@@ -35,7 +41,7 @@ function SortableItem<T>({
 }: {
   item: T
   itemId: (item: T) => string
-  renderItem: (item: T, handleProps: React.HTMLAttributes<HTMLDivElement>) => React.ReactNode
+  renderItem: (item: T, props: SortableItemRenderProps) => React.ReactNode
   disabled?: boolean
 }) {
   const id = itemId(item)
@@ -48,7 +54,7 @@ function SortableItem<T>({
     isDragging,
   } = useSortable({ id, disabled })
 
-  const style = {
+  const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
@@ -56,11 +62,7 @@ function SortableItem<T>({
 
   const handleProps = disabled ? {} : { ...attributes, ...listeners }
 
-  return (
-    <div ref={setNodeRef} style={style} className="contents">
-      {renderItem(item, handleProps)}
-    </div>
-  )
+  return <>{renderItem(item, { handleProps, setNodeRef, style })}</>
 }
 
 export function SortableList<T>({

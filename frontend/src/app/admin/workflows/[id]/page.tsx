@@ -234,9 +234,9 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
               itemId={(s) => String(s.id)}
               onReorder={(ids) => reorderStepsMutation.mutate(ids.map(Number))}
               disabled={reorderPending}
-              renderItem={(s, handleProps) =>
+              renderItem={(s, { handleProps, setNodeRef, style }) =>
                 editingStepId === s.id ? (
-                  <div className="px-4 py-3 bg-blue-50">
+                  <div ref={setNodeRef} style={style} className="px-4 py-3 bg-blue-50">
                     {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
                     <StepForm
                       onSubmit={(data) => {
@@ -247,7 +247,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                     />
                   </div>
                 ) : (
-                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                  <div ref={setNodeRef} style={style} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
                     <DragHandle handleProps={handleProps} />
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
                       {steps.findIndex((x) => x.id === s.id) + 1}

@@ -291,8 +291,8 @@ export default function TemplatesPage() {
                   itemId={(t) => String(t.id)}
                   onReorder={(ids) => reorderMutation.mutate({ projectId, ids: ids.map(Number) })}
                   disabled={reorderPending === projectId}
-                  renderItem={(tmpl, handleProps) => (
-                    <div className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-t border-gray-100 first:border-t-0">
+                  renderItem={(tmpl, { handleProps, setNodeRef, style }) => (
+                    <div ref={setNodeRef} style={style} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-t border-gray-100 first:border-t-0">
                       <DragHandle handleProps={handleProps} className="pt-0.5" />
                       <div className="flex-1 min-w-0 pt-0.5">
                         <div className="flex items-center gap-2 flex-wrap">

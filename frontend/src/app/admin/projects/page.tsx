@@ -117,11 +117,12 @@ export default function AdminProjectsPage() {
             itemId={(p) => p.id}
             onReorder={(ids) => reorderMutation.mutate(ids)}
             disabled={reorderPending}
-            renderItem={(project, handleProps) => (
-              <Link
-                href={`/admin/projects/${project.id}`}
-                className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:shadow-md transition-all group flex items-center justify-between"
-              >
+            renderItem={(project, { handleProps, setNodeRef, style }) => (
+              <div ref={setNodeRef} style={style}>
+                <Link
+                  href={`/admin/projects/${project.id}`}
+                  className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:shadow-md transition-all group flex items-center justify-between block"
+                >
                 <div className="flex items-start gap-2 flex-1 min-w-0">
                   <DragHandle handleProps={handleProps} className="flex-shrink-0 mt-0.5" />
                   <div className="min-w-0">
@@ -145,7 +146,8 @@ export default function AdminProjectsPage() {
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 flex-shrink-0 ml-4" />
-              </Link>
+                </Link>
+              </div>
             )}
           />
         </div>

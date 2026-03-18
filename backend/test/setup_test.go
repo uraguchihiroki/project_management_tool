@@ -143,7 +143,7 @@ func newTestServer(t *testing.T) *testServer {
 	api.PUT("/users/:id/roles", roleH.AssignRoles)
 	api.GET("/roles", roleH.List)
 	api.POST("/roles", roleH.Create)
-	api.PUT("/roles/reorder", roleH.Reorder)
+	api.PUT("/roles/bulk/reorder", roleH.Reorder)
 	api.PUT("/roles/:id", roleH.Update)
 	api.DELETE("/roles/:id", roleH.Delete)
 	api.GET("/workflows", workflowH.List)

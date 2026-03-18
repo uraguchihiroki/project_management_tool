@@ -101,7 +101,7 @@ func TestRole_Reorder(t *testing.T) {
 	roleID1 := uint(mustGetFloat(t, r1, "data", "id"))
 	roleID2 := uint(mustGetFloat(t, r2, "data", "id"))
 
-	status, _ := ts.req(t, "PUT", "/api/v1/roles/reorder?org_id="+testOrgID, map[string]interface{}{
+	status, _ := ts.req(t, "PUT", "/api/v1/roles/bulk/reorder?org_id="+testOrgID, map[string]interface{}{
 		"ids": []uint{roleID2, roleID1},
 	})
 	assertStatus(t, status, http.StatusNoContent, "reorder roles")

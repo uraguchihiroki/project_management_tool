@@ -237,8 +237,8 @@ export default function DepartmentsPage() {
                 itemId={(d) => d.id}
                 onReorder={(ids) => reorderMutation.mutate(ids)}
                 disabled={reorderPending}
-                renderItem={(dept, handleProps) => (
-                  <tr className="hover:bg-gray-50 transition-colors">
+                renderItem={(dept, { handleProps, setNodeRef, style }) => (
+                  <tr ref={setNodeRef} style={style} className="hover:bg-gray-50 transition-colors">
                     <td className="px-2 py-3">
                       <DragHandle handleProps={handleProps} />
                     </td>
