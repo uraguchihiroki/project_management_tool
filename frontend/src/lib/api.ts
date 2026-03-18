@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate, IssueApproval, Organization, SuperAdmin } from '@/types'
+import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate, IssueApproval, Organization, SuperAdmin, Workflow, WorkflowStep, ApprovalObject } from '@/types'
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
@@ -145,6 +145,60 @@ export const approveStep = (approvalId: string, approverId: string, comment: str
 
 export const rejectStep = (approvalId: string, approverId: string, comment: string) =>
   api.post<ApiResponse<IssueApproval>>(`/approvals/${approvalId}/reject`, { approver_id: approverId, comment }).then((r) => r.data.data)
+
+// Workflows & Steps
+export const getWorkflows = () =>
+  api.get<ListResponse<Workflow>>('/workflows').then((r) => r.data.data)
+
+export const getWorkflow = (id: string) =>
+  api.get<ApiResponse<Workflow>>(`/workflows/${id}`).then((r) => r.data.data)
+
+export const getWorkflowStep = (workflowId: string, stepId: string) =>
+  api.get<ApiResponse<WorkflowStep>>(`/workflows/${workflowId}/steps/${stepId}`).then((r) => r.data.data)
+
+export const createWorkflowStep = (
+  workflowId: string,
+  data: {
+    step_type?: string
+    name: string
+    description?: string
+    threshold?: number
+    status_id?: string
+    approval_objects?: Array<{
+      type: 'role' | 'user'
+      role_id?: number
+      role_operator?: 'eq' | 'gte'
+      user_id?: string
+      points?: number
+      exclude_reporter?: boolean
+      exclude_assignee?: boolean
+    }>
+  }
+) => api.post<ApiResponse<WorkflowStep>>(`/workflows/${workflowId}/steps`, data).then((r) => r.data.data)
+
+export const updateWorkflowStep = (
+  workflowId: string,
+  stepId: string,
+  data: {
+    step_type?: string
+    name: string
+    description?: string
+    threshold?: number
+    status_id?: string
+    approval_objects?: Array<{
+      type: 'role' | 'user'
+      role_id?: number
+      role_operator?: 'eq' | 'gte'
+      user_id?: string
+      points?: number
+      exclude_reporter?: boolean
+      exclude_assignee?: boolean
+    }>
+  }
+) => api.put<ApiResponse<WorkflowStep>>(`/workflows/${workflowId}/steps/${stepId}`, data).then((r) => r.data.data)
+
+export const deleteWorkflowStep = (workflowId: string, stepId: string) =>
+  api.delete(`/workflows/${workflowId}/steps/${stepId}`)
 
 // Comments
 export const getComments = (issueId: string) =>

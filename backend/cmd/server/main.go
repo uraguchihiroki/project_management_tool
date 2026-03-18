@@ -40,6 +40,7 @@ func main() {
 		&model.Comment{},
 		&model.Workflow{},
 		&model.WorkflowStep{},
+		&model.ApprovalObject{},
 		&model.IssueTemplate{},
 		&model.IssueApproval{},
 	); err != nil {
@@ -124,6 +125,7 @@ func main() {
 	api.PUT("/workflows/:id", workflowHandler.Update)
 	api.DELETE("/workflows/:id", workflowHandler.Delete)
 	api.POST("/workflows/:id/steps", workflowHandler.AddStep)
+	api.GET("/workflows/:id/steps/:stepId", workflowHandler.GetStep)
 	api.PUT("/workflows/:id/steps/reorder", workflowHandler.ReorderSteps)
 	api.PUT("/workflows/:id/steps/:stepId", workflowHandler.UpdateStep)
 	api.DELETE("/workflows/:id/steps/:stepId", workflowHandler.DeleteStep)

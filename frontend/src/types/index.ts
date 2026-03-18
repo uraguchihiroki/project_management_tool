@@ -121,14 +121,33 @@ export interface Comment {
   updated_at: string
 }
 
+export interface ApprovalObject {
+  id: number
+  workflow_step_id: number
+  order: number
+  type: 'role' | 'user'
+  role_id?: number
+  role?: Role
+  role_operator?: 'eq' | 'gte'
+  user_id?: string
+  user?: User
+  points: number
+  exclude_reporter: boolean
+  exclude_assignee: boolean
+}
+
 export interface WorkflowStep {
   id: number
   workflow_id: number
   order: number
+  step_type?: 'start' | 'normal' | 'goal'
   name: string
-  required_level: number
+  description?: string
+  threshold?: number
   status_id?: string
   status?: Status
+  approval_objects?: ApprovalObject[]
+  required_level?: number
   approver_type?: 'role' | 'user' | 'multiple'
   approver_user_id?: string
   min_approvers?: number

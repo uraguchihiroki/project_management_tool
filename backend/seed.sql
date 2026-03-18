@@ -174,6 +174,25 @@ UPDATE issue_templates t SET display_order = sub.rn FROM (
   SELECT id, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY name) AS rn FROM issue_templates
 ) sub WHERE t.id = sub.id;
 
+-- 14e. ステップ仕様v2: step_type, description, threshold, approval_objects
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS step_type VARCHAR(20) NOT NULL DEFAULT 'normal';
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS threshold INTEGER NOT NULL DEFAULT 1;
+UPDATE workflow_steps SET step_type = 'normal' WHERE step_type IS NULL OR step_type = '';
+
+CREATE TABLE IF NOT EXISTS approval_objects (
+  id SERIAL PRIMARY KEY,
+  workflow_step_id INTEGER NOT NULL REFERENCES workflow_steps(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 1,
+  type VARCHAR(20) NOT NULL,
+  role_id INTEGER REFERENCES roles(id),
+  role_operator VARCHAR(10),
+  user_id UUID REFERENCES users(id),
+  points INTEGER NOT NULL DEFAULT 1,
+  exclude_reporter BOOLEAN DEFAULT false,
+  exclude_assignee BOOLEAN DEFAULT false
+);
+
 -- 15. Create initial super admin account
 --    Email: superadmin@frs.example.com  (change as needed)
 INSERT INTO super_admins (id, name, email, created_at)

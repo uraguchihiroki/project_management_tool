@@ -19,6 +19,11 @@ type WorkflowRepository interface {
 	Reorder(ids []uint) error
 	ReorderSteps(workflowID uint, ids []uint) error
 	GetMaxOrder() (int, error)
+	CreateApprovalObject(obj *model.ApprovalObject) error
+	UpdateApprovalObject(obj *model.ApprovalObject) error
+	DeleteApprovalObject(id uint) error
+	DeleteApprovalObjectsByStepID(stepID uint) error
+	CountApprovalObjects(stepID uint) (int64, error)
 }
 
 type workflowRepository struct {
@@ -39,7 +44,9 @@ func (r *workflowRepository) FindByID(id uint) (*model.Workflow, error) {
 	var workflow model.Workflow
 	err := r.db.
 		Preload("Steps", func(db *gorm.DB) *gorm.DB {
-			return db.Order("\"order\" ASC").Preload("Status")
+			return db.Order("\"order\" ASC").Preload("Status").Preload("ApprovalObjects", func(d *gorm.DB) *gorm.DB {
+				return d.Order("sort_order ASC").Preload("Role").Preload("User")
+			})
 		}).
 		First(&workflow, id).Error
 	if err != nil {
@@ -60,7 +67,16 @@ func (r *workflowRepository) Update(workflow *model.Workflow) error {
 }
 
 func (r *workflowRepository) Delete(id uint) error {
-	// ステップを先に削除してからワークフローを削除
+	// 承認オブジェクト→ステップ→ワークフローの順で削除
+	var stepIDs []uint
+	if err := r.db.Model(&model.WorkflowStep{}).Where("workflow_id = ?", id).Pluck("id", &stepIDs).Error; err != nil {
+		return err
+	}
+	if len(stepIDs) > 0 {
+		if err := r.db.Where("workflow_step_id IN ?", stepIDs).Delete(&model.ApprovalObject{}).Error; err != nil {
+			return err
+		}
+	}
 	if err := r.db.Where("workflow_id = ?", id).Delete(&model.WorkflowStep{}).Error; err != nil {
 		return err
 	}
@@ -73,9 +89,12 @@ func (r *workflowRepository) CreateStep(step *model.WorkflowStep) error {
 
 func (r *workflowRepository) UpdateStep(step *model.WorkflowStep) error {
 	return r.db.Model(&model.WorkflowStep{}).Where("id = ?", step.ID).Updates(map[string]interface{}{
+		"step_type":        step.StepType,
 		"name":             step.Name,
-		"required_level":   step.RequiredLevel,
+		"description":      step.Description,
+		"threshold":        step.Threshold,
 		"status_id":        step.StatusID,
+		"required_level":   step.RequiredLevel,
 		"approver_type":    step.ApproverType,
 		"approver_user_id": step.ApproverUserID,
 		"min_approvers":    step.MinApprovers,
@@ -85,12 +104,20 @@ func (r *workflowRepository) UpdateStep(step *model.WorkflowStep) error {
 }
 
 func (r *workflowRepository) DeleteStep(id uint) error {
+	if err := r.db.Where("workflow_step_id = ?", id).Delete(&model.ApprovalObject{}).Error; err != nil {
+		return err
+	}
 	return r.db.Delete(&model.WorkflowStep{}, id).Error
 }
 
 func (r *workflowRepository) FindStepByID(id uint) (*model.WorkflowStep, error) {
 	var step model.WorkflowStep
-	err := r.db.Preload("Status").First(&step, id).Error
+	err := r.db.
+		Preload("Status").
+		Preload("ApprovalObjects", func(db *gorm.DB) *gorm.DB {
+			return db.Order("sort_order ASC").Preload("Role").Preload("User")
+		}).
+		First(&step, id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -132,4 +159,35 @@ func (r *workflowRepository) ReorderSteps(workflowID uint, ids []uint) error {
 		}
 		return nil
 	})
+}
+
+func (r *workflowRepository) CreateApprovalObject(obj *model.ApprovalObject) error {
+	return r.db.Create(obj).Error
+}
+
+func (r *workflowRepository) UpdateApprovalObject(obj *model.ApprovalObject) error {
+	return r.db.Model(&model.ApprovalObject{}).Where("id = ?", obj.ID).Updates(map[string]interface{}{
+		"sort_order":       obj.Order,
+		"type":            obj.Type,
+		"role_id":         obj.RoleID,
+		"role_operator":   obj.RoleOperator,
+		"user_id":         obj.UserID,
+		"points":          obj.Points,
+		"exclude_reporter": obj.ExcludeReporter,
+		"exclude_assignee": obj.ExcludeAssignee,
+	}).Error
+}
+
+func (r *workflowRepository) DeleteApprovalObject(id uint) error {
+	return r.db.Delete(&model.ApprovalObject{}, id).Error
+}
+
+func (r *workflowRepository) DeleteApprovalObjectsByStepID(stepID uint) error {
+	return r.db.Where("workflow_step_id = ?", stepID).Delete(&model.ApprovalObject{}).Error
+}
+
+func (r *workflowRepository) CountApprovalObjects(stepID uint) (int64, error) {
+	var count int64
+	err := r.db.Model(&model.ApprovalObject{}).Where("workflow_step_id = ?", stepID).Count(&count).Error
+	return count, err
 }

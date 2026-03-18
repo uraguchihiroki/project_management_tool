@@ -161,16 +161,36 @@ type Workflow struct {
 }
 
 type WorkflowStep struct {
-	ID              uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	WorkflowID      uint       `gorm:"not null" json:"workflow_id"`
-	Order           int        `gorm:"not null;default:1" json:"order"`
-	Name            string     `gorm:"size:200;not null" json:"name"`
+	ID             uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	WorkflowID     uint       `gorm:"not null" json:"workflow_id"`
+	Order          int        `gorm:"not null;default:1" json:"order"`
+	StepType       string     `gorm:"size:20;not null;default:'normal'" json:"step_type"` // start / normal / goal
+	Name           string     `gorm:"size:200;not null" json:"name"`
+	Description    string     `gorm:"type:text" json:"description"`
+	Threshold      int        `gorm:"not null;default:1" json:"threshold"`
+	StatusID       *uuid.UUID `gorm:"type:uuid" json:"status_id,omitempty"`
+	Status         *Status    `gorm:"foreignKey:StatusID" json:"status,omitempty"`
+	ApprovalObjects []ApprovalObject `gorm:"foreignKey:WorkflowStepID" json:"approval_objects,omitempty"`
+	// 旧設計（後方互換）
 	RequiredLevel   int        `gorm:"not null;default:1" json:"required_level"`
-	StatusID        *uuid.UUID `gorm:"type:uuid" json:"status_id,omitempty"`
-	Status          *Status    `gorm:"foreignKey:StatusID" json:"status,omitempty"`
-	ApproverType    string     `gorm:"size:20;not null;default:'role'" json:"approver_type"` // role / user / multiple
+	ApproverType    string     `gorm:"size:20;not null;default:'role'" json:"approver_type"`
 	ApproverUserID  *uuid.UUID `gorm:"type:uuid" json:"approver_user_id,omitempty"`
 	MinApprovers    int        `gorm:"not null;default:1" json:"min_approvers"`
+	ExcludeReporter bool       `gorm:"default:false" json:"exclude_reporter"`
+	ExcludeAssignee bool       `gorm:"default:false" json:"exclude_assignee"`
+}
+
+type ApprovalObject struct {
+	ID             uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	WorkflowStepID uint       `gorm:"not null" json:"workflow_step_id"`
+	Order          int        `gorm:"column:sort_order;not null;default:1" json:"order"`
+	Type            string     `gorm:"size:20;not null" json:"type"` // role / user
+	RoleID          *uint      `json:"role_id,omitempty"`
+	Role            *Role      `gorm:"foreignKey:RoleID" json:"role,omitempty"`
+	RoleOperator    string     `gorm:"size:10" json:"role_operator,omitempty"` // eq / gte
+	UserID          *uuid.UUID `gorm:"type:uuid" json:"user_id,omitempty"`
+	User            *User      `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Points          int        `gorm:"not null;default:1" json:"points"`
 	ExcludeReporter bool       `gorm:"default:false" json:"exclude_reporter"`
 	ExcludeAssignee bool       `gorm:"default:false" json:"exclude_assignee"`
 }
