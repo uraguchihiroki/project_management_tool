@@ -139,7 +139,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     return <div className="text-red-500 text-sm">ワークフローが見つかりません</div>
   }
 
-  const StepForm = ({ onSubmit, loading }: { onSubmit: (data: typeof emptyStep) => void; loading: boolean }) => (
+  const renderStepForm = (onSubmit: (data: typeof emptyStep) => void, loading: boolean) => (
     <form
       onSubmit={(e) => { e.preventDefault(); onSubmit(stepForm) }}
       className="grid grid-cols-12 gap-3 items-end"
@@ -149,7 +149,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         <input
           type="text"
           value={stepForm.name}
-          onChange={(e) => setStepForm({ ...stepForm, name: e.target.value })}
+          onChange={(e) => setStepForm((prev) => ({ ...prev, name: e.target.value }))}
           placeholder="例: 上司承認"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -163,7 +163,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           min={0}
           max={9999}
           value={stepForm.required_level}
-          onChange={(e) => setStepForm({ ...stepForm, required_level: parseInt(e.target.value) || 0 })}
+          onChange={(e) => setStepForm((prev) => ({ ...prev, required_level: parseInt(e.target.value) || 0 }))}
           placeholder="1"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -172,7 +172,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         <label className="block text-xs font-medium text-gray-500 mb-1">承認後ステータス</label>
         <select
           value={stepForm.status_id}
-          onChange={(e) => setStepForm({ ...stepForm, status_id: e.target.value })}
+          onChange={(e) => setStepForm((prev) => ({ ...prev, status_id: e.target.value }))}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">（変更なし）</option>
@@ -242,13 +242,13 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                 editingStepId === s.id ? (
                   <div ref={setNodeRef} style={style} className="px-4 py-3 bg-blue-50">
                     {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
-                    <StepForm
-                      onSubmit={(data) => {
+                    {renderStepForm(
+                      (data) => {
                         if (!data.name.trim()) { setError('ステップ名は必須です'); return }
                         updateStepMutation.mutate({ stepId: s.id, data })
-                      }}
-                      loading={updateStepMutation.isPending}
-                    />
+                      },
+                      updateStepMutation.isPending
+                    )}
                   </div>
                 ) : (
                   <div ref={setNodeRef} style={style} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
@@ -311,13 +311,13 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         {showAddForm && (
           <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
             {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
-            <StepForm
-              onSubmit={(data) => {
+            {renderStepForm(
+              (data) => {
                 if (!data.name.trim()) { setError('ステップ名は必須です'); return }
                 addStepMutation.mutate(data)
-              }}
-              loading={addStepMutation.isPending}
-            />
+              },
+              addStepMutation.isPending
+            )}
           </div>
         )}
       </div>

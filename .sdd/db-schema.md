@@ -91,14 +91,29 @@ workflow_steps
 ├── id (PK, auto)
 ├── workflow_id (FK → workflows.id)
 ├── order
+├── step_type (start / normal / goal) # スタート/通常/ゴール。ワークフローは start→goal で構成
 ├── name
-├── required_level
-├── status_id (FK → statuses.id, nullable)
-├── approver_type (role / user / multiple)
-├── approver_user_id (FK → users.id, nullable)
-├── min_approvers (default 1)
-├── exclude_reporter (default false)
-└── exclude_assignee (default false)
+├── description (nullable)           # ステップの説明（goal でも有効）
+├── threshold (default 1)             # 閾値（点数合計>=で遷移）。goal では無効
+├── status_id (FK → statuses.id, nullable)  # 承認後ステータス。goal では無効
+├── required_level (deprecated)      # 旧設計・後方互換用
+├── approver_type (deprecated)
+├── approver_user_id (deprecated)
+├── min_approvers (deprecated)
+├── exclude_reporter (deprecated)
+└── exclude_assignee (deprecated)
+
+approval_objects (承認オブジェクト, 1ステップ:N。goal ステップには紐づかない)
+├── id (PK, auto)
+├── workflow_step_id (FK → workflow_steps.id)
+├── order
+├── type (role / user)
+├── role_id (FK → roles.id, nullable)      # type=role のとき
+├── role_operator (eq / gte, nullable)     # イコール / 以上
+├── user_id (FK → users.id, nullable)      # type=user のとき
+├── points (default 1)                      # 承認時に加算する点数。同一人物は1回のみ、複数該当時は最高点で加算
+├── exclude_reporter (default false)        # 起票者をこの承認オブジェクトの承認者から除外
+└── exclude_assignee (default false)        # 担当者をこの承認オブジェクトの承認者から除外
 
 issue_templates
 ├── id (PK, auto)
@@ -246,14 +261,32 @@ issue_approvals
 | id | SERIAL | PK | ステップID |
 | workflow_id | INTEGER | FK | 所属ワークフロー |
 | order | INTEGER | NOT NULL, DEFAULT 1 | 表示順 |
+| step_type | VARCHAR(20) | NOT NULL, DEFAULT 'normal' | start / normal / goal。ワークフローは start で始まり goal で終わる |
 | name | VARCHAR(200) | NOT NULL | ステップ名 |
-| required_level | INTEGER | NOT NULL, DEFAULT 1 | 承認に必要な役職レベル |
-| status_id | UUID | FK, nullable | 紐づくステータス |
-| approver_type | VARCHAR(20) | DEFAULT 'role' | role / user / multiple |
-| approver_user_id | UUID | FK, nullable | 個人指定時のユーザーID |
-| min_approvers | INTEGER | DEFAULT 1 | 最低承認者数 |
-| exclude_reporter | BOOLEAN | DEFAULT false | 起票者を除外 |
-| exclude_assignee | BOOLEAN | DEFAULT false | 担当者を除外 |
+| description | TEXT | nullable | ステップの説明（goal でも編集可） |
+| threshold | INTEGER | NOT NULL, DEFAULT 1 | 閾値（点数合計>=で遷移）。goal では無効 |
+| status_id | UUID | FK, nullable | 承認後ステータス。goal では無効 |
+| required_level | INTEGER | (deprecated) | 旧設計・後方互換用 |
+| approver_type | VARCHAR(20) | (deprecated) | 旧設計 |
+| approver_user_id | UUID | (deprecated) | 旧設計 |
+| min_approvers | INTEGER | (deprecated) | 旧設計 |
+| exclude_reporter | BOOLEAN | (deprecated) | 旧設計 |
+| exclude_assignee | BOOLEAN | (deprecated) | 旧設計 |
+
+### approval_objects（承認オブジェクト）
+
+| カラム | 型 | 制約 | 説明 |
+|-------|-----|------|------|
+| id | SERIAL | PK | 承認オブジェクトID |
+| workflow_step_id | INTEGER | FK | 所属ステップ |
+| order | INTEGER | NOT NULL, DEFAULT 1 | 表示順 |
+| type | VARCHAR(20) | NOT NULL | role / user |
+| role_id | INTEGER | FK, nullable | type=role のとき対象役職 |
+| role_operator | VARCHAR(10) | nullable | type=role のとき: eq（イコール）/ gte（以上） |
+| user_id | UUID | FK, nullable | type=user のとき対象ユーザー |
+| points | INTEGER | NOT NULL, DEFAULT 1 | 承認時に加算する点数 |
+| exclude_reporter | BOOLEAN | DEFAULT false | 起票者をこの承認オブジェクトの承認者から除外 |
+| exclude_assignee | BOOLEAN | DEFAULT false | 担当者をこの承認オブジェクトの承認者から除外 |
 
 ### issue_templates
 
