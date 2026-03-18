@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -48,6 +49,35 @@ func (h *ApprovalHandler) Approve(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid approver_id")
 	}
 	approval, err := h.approvalService.Approve(approvalID, approverID, req.Comment)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": approval})
+}
+
+// POST /api/v1/issues/:issueId/steps/:stepId/approve
+func (h *ApprovalHandler) ApproveStep(c echo.Context) error {
+	issueID, err := uuid.Parse(c.Param("issueId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid issue id")
+	}
+	stepID, err := strconv.ParseUint(c.Param("stepId"), 10, 64)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid step id")
+	}
+	type Request struct {
+		ApproverID string `json:"approver_id"`
+		Comment    string `json:"comment"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	approverID, err := uuid.Parse(req.ApproverID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid approver_id")
+	}
+	approval, err := h.approvalService.ApproveStep(issueID, uint(stepID), approverID, req.Comment)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}

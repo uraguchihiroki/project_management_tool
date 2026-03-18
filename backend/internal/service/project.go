@@ -14,11 +14,17 @@ type CreateProjectInput struct {
 	Description    *string
 	OwnerID        uuid.UUID
 	OrganizationID *uuid.UUID
+	StartDate      *time.Time
+	EndDate        *time.Time
+	Status         string
 }
 
 type UpdateProjectInput struct {
 	Name        *string
 	Description *string
+	StartDate   *time.Time
+	EndDate     *time.Time
+	Status      *string
 }
 
 type ProjectService interface {
@@ -27,6 +33,7 @@ type ProjectService interface {
 	Create(input CreateProjectInput) (*model.Project, error)
 	Update(id uuid.UUID, input UpdateProjectInput) (*model.Project, error)
 	Delete(id uuid.UUID) error
+	ListStatusesByOrg(orgID uuid.UUID) ([]model.Status, error)
 }
 
 type projectService struct {
@@ -50,6 +57,10 @@ func (s *projectService) Get(id uuid.UUID) (*model.Project, error) {
 }
 
 func (s *projectService) Create(input CreateProjectInput) (*model.Project, error) {
+	status := input.Status
+	if status == "" {
+		status = "none"
+	}
 	project := &model.Project{
 		ID:             uuid.New(),
 		Key:            input.Key,
@@ -57,6 +68,9 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 		Description:    input.Description,
 		OwnerID:        input.OwnerID,
 		OrganizationID: input.OrganizationID,
+		StartDate:      input.StartDate,
+		EndDate:        input.EndDate,
+		Status:         status,
 		CreatedAt:      time.Now(),
 	}
 	if err := s.projectRepo.Create(project); err != nil {
@@ -77,7 +91,7 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 	for _, ds := range defaultStatuses {
 		status := &model.Status{
 			ID:        uuid.New(),
-			ProjectID: project.ID,
+			ProjectID: &project.ID,
 			Name:      ds.Name,
 			Color:     ds.Color,
 			Order:     ds.Order,
@@ -102,6 +116,15 @@ func (s *projectService) Update(id uuid.UUID, input UpdateProjectInput) (*model.
 	if input.Description != nil {
 		project.Description = input.Description
 	}
+	if input.StartDate != nil {
+		project.StartDate = input.StartDate
+	}
+	if input.EndDate != nil {
+		project.EndDate = input.EndDate
+	}
+	if input.Status != nil {
+		project.Status = *input.Status
+	}
 	if err := s.projectRepo.Update(project); err != nil {
 		return nil, err
 	}
@@ -110,4 +133,8 @@ func (s *projectService) Update(id uuid.UUID, input UpdateProjectInput) (*model.
 
 func (s *projectService) Delete(id uuid.UUID) error {
 	return s.projectRepo.Delete(id)
+}
+
+func (s *projectService) ListStatusesByOrg(orgID uuid.UUID) ([]model.Status, error) {
+	return s.statusRepo.FindByOrganizationID(orgID)
 }

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Check, ChevronRight, GitBranch } from 'lucide-react'
-import type { Workflow, Project } from '@/types'
+import type { Workflow, Organization } from '@/types'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -14,8 +14,8 @@ async function fetchWorkflows(): Promise<Workflow[]> {
   return json.data ?? []
 }
 
-async function fetchProjects(): Promise<Project[]> {
-  const res = await fetch(`${API}/projects`)
+async function fetchOrganizations(): Promise<Organization[]> {
+  const res = await fetch(`${API}/organizations`)
   const json = await res.json()
   return json.data ?? []
 }
@@ -23,11 +23,11 @@ async function fetchProjects(): Promise<Project[]> {
 export default function WorkflowsPage() {
   const queryClient = useQueryClient()
   const { data: workflows = [], isLoading } = useQuery({ queryKey: ['workflows'], queryFn: fetchWorkflows })
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects })
+  const { data: organizations = [] } = useQuery({ queryKey: ['organizations'], queryFn: fetchOrganizations })
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [form, setForm] = useState({ name: '', description: '', project_id: '' })
+  const [form, setForm] = useState({ name: '', description: '', organization_id: '' })
   const [error, setError] = useState('')
 
   const createMutation = useMutation({
@@ -45,7 +45,7 @@ export default function WorkflowsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
       setShowForm(false)
-      setForm({ name: '', description: '', project_id: '' })
+      setForm({ name: '', description: '', organization_id: '' })
       setError('')
     },
     onError: (e: Error) => setError(e.message),
@@ -63,7 +63,7 @@ export default function WorkflowsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
       setEditingId(null)
-      setForm({ name: '', description: '', project_id: '' })
+      setForm({ name: '', description: '', organization_id: '' })
       setError('')
     },
     onError: (e: Error) => setError(e.message),
@@ -78,7 +78,7 @@ export default function WorkflowsPage() {
 
   const startEdit = (wf: Workflow) => {
     setEditingId(wf.id)
-    setForm({ name: wf.name, description: wf.description, project_id: wf.project_id })
+    setForm({ name: wf.name, description: wf.description, organization_id: wf.organization_id })
     setShowForm(false)
     setError('')
   }
@@ -89,22 +89,22 @@ export default function WorkflowsPage() {
     if (editingId !== null) {
       updateMutation.mutate({ id: editingId, data: { name: form.name, description: form.description } })
     } else {
-      if (!form.project_id) { setError('プロジェクトを選択してください'); return }
+      if (!form.organization_id) { setError('組織を選択してください'); return }
       createMutation.mutate(form)
     }
   }
 
-  // プロジェクトごとにグループ化
+  // 組織ごとにグループ化
   const grouped = workflows.reduce<Record<string, Workflow[]>>((acc, wf) => {
-    const key = wf.project_id
+    const key = wf.organization_id
     if (!acc[key]) acc[key] = []
     acc[key].push(wf)
     return acc
   }, {})
 
-  const getProjectName = (projectId: string) => {
-    const p = projects.find((p) => p.id === projectId)
-    return p ? `${p.key} - ${p.name}` : projectId
+  const getOrgName = (orgId: string) => {
+    const o = organizations.find((o) => o.id === orgId)
+    return o ? o.name : orgId
   }
 
   return (
@@ -118,7 +118,7 @@ export default function WorkflowsPage() {
           <button
             onClick={() => {
               setShowForm(true)
-              setForm({ name: '', description: '', project_id: projects[0]?.id ?? '' })
+              setForm({ name: '', description: '', organization_id: organizations[0]?.id ?? '' })
               setError('')
             }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -138,15 +138,15 @@ export default function WorkflowsPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {editingId === null && (
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">プロジェクト *</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">組織 *</label>
                 <select
-                  value={form.project_id}
-                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                  value={form.organization_id}
+                  onChange={(e) => setForm({ ...form, organization_id: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">プロジェクトを選択...</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>{p.key} - {p.name}</option>
+                  <option value="">組織を選択...</option>
+                  {organizations.map((o) => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
                   ))}
                 </select>
               </div>
@@ -205,10 +205,10 @@ export default function WorkflowsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {Object.entries(grouped).map(([projectId, wfs]) => (
-            <div key={projectId}>
+          {Object.entries(grouped).map(([orgId, wfs]) => (
+            <div key={orgId}>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-1">
-                {getProjectName(projectId)}
+                {getOrgName(orgId)}
               </p>
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                 {wfs.map((wf, idx) => (

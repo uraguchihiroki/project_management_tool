@@ -5,7 +5,14 @@ import { getProjects, createProject } from '@/lib/api'
 import { useState } from 'react'
 import Link from 'next/link'
 import { Plus, FolderKanban, ChevronRight } from 'lucide-react'
-import type { Project } from '@/types'
+import type { Project, ProjectStatus } from '@/types'
+
+const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  none: 'なし',
+  planning: '計画中',
+  active: '実行中',
+  completed: '完了',
+}
 import { useRequireAdmin, useAuth } from '@/context/AuthContext'
 
 export default function AdminProjectsPage() {
@@ -13,7 +20,14 @@ export default function AdminProjectsPage() {
   const { currentOrg } = useAuth()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ key: '', name: '', description: '' })
+  const [form, setForm] = useState({
+    key: '',
+    name: '',
+    description: '',
+    start_date: '',
+    end_date: '',
+    status: 'none' as ProjectStatus,
+  })
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects', currentOrg?.id],
@@ -25,7 +39,7 @@ export default function AdminProjectsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       setShowForm(false)
-      setForm({ key: '', name: '', description: '' })
+      setForm({ key: '', name: '', description: '', start_date: '', end_date: '', status: 'none' })
     },
   })
 
@@ -38,6 +52,9 @@ export default function AdminProjectsPage() {
       description: form.description || undefined,
       owner_id: currentUser.id,
       organization_id: currentOrg?.id,
+      start_date: form.start_date || undefined,
+      end_date: form.end_date || undefined,
+      status: form.status !== 'none' ? form.status : undefined,
     })
   }
 
@@ -90,7 +107,14 @@ export default function AdminProjectsPage() {
                 {project.description && (
                   <p className="mt-1 text-sm text-gray-500 line-clamp-1">{project.description}</p>
                 )}
-                <p className="mt-2 text-xs text-gray-400">オーナー: {project.owner?.name}</p>
+                <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+                  <span>オーナー: {project.owner?.name}</span>
+                  {project.status && project.status !== 'none' && (
+                    <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                      {PROJECT_STATUS_LABELS[project.status as ProjectStatus] ?? project.status}
+                    </span>
+                  )}
+                </div>
               </div>
               <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 flex-shrink-0 ml-4" />
             </Link>
@@ -140,6 +164,40 @@ export default function AdminProjectsPage() {
                   rows={3}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">開始日</label>
+                  <input
+                    type="date"
+                    value={form.start_date}
+                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">終了日</label>
+                  <input
+                    type="date"
+                    value={form.end_date}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">ライフサイクルステータス</label>
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value as ProjectStatus })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {(['none', 'planning', 'active', 'completed'] as const).map((s) => (
+                    <option key={s} value={s}>
+                      {PROJECT_STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
               </div>
               {createMutation.isError && (
                 <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">作成に失敗しました</p>

@@ -8,6 +8,7 @@ import (
 
 type StatusRepository interface {
 	FindByProject(projectID uuid.UUID) ([]model.Status, error)
+	FindByOrganizationID(orgID uuid.UUID) ([]model.Status, error)
 	FindByID(id uuid.UUID) (*model.Status, error)
 	Create(status *model.Status) error
 	Update(status *model.Status) error
@@ -25,6 +26,16 @@ func NewStatusRepository(db *gorm.DB) StatusRepository {
 func (r *statusRepository) FindByProject(projectID uuid.UUID) ([]model.Status, error) {
 	var statuses []model.Status
 	err := r.db.Where("project_id = ?", projectID).Order(`"order" asc`).Find(&statuses).Error
+	return statuses, err
+}
+
+func (r *statusRepository) FindByOrganizationID(orgID uuid.UUID) ([]model.Status, error) {
+	var statuses []model.Status
+	// プロジェクト所属 + 組織直下のステータス
+	err := r.db.Where(
+		"project_id IN (SELECT id FROM projects WHERE organization_id = ?) OR organization_id = ?",
+		orgID, orgID,
+	).Order(`"order" asc`).Find(&statuses).Error
 	return statuses, err
 }
 

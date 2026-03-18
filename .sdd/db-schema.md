@@ -83,7 +83,7 @@ comments
 
 workflows
 ├── id (PK, auto)
-├── project_id (FK → projects.id)
+├── organization_id (FK → organizations.id)
 ├── name
 ├── description
 └── created_at
@@ -94,7 +94,12 @@ workflow_steps
 ├── order
 ├── name
 ├── required_level
-└── status_id (FK → statuses.id, nullable)
+├── status_id (FK → statuses.id, nullable)
+├── approver_type (role / user / multiple)
+├── approver_user_id (FK → users.id, nullable)
+├── min_approvers (default 1)
+├── exclude_reporter (default false)
+└── exclude_assignee (default false)
 
 issue_templates
 ├── id (PK, auto)
@@ -229,7 +234,7 @@ issue_approvals
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | SERIAL | PK | ワークフローID |
-| project_id | UUID | FK | 所属プロジェクト |
+| organization_id | UUID | FK | 所属組織 |
 | name | VARCHAR(200) | NOT NULL | ワークフロー名 |
 | description | VARCHAR(500) | | 説明 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
@@ -244,6 +249,11 @@ issue_approvals
 | name | VARCHAR(200) | NOT NULL | ステップ名 |
 | required_level | INTEGER | NOT NULL, DEFAULT 1 | 承認に必要な役職レベル |
 | status_id | UUID | FK, nullable | 紐づくステータス |
+| approver_type | VARCHAR(20) | DEFAULT 'role' | role / user / multiple |
+| approver_user_id | UUID | FK, nullable | 個人指定時のユーザーID |
+| min_approvers | INTEGER | DEFAULT 1 | 最低承認者数 |
+| exclude_reporter | BOOLEAN | DEFAULT false | 起票者を除外 |
+| exclude_assignee | BOOLEAN | DEFAULT false | 担当者を除外 |
 
 ### issue_templates
 

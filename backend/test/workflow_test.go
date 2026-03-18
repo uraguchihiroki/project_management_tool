@@ -7,12 +7,12 @@ import (
 )
 
 // createTestWorkflow はテスト用ワークフローを作成しそのIDを返します
-func createTestWorkflow(t *testing.T, ts *testServer, projectID, name string) string {
+func createTestWorkflow(t *testing.T, ts *testServer, orgID, name string) string {
 	t.Helper()
 	status, resp := ts.req(t, "POST", "/api/v1/workflows", map[string]interface{}{
-		"project_id":  projectID,
-		"name":        name,
-		"description": "テスト用ワークフロー",
+		"organization_id": orgID,
+		"name":            name,
+		"description":     "テスト用ワークフロー",
 	})
 	assertStatus(t, status, http.StatusCreated, fmt.Sprintf("createWorkflow(%s)", name))
 	return fmt.Sprintf("%.0f", mustGetFloat(t, resp, "data", "id"))
@@ -21,13 +21,13 @@ func createTestWorkflow(t *testing.T, ts *testServer, projectID, name string) st
 func TestWorkflow_Create(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	projectID := createTestProject(t, ts, "WF", "ワークフローテスト", ownerID)
+	createTestProject(t, ts, "WF", "ワークフローテスト", ownerID)
 
 	t.Run("ワークフローを作成できる", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/workflows", map[string]interface{}{
-			"project_id":  projectID,
-			"name":        "通常承認フロー",
-			"description": "一般的な承認フロー",
+			"organization_id": testOrgID,
+			"name":           "通常承認フロー",
+			"description":    "一般的な承認フロー",
 		})
 		assertStatus(t, status, http.StatusCreated, "create workflow")
 		assertField(t, mustGetString(t, resp, "data", "name"), "通常承認フロー", "name")
@@ -36,7 +36,7 @@ func TestWorkflow_Create(t *testing.T) {
 
 	t.Run("name未指定は400", func(t *testing.T) {
 		status, _ := ts.req(t, "POST", "/api/v1/workflows", map[string]interface{}{
-			"project_id": projectID,
+			"organization_id": testOrgID,
 		})
 		assertStatus(t, status, http.StatusBadRequest, "create without name")
 	})
@@ -45,10 +45,10 @@ func TestWorkflow_Create(t *testing.T) {
 func TestWorkflow_List(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
 
-	createTestWorkflow(t, ts, projectID, "フロー1")
-	createTestWorkflow(t, ts, projectID, "フロー2")
+	createTestWorkflow(t, ts, testOrgID, "フロー1")
+	createTestWorkflow(t, ts, testOrgID, "フロー2")
 
 	t.Run("全ワークフロー一覧を取得できる", func(t *testing.T) {
 		status, resp := ts.req(t, "GET", "/api/v1/workflows", nil)
@@ -59,12 +59,12 @@ func TestWorkflow_List(t *testing.T) {
 		}
 	})
 
-	t.Run("プロジェクト別ワークフロー一覧を取得できる", func(t *testing.T) {
-		status, resp := ts.req(t, "GET", "/api/v1/projects/"+projectID+"/workflows", nil)
-		assertStatus(t, status, http.StatusOK, "list by project")
+	t.Run("組織別ワークフロー一覧を取得できる", func(t *testing.T) {
+		status, resp := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/workflows", nil)
+		assertStatus(t, status, http.StatusOK, "list by org")
 		workflows := mustGetArray(t, resp, "data")
 		if len(workflows) != 2 {
-			t.Fatalf("expected 2 workflows for project, got %d", len(workflows))
+			t.Fatalf("expected 2 workflows for org, got %d", len(workflows))
 		}
 	})
 }
@@ -72,8 +72,8 @@ func TestWorkflow_List(t *testing.T) {
 func TestWorkflow_Get(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, projectID, "取得テストフロー")
+	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	wfID := createTestWorkflow(t, ts, testOrgID, "取得テストフロー")
 
 	t.Run("IDでワークフローを取得できる", func(t *testing.T) {
 		status, resp := ts.req(t, "GET", "/api/v1/workflows/"+wfID, nil)
@@ -90,8 +90,8 @@ func TestWorkflow_Get(t *testing.T) {
 func TestWorkflow_Update(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, projectID, "更新前フロー")
+	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	wfID := createTestWorkflow(t, ts, testOrgID, "更新前フロー")
 
 	t.Run("ワークフロー名を更新できる", func(t *testing.T) {
 		status, resp := ts.req(t, "PUT", "/api/v1/workflows/"+wfID, map[string]interface{}{
@@ -106,8 +106,8 @@ func TestWorkflow_Update(t *testing.T) {
 func TestWorkflow_Delete(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, projectID, "削除テストフロー")
+	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	wfID := createTestWorkflow(t, ts, testOrgID, "削除テストフロー")
 
 	t.Run("ワークフローを削除できる", func(t *testing.T) {
 		status, _ := ts.req(t, "DELETE", "/api/v1/workflows/"+wfID, nil)
@@ -124,7 +124,7 @@ func TestWorkflowStep_AddAndList(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, projectID, "ステップテストフロー")
+	wfID := createTestWorkflow(t, ts, testOrgID, "ステップテストフロー")
 	statusID := getFirstStatusID(t, ts, projectID)
 
 	t.Run("ステップを追加できる", func(t *testing.T) {
@@ -162,8 +162,8 @@ func TestWorkflowStep_AddAndList(t *testing.T) {
 func TestWorkflowStep_Update(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, projectID, "ステップ更新テスト")
+	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	wfID := createTestWorkflow(t, ts, testOrgID, "ステップ更新テスト")
 
 	_, stepResp := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
 		"name": "初期ステップ", "required_level": 3,
@@ -184,8 +184,8 @@ func TestWorkflowStep_Update(t *testing.T) {
 func TestWorkflowStep_Delete(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, projectID, "ステップ削除テスト")
+	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	wfID := createTestWorkflow(t, ts, testOrgID, "ステップ削除テスト")
 
 	_, stepResp := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
 		"name": "削除対象ステップ", "required_level": 5,
@@ -210,8 +210,8 @@ func TestWorkflowStep_Delete(t *testing.T) {
 func TestWorkflow_DeleteCascade(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, projectID, "カスケード削除テスト")
+	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	wfID := createTestWorkflow(t, ts, testOrgID, "カスケード削除テスト")
 
 	// ステップを追加してからワークフローを削除
 	ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{

@@ -15,10 +15,10 @@ async function fetchWorkflow(id: string): Promise<Workflow> {
   return json.data
 }
 
-async function fetchProjectStatuses(projectId: string): Promise<Status[]> {
-  const res = await fetch(`${API}/projects/${projectId}`)
+async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
+  const res = await fetch(`${API}/organizations/${orgId}/statuses`)
   const json = await res.json()
-  return json.data?.statuses ?? []
+  return json.data ?? []
 }
 
 const emptyStep = { name: '', required_level: 1, status_id: '' }
@@ -33,9 +33,9 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   })
 
   const { data: statuses = [] } = useQuery({
-    queryKey: ['project-statuses', workflow?.project_id],
-    queryFn: () => fetchProjectStatuses(workflow!.project_id),
-    enabled: !!workflow?.project_id,
+    queryKey: ['org-statuses', workflow?.organization_id],
+    queryFn: () => fetchOrgStatuses(workflow!.organization_id),
+    enabled: !!workflow?.organization_id,
   })
 
   const [showAddForm, setShowAddForm] = useState(false)

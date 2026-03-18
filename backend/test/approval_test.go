@@ -38,7 +38,7 @@ func setupApprovalFixture(t *testing.T, ts *testServer) (projectID, statusID, ow
 		"role_ids": []float64{roleID},
 	})
 
-	wfID = createTestWorkflow(t, ts, projectID, "テスト承認フロー")
+	wfID = createTestWorkflow(t, ts, testOrgID, "テスト承認フロー")
 	// Step 1: Level 5 が承認 → status変更
 	ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
 		"name": "課長承認", "required_level": 5, "status_id": statusID,

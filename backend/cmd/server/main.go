@@ -32,6 +32,8 @@ func main() {
 		&model.Role{},
 		&model.User{},
 		&model.OrganizationUser{},
+		&model.Department{},
+		&model.OrganizationUserDepartment{},
 		&model.Project{},
 		&model.Status{},
 		&model.Issue{},
@@ -56,12 +58,14 @@ func main() {
 	approvalRepo := repository.NewApprovalRepository(db)
 	orgRepo := repository.NewOrganizationRepository(db)
 	superAdminRepo := repository.NewSuperAdminRepository(db)
+	departmentRepo := repository.NewDepartmentRepository(db)
 
 	// Services
 	userSvc := service.NewUserService(userRepo, orgRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
+	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
 	commentSvc := service.NewCommentService(commentRepo)
 	roleSvc := service.NewRoleService(roleRepo)
@@ -80,6 +84,7 @@ func main() {
 	approvalHandler := handler.NewApprovalHandler(approvalSvc)
 	orgHandler := handler.NewOrganizationHandler(orgSvc)
 	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
+	departmentHandler := handler.NewDepartmentHandler(departmentSvc)
 
 	// Echo
 	e := echo.New()
@@ -117,7 +122,7 @@ func main() {
 	api.POST("/workflows/:id/steps", workflowHandler.AddStep)
 	api.PUT("/workflows/:id/steps/:stepId", workflowHandler.UpdateStep)
 	api.DELETE("/workflows/:id/steps/:stepId", workflowHandler.DeleteStep)
-	api.GET("/projects/:projectId/workflows", workflowHandler.ListByProject)
+	api.GET("/organizations/:orgId/workflows", workflowHandler.ListByOrganization)
 
 	// Templates
 	api.GET("/templates", templateHandler.List)
@@ -130,6 +135,7 @@ func main() {
 	// Approvals
 	api.GET("/issues/:issueId/approvals", approvalHandler.List)
 	api.POST("/approvals/:id/approve", approvalHandler.Approve)
+	api.POST("/issues/:issueId/steps/:stepId/approve", approvalHandler.ApproveStep)
 	api.POST("/approvals/:id/reject", approvalHandler.Reject)
 
 	// Organizations
@@ -137,6 +143,14 @@ func main() {
 	api.POST("/organizations", orgHandler.Create)
 	api.GET("/users/:id/organizations", orgHandler.ListByUser)
 	api.POST("/organizations/:orgId/users", orgHandler.AddUser)
+
+	// Departments
+	api.GET("/organizations/:orgId/departments", departmentHandler.List)
+	api.POST("/organizations/:orgId/departments", departmentHandler.Create)
+	api.PUT("/organizations/:orgId/departments/:id", departmentHandler.Update)
+	api.DELETE("/organizations/:orgId/departments/:id", departmentHandler.Delete)
+	api.GET("/users/:id/departments", departmentHandler.GetUserDepartments)
+	api.PUT("/users/:id/departments", departmentHandler.SetUserDepartments)
 
 	// Super Admin
 	api.POST("/super-admin/login", superAdminHandler.Login)
@@ -151,6 +165,7 @@ func main() {
 
 	// Projects
 	api.GET("/projects", projectHandler.List)
+	api.GET("/organizations/:orgId/statuses", projectHandler.ListStatusesByOrg)
 	api.POST("/projects", projectHandler.Create)
 	api.GET("/projects/:id", projectHandler.Get)
 	api.PUT("/projects/:id", projectHandler.Update)
@@ -159,6 +174,11 @@ func main() {
 	// Issues
 	api.GET("/projects/:projectId/issues", issueHandler.List)
 	api.POST("/projects/:projectId/issues", issueHandler.Create)
+	api.GET("/organizations/:orgId/issues", issueHandler.ListByOrg)
+	api.POST("/organizations/:orgId/issues", issueHandler.CreateForOrg)
+	api.GET("/organizations/:orgId/issues/:number", issueHandler.GetByOrgAndNumber)
+	api.PUT("/organizations/:orgId/issues/:number", issueHandler.UpdateByOrgAndNumber)
+	api.DELETE("/organizations/:orgId/issues/:number", issueHandler.DeleteByOrgAndNumber)
 	api.GET("/projects/:projectId/issues/:number", issueHandler.Get)
 	api.PUT("/projects/:projectId/issues/:number", issueHandler.Update)
 	api.DELETE("/projects/:projectId/issues/:number", issueHandler.Delete)

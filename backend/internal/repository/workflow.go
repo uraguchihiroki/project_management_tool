@@ -8,7 +8,7 @@ import (
 
 type WorkflowRepository interface {
 	FindAll() ([]model.Workflow, error)
-	FindByProjectID(projectID uuid.UUID) ([]model.Workflow, error)
+	FindByOrganizationID(orgID uuid.UUID) ([]model.Workflow, error)
 	FindByID(id uint) (*model.Workflow, error)
 	Create(workflow *model.Workflow) error
 	Update(workflow *model.Workflow) error
@@ -30,20 +30,20 @@ func NewWorkflowRepository(db *gorm.DB) WorkflowRepository {
 
 func (r *workflowRepository) FindAll() ([]model.Workflow, error) {
 	var workflows []model.Workflow
-	err := r.db.Preload("Project").Order("created_at DESC").Find(&workflows).Error
+	err := r.db.Preload("Organization").Order("created_at DESC").Find(&workflows).Error
 	return workflows, err
 }
 
-func (r *workflowRepository) FindByProjectID(projectID uuid.UUID) ([]model.Workflow, error) {
+func (r *workflowRepository) FindByOrganizationID(orgID uuid.UUID) ([]model.Workflow, error) {
 	var workflows []model.Workflow
-	err := r.db.Where("project_id = ?", projectID).Order("created_at DESC").Find(&workflows).Error
+	err := r.db.Where("organization_id = ?", orgID).Order("created_at DESC").Find(&workflows).Error
 	return workflows, err
 }
 
 func (r *workflowRepository) FindByID(id uint) (*model.Workflow, error) {
 	var workflow model.Workflow
 	err := r.db.
-		Preload("Project").
+		Preload("Organization").
 		Preload("Steps", func(db *gorm.DB) *gorm.DB {
 			return db.Order("\"order\" ASC").Preload("Status")
 		}).
@@ -79,10 +79,15 @@ func (r *workflowRepository) CreateStep(step *model.WorkflowStep) error {
 
 func (r *workflowRepository) UpdateStep(step *model.WorkflowStep) error {
 	return r.db.Model(&model.WorkflowStep{}).Where("id = ?", step.ID).Updates(map[string]interface{}{
-		"name":           step.Name,
-		"required_level": step.RequiredLevel,
-		"status_id":      step.StatusID,
-		"order":          step.Order,
+		"name":             step.Name,
+		"required_level":   step.RequiredLevel,
+		"status_id":        step.StatusID,
+		"order":            step.Order,
+		"approver_type":    step.ApproverType,
+		"approver_user_id": step.ApproverUserID,
+		"min_approvers":    step.MinApprovers,
+		"exclude_reporter": step.ExcludeReporter,
+		"exclude_assignee": step.ExcludeAssignee,
 	}).Error
 }
 

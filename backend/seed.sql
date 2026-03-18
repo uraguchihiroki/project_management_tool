@@ -80,7 +80,49 @@ SET admin_email = (
 WHERE o.id = '00000000-0000-0000-0000-000000000001'
   AND (o.admin_email IS NULL OR o.admin_email = '');
 
--- 11. Create initial super admin account
+-- 11. Workflow: project_id → organization_id migration (Phase 3)
+--    Add organization_id if column does not exist (GORM AutoMigrate may have added it)
+ALTER TABLE workflows ADD COLUMN IF NOT EXISTS organization_id UUID;
+-- Backfill from project's organization
+UPDATE workflows w
+SET organization_id = p.organization_id
+FROM projects p
+WHERE w.project_id = p.id AND w.organization_id IS NULL;
+-- Set to FRS for any orphaned workflows
+UPDATE workflows SET organization_id = '00000000-0000-0000-0000-000000000001'
+WHERE organization_id IS NULL;
+ALTER TABLE workflows ALTER COLUMN organization_id SET NOT NULL;
+-- Drop project_id (ignore if already dropped)
+ALTER TABLE workflows DROP COLUMN IF EXISTS project_id;
+
+-- 12. Issue & Status: Phase 4 migration
+-- Issue: add organization_id, backfill, project_id nullable
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS organization_id UUID;
+UPDATE issues i SET organization_id = p.organization_id
+FROM projects p WHERE i.project_id = p.id AND i.organization_id IS NULL;
+UPDATE issues SET organization_id = '00000000-0000-0000-0000-000000000001'
+WHERE organization_id IS NULL;
+ALTER TABLE issues ALTER COLUMN organization_id SET NOT NULL;
+ALTER TABLE issues ALTER COLUMN project_id DROP NOT NULL;
+
+-- Status: add organization_id, project_id nullable
+ALTER TABLE statuses ADD COLUMN IF NOT EXISTS organization_id UUID;
+ALTER TABLE statuses ALTER COLUMN project_id DROP NOT NULL;
+
+-- 組織用デフォルトステータス（FRS用、project_id なし）
+INSERT INTO statuses (id, project_id, organization_id, name, color, "order")
+SELECT gen_random_uuid(), NULL, '00000000-0000-0000-0000-000000000001', n, c, o
+FROM (VALUES ('未着手', '#6B7280', 1), ('進行中', '#3B82F6', 2), ('完了', '#10B981', 3)) AS t(n, c, o)
+WHERE NOT EXISTS (SELECT 1 FROM statuses WHERE organization_id = '00000000-0000-0000-0000-000000000001' AND project_id IS NULL LIMIT 1);
+
+-- 13. WorkflowStep: Phase 5 承認対象拡張
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS approver_type VARCHAR(20) DEFAULT 'role';
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS approver_user_id UUID;
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS min_approvers INTEGER DEFAULT 1;
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS exclude_reporter BOOLEAN DEFAULT false;
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS exclude_assignee BOOLEAN DEFAULT false;
+
+-- 14. Create initial super admin account
 --    Email: superadmin@frs.example.com  (change as needed)
 INSERT INTO super_admins (id, name, email, created_at)
 VALUES (

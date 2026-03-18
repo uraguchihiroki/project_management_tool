@@ -4,6 +4,14 @@ export interface Organization {
   created_at: string
 }
 
+export interface Department {
+  id: string
+  organization_id: string
+  name: string
+  order: number
+  created_at: string
+}
+
 export interface SuperAdmin {
   id: string
   name: string
@@ -29,6 +37,8 @@ export interface User {
   created_at: string
 }
 
+export type ProjectStatus = 'none' | 'planning' | 'active' | 'completed'
+
 export interface Project {
   id: string
   key: string
@@ -36,13 +46,18 @@ export interface Project {
   description?: string
   owner_id: string
   owner: User
+  organization_id?: string
+  start_date?: string
+  end_date?: string
+  status: ProjectStatus
   statuses?: Status[]
   created_at: string
 }
 
 export interface Status {
   id: string
-  project_id: string
+  project_id?: string
+  organization_id?: string
   name: string
   color: string
   order: number
@@ -88,7 +103,8 @@ export interface Issue {
   assignee?: User
   reporter_id: string
   reporter: User
-  project_id: string
+  organization_id: string
+  project_id?: string
   due_date?: string
   template_id?: number
   workflow_id?: number
@@ -115,12 +131,17 @@ export interface WorkflowStep {
   required_level: number
   status_id?: string
   status?: Status
+  approver_type?: 'role' | 'user' | 'multiple'
+  approver_user_id?: string
+  min_approvers?: number
+  exclude_reporter?: boolean
+  exclude_assignee?: boolean
 }
 
 export interface Workflow {
   id: number
-  project_id: string
-  project?: Project
+  organization_id: string
+  organization?: Organization
   name: string
   description: string
   steps?: WorkflowStep[]

@@ -145,7 +145,7 @@ func TestTemplate_WithWorkflow(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	projectID := createTestProject(t, ts, "TM", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, projectID, "申請フロー")
+	wfID := createTestWorkflow(t, ts, testOrgID, "申請フロー")
 
 	t.Run("ワークフローを紐付けてテンプレートを作成できる", func(t *testing.T) {
 		wfIDUint := uint(0)
@@ -170,7 +170,7 @@ func TestIssue_CreateFromTemplate(t *testing.T) {
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	projectID := createTestProject(t, ts, "TM", "テストプロジェクト", ownerID)
 	statusID := getFirstStatusID(t, ts, projectID)
-	wfID := createTestWorkflow(t, ts, projectID, "申請フロー")
+	wfID := createTestWorkflow(t, ts, testOrgID, "申請フロー")
 
 	wfIDUint := uint(0)
 	fmt.Sscanf(wfID, "%d", &wfIDUint)

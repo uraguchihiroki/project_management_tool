@@ -26,13 +26,13 @@ func (h *WorkflowHandler) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": workflows})
 }
 
-// GET /api/v1/projects/:projectId/workflows
-func (h *WorkflowHandler) ListByProject(c echo.Context) error {
-	projectID, err := uuid.Parse(c.Param("projectId"))
+// GET /api/v1/organizations/:orgId/workflows
+func (h *WorkflowHandler) ListByOrganization(c echo.Context) error {
+	orgID, err := uuid.Parse(c.Param("orgId"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
 	}
-	workflows, err := h.workflowService.ListByProject(projectID)
+	workflows, err := h.workflowService.ListByOrganization(orgID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -42,9 +42,9 @@ func (h *WorkflowHandler) ListByProject(c echo.Context) error {
 // POST /api/v1/workflows
 func (h *WorkflowHandler) Create(c echo.Context) error {
 	type Request struct {
-		ProjectID   string `json:"project_id"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
+		OrganizationID string `json:"organization_id"`
+		Name           string `json:"name"`
+		Description    string `json:"description"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -53,11 +53,11 @@ func (h *WorkflowHandler) Create(c echo.Context) error {
 	if req.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
-	projectID, err := uuid.Parse(req.ProjectID)
+	orgID, err := uuid.Parse(req.OrganizationID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid project_id")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
 	}
-	workflow, err := h.workflowService.CreateWorkflow(projectID, req.Name, req.Description)
+	workflow, err := h.workflowService.CreateWorkflow(orgID, req.Name, req.Description)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -120,9 +120,14 @@ func (h *WorkflowHandler) AddStep(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid workflow id")
 	}
 	type Request struct {
-		Name          string  `json:"name"`
-		RequiredLevel int     `json:"required_level"`
-		StatusID      *string `json:"status_id"`
+		Name            string  `json:"name"`
+		RequiredLevel   int     `json:"required_level"`
+		StatusID        *string `json:"status_id"`
+		ApproverType    string  `json:"approver_type"`
+		ApproverUserID  *string `json:"approver_user_id"`
+		MinApprovers    int     `json:"min_approvers"`
+		ExcludeReporter bool    `json:"exclude_reporter"`
+		ExcludeAssignee bool    `json:"exclude_assignee"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -139,7 +144,25 @@ func (h *WorkflowHandler) AddStep(c echo.Context) error {
 		}
 		statusID = &parsed
 	}
-	step, err := h.workflowService.AddStep(uint(workflowID), req.Name, req.RequiredLevel, statusID)
+	var approverUserID *uuid.UUID
+	if req.ApproverUserID != nil && *req.ApproverUserID != "" {
+		parsed, err := uuid.Parse(*req.ApproverUserID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid approver_user_id")
+		}
+		approverUserID = &parsed
+	}
+	input := service.AddStepInput{
+		Name:             req.Name,
+		RequiredLevel:    req.RequiredLevel,
+		StatusID:         statusID,
+		ApproverType:     req.ApproverType,
+		ApproverUserID:   approverUserID,
+		MinApprovers:     req.MinApprovers,
+		ExcludeReporter:  req.ExcludeReporter,
+		ExcludeAssignee:  req.ExcludeAssignee,
+	}
+	step, err := h.workflowService.AddStep(uint(workflowID), input)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -153,10 +176,15 @@ func (h *WorkflowHandler) UpdateStep(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid step id")
 	}
 	type Request struct {
-		Name          string  `json:"name"`
-		RequiredLevel int     `json:"required_level"`
-		StatusID      *string `json:"status_id"`
-		Order         int     `json:"order"`
+		Name            string  `json:"name"`
+		RequiredLevel   int     `json:"required_level"`
+		StatusID        *string `json:"status_id"`
+		Order           int     `json:"order"`
+		ApproverType    string  `json:"approver_type"`
+		ApproverUserID  *string `json:"approver_user_id"`
+		MinApprovers    int     `json:"min_approvers"`
+		ExcludeReporter bool    `json:"exclude_reporter"`
+		ExcludeAssignee bool    `json:"exclude_assignee"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -173,7 +201,26 @@ func (h *WorkflowHandler) UpdateStep(c echo.Context) error {
 		}
 		statusID = &parsed
 	}
-	step, err := h.workflowService.UpdateStep(uint(stepID), req.Name, req.RequiredLevel, statusID, req.Order)
+	var approverUserID *uuid.UUID
+	if req.ApproverUserID != nil && *req.ApproverUserID != "" {
+		parsed, err := uuid.Parse(*req.ApproverUserID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid approver_user_id")
+		}
+		approverUserID = &parsed
+	}
+	input := service.UpdateStepInput{
+		Name:             req.Name,
+		RequiredLevel:   req.RequiredLevel,
+		StatusID:        statusID,
+		Order:           req.Order,
+		ApproverType:    req.ApproverType,
+		ApproverUserID:  approverUserID,
+		MinApprovers:    req.MinApprovers,
+		ExcludeReporter: req.ExcludeReporter,
+		ExcludeAssignee: req.ExcludeAssignee,
+	}
+	step, err := h.workflowService.UpdateStep(uint(stepID), input)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
