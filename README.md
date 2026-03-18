@@ -193,6 +193,7 @@ Remove-Item frontend\.next\dev\lock -ErrorAction SilentlyContinue
 | [.sdd/README.md](.sdd/README.md) | ドキュメント一覧・ナビゲーション |
 | [architecture.md](.sdd/architecture.md) | システムアーキテクチャ |
 | [layer-responsibility.md](.sdd/layer-responsibility.md) | Handler / Service / Repository の責務分担 |
+| [domain-model.md](.sdd/domain-model.md) | エンティティ関係・ドメインモデル |
 | [db-schema.md](.sdd/db-schema.md) | DB 設計・テーブル定義 |
 | [api-spec.md](.sdd/api-spec.md) | REST API 仕様 |
 | [key-flows.md](.sdd/key-flows.md) | 認証・マルチテナント・承認の主要フロー |
