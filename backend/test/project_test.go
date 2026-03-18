@@ -186,3 +186,30 @@ func TestProject_Delete(t *testing.T) {
 		assertStatus(t, getStatus, http.StatusNotFound, "GET after DELETE")
 	})
 }
+
+func TestProject_Reorder(t *testing.T) {
+	ts := newTestServer(t)
+	ownerID := createTestUser(t, ts, "オーナー", "reorder@example.com")
+	_, r1 := ts.req(t, "POST", "/api/v1/projects", map[string]interface{}{
+		"key": "PA", "name": "プロジェクトA", "owner_id": ownerID, "organization_id": testOrgID,
+	})
+	_, r2 := ts.req(t, "POST", "/api/v1/projects", map[string]interface{}{
+		"key": "PB", "name": "プロジェクトB", "owner_id": ownerID, "organization_id": testOrgID,
+	})
+	id1 := mustGetString(t, r1, "data", "id")
+	id2 := mustGetString(t, r2, "data", "id")
+
+	status, _ := ts.req(t, "PUT", "/api/v1/projects/reorder?org_id="+testOrgID, map[string]interface{}{
+		"ids": []string{id2, id1},
+	})
+	assertStatus(t, status, http.StatusNoContent, "reorder projects")
+
+	status, listResp := ts.req(t, "GET", "/api/v1/projects?org_id="+testOrgID, nil)
+	assertStatus(t, status, http.StatusOK, "list after reorder")
+	arr := mustGetArray(t, listResp, "data")
+	if len(arr) != 2 {
+		t.Fatalf("expected 2 projects, got %d", len(arr))
+	}
+	assertField(t, mustGetString(t, arr[0].(map[string]interface{}), "name"), "プロジェクトB", "first after reorder")
+	assertField(t, mustGetString(t, arr[1].(map[string]interface{}), "name"), "プロジェクトA", "second after reorder")
+}

@@ -3,6 +3,7 @@ package test
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"testing"
 )
 
@@ -174,11 +175,35 @@ func TestWorkflowStep_Update(t *testing.T) {
 		status, resp := ts.req(t, "PUT", "/api/v1/workflows/"+wfID+"/steps/"+stepID, map[string]interface{}{
 			"name":           "更新後ステップ",
 			"required_level": 7,
-			"order":          1,
 		})
 		assertStatus(t, status, http.StatusOK, "update step")
 		assertField(t, mustGetString(t, resp, "data", "name"), "更新後ステップ", "name")
 	})
+}
+
+func TestWorkflowStep_Reorder(t *testing.T) {
+	ts := newTestServer(t)
+	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
+	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	wfID := createTestWorkflow(t, ts, testOrgID, "ステップ並び替えテスト")
+
+	_, s1 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{"name": "ステップ1", "required_level": 5})
+	_, s2 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{"name": "ステップ2", "required_level": 7})
+	stepID1 := uint(mustGetFloat(t, s1, "data", "id"))
+	stepID2 := uint(mustGetFloat(t, s2, "data", "id"))
+
+	status, _ := ts.req(t, "PUT", "/api/v1/workflows/"+wfID+"/steps/reorder", map[string]interface{}{
+		"ids": []uint{stepID2, stepID1},
+	})
+	assertStatus(t, status, http.StatusNoContent, "reorder steps")
+
+	_, wfResp := ts.req(t, "GET", "/api/v1/workflows/"+wfID, nil)
+	steps := wfResp["data"].(map[string]interface{})["steps"].([]interface{})
+	if len(steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(steps))
+	}
+	assertField(t, mustGetString(t, steps[0].(map[string]interface{}), "name"), "ステップ2", "first after reorder")
+	assertField(t, mustGetString(t, steps[1].(map[string]interface{}), "name"), "ステップ1", "second after reorder")
 }
 
 func TestWorkflowStep_Delete(t *testing.T) {
@@ -205,6 +230,31 @@ func TestWorkflowStep_Delete(t *testing.T) {
 			t.Errorf("expected 0 steps after delete, got %d", len(steps))
 		}
 	})
+}
+
+func TestWorkflow_Reorder(t *testing.T) {
+	ts := newTestServer(t)
+	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
+	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	wfID1 := createTestWorkflow(t, ts, testOrgID, "フロー1")
+	wfID2 := createTestWorkflow(t, ts, testOrgID, "フロー2")
+
+	id1, _ := strconv.ParseUint(wfID1, 10, 64)
+	id2, _ := strconv.ParseUint(wfID2, 10, 64)
+
+	status, _ := ts.req(t, "PUT", "/api/v1/organizations/"+testOrgID+"/workflows/reorder", map[string]interface{}{
+		"ids": []uint{uint(id2), uint(id1)},
+	})
+	assertStatus(t, status, http.StatusNoContent, "reorder workflows")
+
+	status, listResp := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/workflows", nil)
+	assertStatus(t, status, http.StatusOK, "list after reorder")
+	wfs := mustGetArray(t, listResp, "data")
+	if len(wfs) != 2 {
+		t.Fatalf("expected 2 workflows, got %d", len(wfs))
+	}
+	assertField(t, mustGetString(t, wfs[0].(map[string]interface{}), "name"), "フロー2", "first after reorder")
+	assertField(t, mustGetString(t, wfs[1].(map[string]interface{}), "name"), "フロー1", "second after reorder")
 }
 
 func TestWorkflow_DeleteCascade(t *testing.T) {

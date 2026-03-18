@@ -110,6 +110,7 @@ func main() {
 	// Roles
 	api.GET("/roles", roleHandler.List)
 	api.POST("/roles", roleHandler.Create)
+	api.PUT("/roles/reorder", roleHandler.Reorder)
 	api.PUT("/roles/:id", roleHandler.Update)
 	api.DELETE("/roles/:id", roleHandler.Delete)
 
@@ -120,9 +121,11 @@ func main() {
 	api.PUT("/workflows/:id", workflowHandler.Update)
 	api.DELETE("/workflows/:id", workflowHandler.Delete)
 	api.POST("/workflows/:id/steps", workflowHandler.AddStep)
+	api.PUT("/workflows/:id/steps/reorder", workflowHandler.ReorderSteps)
 	api.PUT("/workflows/:id/steps/:stepId", workflowHandler.UpdateStep)
 	api.DELETE("/workflows/:id/steps/:stepId", workflowHandler.DeleteStep)
 	api.GET("/organizations/:orgId/workflows", workflowHandler.ListByOrganization)
+	api.PUT("/organizations/:orgId/workflows/reorder", workflowHandler.Reorder)
 
 	// Templates
 	api.GET("/templates", templateHandler.List)
@@ -131,6 +134,7 @@ func main() {
 	api.PUT("/templates/:id", templateHandler.Update)
 	api.DELETE("/templates/:id", templateHandler.Delete)
 	api.GET("/projects/:projectId/templates", templateHandler.ListByProject)
+	api.PUT("/projects/:projectId/templates/reorder", templateHandler.Reorder)
 
 	// Approvals
 	api.GET("/issues/:issueId/approvals", approvalHandler.List)
@@ -147,6 +151,7 @@ func main() {
 	// Departments
 	api.GET("/organizations/:orgId/departments", departmentHandler.List)
 	api.POST("/organizations/:orgId/departments", departmentHandler.Create)
+	api.PUT("/organizations/:orgId/departments/reorder", departmentHandler.Reorder)
 	api.PUT("/organizations/:orgId/departments/:id", departmentHandler.Update)
 	api.DELETE("/organizations/:orgId/departments/:id", departmentHandler.Delete)
 	api.GET("/users/:id/departments", departmentHandler.GetUserDepartments)
@@ -167,6 +172,7 @@ func main() {
 	api.GET("/projects", projectHandler.List)
 	api.GET("/organizations/:orgId/statuses", projectHandler.ListStatusesByOrg)
 	api.POST("/projects", projectHandler.Create)
+	api.PUT("/projects/reorder", projectHandler.Reorder)
 	api.GET("/projects/:id", projectHandler.Get)
 	api.PUT("/projects/:id", projectHandler.Update)
 	api.DELETE("/projects/:id", projectHandler.Delete)

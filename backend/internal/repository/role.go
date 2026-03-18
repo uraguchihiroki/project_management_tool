@@ -15,6 +15,8 @@ type RoleRepository interface {
 	Delete(id uint) error
 	AssignRolesToUser(userID uuid.UUID, roleIDs []uint) error
 	FindRolesByUserID(userID uuid.UUID) ([]model.Role, error)
+	Reorder(orgID *uuid.UUID, ids []uint) error
+	GetMaxOrder(orgID *uuid.UUID) (int, error)
 }
 
 type roleRepository struct {
@@ -27,13 +29,13 @@ func NewRoleRepository(db *gorm.DB) RoleRepository {
 
 func (r *roleRepository) FindAll() ([]model.Role, error) {
 	var roles []model.Role
-	err := r.db.Order("level DESC, name ASC").Find(&roles).Error
+	err := r.db.Order("display_order ASC, level DESC").Find(&roles).Error
 	return roles, err
 }
 
 func (r *roleRepository) FindByOrg(orgID uuid.UUID) ([]model.Role, error) {
 	var roles []model.Role
-	err := r.db.Where("organization_id = ?", orgID).Order("level DESC, name ASC").Find(&roles).Error
+	err := r.db.Where("organization_id = ?", orgID).Order("display_order ASC, level DESC").Find(&roles).Error
 	return roles, err
 }
 
@@ -80,4 +82,29 @@ func (r *roleRepository) FindRolesByUserID(userID uuid.UUID) ([]model.Role, erro
 		return nil, err
 	}
 	return user.Roles, nil
+}
+
+func (r *roleRepository) GetMaxOrder(orgID *uuid.UUID) (int, error) {
+	var maxOrder int
+	q := r.db.Model(&model.Role{})
+	if orgID != nil {
+		q = q.Where("organization_id = ?", orgID)
+	}
+	err := q.Select("COALESCE(MAX(display_order), 0)").Scan(&maxOrder).Error
+	return maxOrder, err
+}
+
+func (r *roleRepository) Reorder(orgID *uuid.UUID, ids []uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i, id := range ids {
+			q := tx.Model(&model.Role{}).Where("id = ?", id)
+			if orgID != nil {
+				q = q.Where("organization_id = ?", orgID)
+			}
+			if err := q.Update("display_order", i+1).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Check, ChevronRight, GitBranch } from 'lucide-react'
 import type { Workflow, Organization } from '@/types'
+import { SortableList, DragHandle } from '@/components/SortableList'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -73,6 +74,21 @@ export default function WorkflowsPage() {
     mutationFn: async (id: number) => {
       await fetch(`${API}/workflows/${id}`, { method: 'DELETE' })
     },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
+  })
+
+  const [reorderPending, setReorderPending] = useState<string | null>(null)
+  const reorderMutation = useMutation({
+    mutationFn: async ({ orgId, ids }: { orgId: string; ids: number[] }) => {
+      const res = await fetch(`${API}/organizations/${orgId}/workflows/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) throw new Error('並び替えに失敗しました')
+    },
+    onMutate: ({ orgId }) => setReorderPending(orgId),
+    onSettled: () => setReorderPending(null),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
   })
 
@@ -211,49 +227,51 @@ export default function WorkflowsPage() {
                 {getOrgName(orgId)}
               </p>
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                {wfs.map((wf, idx) => (
-                  <div
-                    key={wf.id}
-                    className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${
-                      idx !== 0 ? 'border-t border-gray-100' : ''
-                    }`}
-                  >
-                    <GitBranch className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 text-sm">{wf.name}</p>
-                      {wf.description && (
-                        <p className="text-xs text-gray-400 truncate">{wf.description}</p>
-                      )}
+                <SortableList
+                  items={wfs}
+                  itemId={(w) => String(w.id)}
+                  onReorder={(ids) => reorderMutation.mutate({ orgId, ids: ids.map(Number) })}
+                  disabled={reorderPending === orgId}
+                  renderItem={(wf, handleProps) => (
+                    <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-t border-gray-100 first:border-t-0">
+                      <DragHandle handleProps={handleProps} />
+                      <GitBranch className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 text-sm">{wf.name}</p>
+                        {wf.description && (
+                          <p className="text-xs text-gray-400 truncate">{wf.description}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Link
+                          href={`/admin/workflows/${wf.id}`}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        >
+                          ステップ編集
+                          <ChevronRight className="w-3 h-3" />
+                        </Link>
+                        <button
+                          onClick={() => startEdit(wf)}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="編集"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`「${wf.name}」を削除しますか？ステップもすべて削除されます。`)) {
+                              deleteMutation.mutate(wf.id)
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="削除"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <Link
-                        href={`/admin/workflows/${wf.id}`}
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      >
-                        ステップ編集
-                        <ChevronRight className="w-3 h-3" />
-                      </Link>
-                      <button
-                        onClick={() => startEdit(wf)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="編集"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`「${wf.name}」を削除しますか？ステップもすべて削除されます。`)) {
-                            deleteMutation.mutate(wf.id)
-                          }
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="削除"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  )}
+                />
               </div>
             </div>
           ))}

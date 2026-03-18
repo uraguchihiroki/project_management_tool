@@ -9,8 +9,7 @@ import (
 func TestDepartment_Create(t *testing.T) {
 	ts := newTestServer(t)
 	status, resp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{
-		"name":  "開発部",
-		"order": 1,
+		"name": "開発部",
 	})
 	assertStatus(t, status, http.StatusCreated, "create department")
 	id := mustGetString(t, resp, "data", "id")
@@ -28,14 +27,12 @@ func TestDepartment_List(t *testing.T) {
 func TestDepartment_Update(t *testing.T) {
 	ts := newTestServer(t)
 	_, createResp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{
-		"name":  "営業部",
-		"order": 0,
+		"name": "営業部",
 	})
 	id := mustGetString(t, createResp, "data", "id")
 
 	status, resp := ts.req(t, "PUT", "/api/v1/organizations/"+testOrgID+"/departments/"+id, map[string]interface{}{
-		"name":  "営業本部",
-		"order": 2,
+		"name": "営業本部",
 	})
 	assertStatus(t, status, http.StatusOK, "update department")
 	assertField(t, mustGetString(t, resp, "data", "name"), "営業本部", "name")
@@ -44,8 +41,7 @@ func TestDepartment_Update(t *testing.T) {
 func TestDepartment_Delete(t *testing.T) {
 	ts := newTestServer(t)
 	_, createResp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{
-		"name":  "経理部",
-		"order": 0,
+		"name": "経理部",
 	})
 	id := mustGetString(t, createResp, "data", "id")
 
@@ -67,14 +63,12 @@ func TestDepartment_NormalFlow(t *testing.T) {
 
 	// 2. 作成
 	status, createResp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{
-		"name":  "取締役",
-		"order": 1,
+		"name": "取締役",
 	})
 	assertStatus(t, status, http.StatusCreated, "create department")
 	id := mustGetString(t, createResp, "data", "id")
 	assertNotEmpty(t, id, "id")
 	assertField(t, mustGetString(t, createResp, "data", "name"), "取締役", "name")
-	assertField(t, fmt.Sprintf("%.0f", mustGetFloat(t, createResp, "data", "order")), "1", "order")
 
 	// 3. 一覧に反映されていること
 	status, listResp = ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/departments", nil)
@@ -87,8 +81,7 @@ func TestDepartment_NormalFlow(t *testing.T) {
 
 	// 4. 更新
 	status, updateResp := ts.req(t, "PUT", "/api/v1/organizations/"+testOrgID+"/departments/"+id, map[string]interface{}{
-		"name":  "取締役会",
-		"order": 2,
+		"name": "取締役会",
 	})
 	assertStatus(t, status, http.StatusOK, "update department")
 	assertField(t, mustGetString(t, updateResp, "data", "name"), "取締役会", "name after update")
@@ -115,26 +108,26 @@ func TestDepartment_NormalFlow(t *testing.T) {
 	}
 }
 
-func TestDepartment_OrderValidation(t *testing.T) {
+func TestDepartment_Reorder(t *testing.T) {
 	ts := newTestServer(t)
+	_, r1 := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{"name": "開発部"})
+	_, r2 := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{"name": "営業部"})
+	id1 := mustGetString(t, r1, "data", "id")
+	id2 := mustGetString(t, r2, "data", "id")
 
-	// 表示順が範囲外（負の数）は400
-	status, _ := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{
-		"name":  "テスト",
-		"order": -1,
+	status, _ := ts.req(t, "PUT", "/api/v1/organizations/"+testOrgID+"/departments/reorder", map[string]interface{}{
+		"ids": []string{id2, id1},
 	})
-	if status != http.StatusBadRequest {
-		t.Errorf("order -1 should be 400, got %d", status)
-	}
+	assertStatus(t, status, http.StatusNoContent, "reorder departments")
 
-	// 表示順が範囲外（10000以上）は400
-	status, _ = ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{
-		"name":  "テスト",
-		"order": 10000,
-	})
-	if status != http.StatusBadRequest {
-		t.Errorf("order 10000 should be 400, got %d", status)
+	status, listResp := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/departments", nil)
+	assertStatus(t, status, http.StatusOK, "list after reorder")
+	arr := mustGetArray(t, listResp, "data")
+	if len(arr) != 2 {
+		t.Fatalf("expected 2 departments, got %d", len(arr))
 	}
+	assertField(t, mustGetString(t, arr[0].(map[string]interface{}), "name"), "営業部", "first after reorder")
+	assertField(t, mustGetString(t, arr[1].(map[string]interface{}), "name"), "開発部", "second after reorder")
 }
 
 func TestDepartment_UserDepartments(t *testing.T) {
@@ -146,8 +139,7 @@ func TestDepartment_UserDepartments(t *testing.T) {
 	})
 
 	_, deptResp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/departments", map[string]interface{}{
-		"name":  "開発部",
-		"order": 0,
+		"name": "開発部",
 	})
 	deptID := mustGetString(t, deptResp, "data", "id")
 

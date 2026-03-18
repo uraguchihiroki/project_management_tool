@@ -16,6 +16,8 @@ type DepartmentRepository interface {
 	RemoveUserFromDepartment(orgID, userID, departmentID uuid.UUID) error
 	FindUserDepartments(orgID, userID uuid.UUID) ([]model.Department, error)
 	SetUserDepartments(orgID, userID uuid.UUID, departmentIDs []uuid.UUID) error
+	Reorder(orgID uuid.UUID, ids []uuid.UUID) error
+	GetMaxOrder(orgID uuid.UUID) (int, error)
 }
 
 type departmentRepository struct {
@@ -49,7 +51,29 @@ func (r *departmentRepository) Create(d *model.Department) error {
 }
 
 func (r *departmentRepository) Update(d *model.Department) error {
-	return r.db.Save(d).Error
+	return r.db.Model(d).Updates(map[string]interface{}{
+		"name": d.Name,
+	}).Error
+}
+
+func (r *departmentRepository) GetMaxOrder(orgID uuid.UUID) (int, error) {
+	var maxOrder int
+	err := r.db.Model(&model.Department{}).Where("organization_id = ?", orgID).
+		Select("COALESCE(MAX(\"order\"), 0)").Scan(&maxOrder).Error
+	return maxOrder, err
+}
+
+func (r *departmentRepository) Reorder(orgID uuid.UUID, ids []uuid.UUID) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i, id := range ids {
+			if err := tx.Model(&model.Department{}).
+				Where("id = ? AND organization_id = ?", id, orgID).
+				Update("order", i+1).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *departmentRepository) Delete(id uuid.UUID) error {

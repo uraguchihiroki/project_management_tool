@@ -122,7 +122,28 @@ ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS min_approvers INTEGER DEFAUL
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS exclude_reporter BOOLEAN DEFAULT false;
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS exclude_assignee BOOLEAN DEFAULT false;
 
--- 14. Create initial super admin account
+-- 14. Display order columns for drag-and-drop reordering
+ALTER TABLE roles ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 1;
+UPDATE roles r SET display_order = sub.rn FROM (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY COALESCE(organization_id::text, '') ORDER BY level DESC, name) AS rn FROM roles
+) sub WHERE r.id = sub.id;
+
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 1;
+UPDATE projects p SET display_order = sub.rn FROM (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY COALESCE(organization_id::text, '') ORDER BY created_at) AS rn FROM projects
+) sub WHERE p.id = sub.id;
+
+ALTER TABLE workflows ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 1;
+UPDATE workflows w SET display_order = sub.rn FROM (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY organization_id ORDER BY created_at) AS rn FROM workflows
+) sub WHERE w.id = sub.id;
+
+ALTER TABLE issue_templates ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 1;
+UPDATE issue_templates t SET display_order = sub.rn FROM (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY name) AS rn FROM issue_templates
+) sub WHERE t.id = sub.id;
+
+-- 15. Create initial super admin account
 --    Email: superadmin@frs.example.com  (change as needed)
 INSERT INTO super_admins (id, name, email, created_at)
 VALUES (
@@ -133,4 +154,5 @@ VALUES (
 )
 ON CONFLICT (email) DO NOTHING;
 
+-- 16. Display order backfill complete
 SELECT 'Seed completed successfully.' AS result;

@@ -20,13 +20,12 @@ type AddStepInput struct {
 }
 
 type UpdateStepInput struct {
-	Name           string
-	RequiredLevel  int
-	StatusID       *uuid.UUID
-	Order          int
-	ApproverType   string
-	ApproverUserID *uuid.UUID
-	MinApprovers   int
+	Name            string
+	RequiredLevel   int
+	StatusID        *uuid.UUID
+	ApproverType    string
+	ApproverUserID  *uuid.UUID
+	MinApprovers    int
 	ExcludeReporter bool
 	ExcludeAssignee bool
 }
@@ -38,6 +37,8 @@ type WorkflowService interface {
 	CreateWorkflow(organizationID uuid.UUID, name, description string) (*model.Workflow, error)
 	UpdateWorkflow(id uint, name, description string) (*model.Workflow, error)
 	DeleteWorkflow(id uint) error
+	Reorder(orgID uuid.UUID, ids []uint) error
+	ReorderSteps(workflowID uint, ids []uint) error
 	AddStep(workflowID uint, input AddStepInput) (*model.WorkflowStep, error)
 	UpdateStep(stepID uint, input UpdateStepInput) (*model.WorkflowStep, error)
 	DeleteStep(stepID uint) error
@@ -64,16 +65,29 @@ func (s *workflowService) GetWorkflow(id uint) (*model.Workflow, error) {
 }
 
 func (s *workflowService) CreateWorkflow(organizationID uuid.UUID, name, description string) (*model.Workflow, error) {
+	maxOrder, err := s.workflowRepo.GetMaxOrder(organizationID)
+	if err != nil {
+		return nil, err
+	}
 	workflow := &model.Workflow{
 		OrganizationID: organizationID,
 		Name:           name,
 		Description:    description,
+		Order:          maxOrder + 1,
 		CreatedAt:      time.Now(),
 	}
 	if err := s.workflowRepo.Create(workflow); err != nil {
 		return nil, err
 	}
 	return s.workflowRepo.FindByID(workflow.ID)
+}
+
+func (s *workflowService) Reorder(orgID uuid.UUID, ids []uint) error {
+	return s.workflowRepo.Reorder(orgID, ids)
+}
+
+func (s *workflowService) ReorderSteps(workflowID uint, ids []uint) error {
+	return s.workflowRepo.ReorderSteps(workflowID, ids)
 }
 
 func (s *workflowService) UpdateWorkflow(id uint, name, description string) (*model.Workflow, error) {
@@ -132,7 +146,6 @@ func (s *workflowService) UpdateStep(stepID uint, input UpdateStepInput) (*model
 	step.Name = input.Name
 	step.RequiredLevel = input.RequiredLevel
 	step.StatusID = input.StatusID
-	step.Order = input.Order
 	if input.ApproverType != "" {
 		step.ApproverType = input.ApproverType
 	}

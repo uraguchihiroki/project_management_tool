@@ -11,9 +11,10 @@ import (
 type DepartmentService interface {
 	ListByOrganization(orgID uuid.UUID) ([]model.Department, error)
 	Get(id uuid.UUID) (*model.Department, error)
-	Create(orgID uuid.UUID, name string, order int) (*model.Department, error)
-	Update(id uuid.UUID, name string, order int) (*model.Department, error)
+	Create(orgID uuid.UUID, name string) (*model.Department, error)
+	Update(id uuid.UUID, name string) (*model.Department, error)
 	Delete(id uuid.UUID) error
+	Reorder(orgID uuid.UUID, ids []uuid.UUID) error
 	GetUserDepartments(orgID, userID uuid.UUID) ([]model.Department, error)
 	SetUserDepartments(orgID, userID uuid.UUID, departmentIDs []uuid.UUID) error
 }
@@ -35,12 +36,16 @@ func (s *departmentService) Get(id uuid.UUID) (*model.Department, error) {
 	return s.deptRepo.FindByID(id)
 }
 
-func (s *departmentService) Create(orgID uuid.UUID, name string, order int) (*model.Department, error) {
+func (s *departmentService) Create(orgID uuid.UUID, name string) (*model.Department, error) {
+	maxOrder, err := s.deptRepo.GetMaxOrder(orgID)
+	if err != nil {
+		return nil, err
+	}
 	d := &model.Department{
 		ID:             uuid.New(),
 		OrganizationID: orgID,
 		Name:           name,
-		Order:          order,
+		Order:          maxOrder + 1,
 		CreatedAt:      time.Now(),
 	}
 	if err := s.deptRepo.Create(d); err != nil {
@@ -49,7 +54,7 @@ func (s *departmentService) Create(orgID uuid.UUID, name string, order int) (*mo
 	return d, nil
 }
 
-func (s *departmentService) Update(id uuid.UUID, name string, order int) (*model.Department, error) {
+func (s *departmentService) Update(id uuid.UUID, name string) (*model.Department, error) {
 	d, err := s.deptRepo.FindByID(id)
 	if err != nil {
 		return nil, err
@@ -57,11 +62,14 @@ func (s *departmentService) Update(id uuid.UUID, name string, order int) (*model
 	if name != "" {
 		d.Name = name
 	}
-	d.Order = order
 	if err := s.deptRepo.Update(d); err != nil {
 		return nil, err
 	}
 	return d, nil
+}
+
+func (s *departmentService) Reorder(orgID uuid.UUID, ids []uuid.UUID) error {
+	return s.deptRepo.Reorder(orgID, ids)
 }
 
 func (s *departmentService) Delete(id uuid.UUID) error {

@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, X, Check, ArrowUp, ArrowDown, ChevronLeft } from 'lucide-react'
+import { Plus, Trash2, X, Check, ChevronLeft } from 'lucide-react'
 import type { Workflow, Status } from '@/types'
+import { SortableList, DragHandle } from '@/components/SortableList'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -77,13 +78,11 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   })
 
   const updateStepMutation = useMutation({
-    mutationFn: async ({ stepId, data, order }: { stepId: number; data: typeof emptyStep; order: number }) => {
+    mutationFn: async ({ stepId, data }: { stepId: number; data: typeof emptyStep }) => {
       validateStepForm(data)
-      if (order < 0 || order > 9999) throw new Error('表示順は0～9999の範囲で指定してください')
       const body: Record<string, unknown> = {
         name: data.name,
         required_level: data.required_level,
-        order,
       }
       if (data.status_id) body.status_id = data.status_id
       const res = await fetch(`${API}/workflows/${id}/steps/${stepId}`, {
@@ -112,37 +111,20 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', id] }),
   })
 
-  const moveStepMutation = useMutation({
-    mutationFn: async ({ stepId, name, requiredLevel, statusId, newOrder }: {
-      stepId: number; name: string; requiredLevel: number; statusId?: string; newOrder: number
-    }) => {
-      const body: Record<string, unknown> = { name, required_level: requiredLevel, order: newOrder }
-      if (statusId) body.status_id = statusId
-      await fetch(`${API}/workflows/${id}/steps/${stepId}`, {
+  const [reorderPending, setReorderPending] = useState(false)
+  const reorderStepsMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await fetch(`${API}/workflows/${id}/steps/reorder`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ids }),
       })
+      if (!res.ok) throw new Error('並び替えに失敗しました')
     },
+    onMutate: () => setReorderPending(true),
+    onSettled: () => setReorderPending(false),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', id] }),
   })
-
-  const handleMoveStep = async (index: number, direction: 'up' | 'down') => {
-    const steps = workflow?.steps ?? []
-    const step = steps[index]
-    const swapIndex = direction === 'up' ? index - 1 : index + 1
-    const swapStep = steps[swapIndex]
-    if (!step || !swapStep) return
-
-    await moveStepMutation.mutateAsync({
-      stepId: step.id, name: step.name, requiredLevel: step.required_level,
-      statusId: step.status_id, newOrder: swapStep.order,
-    })
-    await moveStepMutation.mutateAsync({
-      stepId: swapStep.id, name: swapStep.name, requiredLevel: swapStep.required_level,
-      statusId: swapStep.status_id, newOrder: step.order,
-    })
-  }
 
   const steps = workflow?.steps ?? []
 
@@ -247,70 +229,52 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {steps.map((step, idx) => (
-              <div key={step.id}>
-                {editingStepId === step.id ? (
+            <SortableList
+              items={steps}
+              itemId={(s) => String(s.id)}
+              onReorder={(ids) => reorderStepsMutation.mutate(ids.map(Number))}
+              disabled={reorderPending}
+              renderItem={(s, handleProps) =>
+                editingStepId === s.id ? (
                   <div className="px-4 py-3 bg-blue-50">
                     {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
                     <StepForm
                       onSubmit={(data) => {
                         if (!data.name.trim()) { setError('ステップ名は必須です'); return }
-                        updateStepMutation.mutate({ stepId: step.id, data, order: step.order })
+                        updateStepMutation.mutate({ stepId: s.id, data })
                       }}
                       loading={updateStepMutation.isPending}
                     />
                   </div>
                 ) : (
                   <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
-                    {/* 並び替えボタン */}
-                    <div className="flex flex-col gap-0.5 flex-shrink-0">
-                      <button
-                        onClick={() => handleMoveStep(idx, 'up')}
-                        disabled={idx === 0 || moveStepMutation.isPending}
-                        className="p-0.5 text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors"
-                      >
-                        <ArrowUp className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => handleMoveStep(idx, 'down')}
-                        disabled={idx === steps.length - 1 || moveStepMutation.isPending}
-                        className="p-0.5 text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors"
-                      >
-                        <ArrowDown className="w-3 h-3" />
-                      </button>
-                    </div>
-
-                    {/* ステップ番号 */}
+                    <DragHandle handleProps={handleProps} />
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                      {step.order}
+                      {steps.findIndex((x) => x.id === s.id) + 1}
                     </span>
-
-                    {/* ステップ情報 */}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 text-sm">{step.name}</p>
+                      <p className="font-medium text-gray-900 text-sm">{s.name}</p>
                       <p className="text-xs text-gray-400">
-                        Level {step.required_level} 以上が承認可能
-                        {step.status && (
+                        Level {s.required_level} 以上が承認可能
+                        {s.status && (
                           <span className="ml-2">
                             → <span
                               className="inline-block w-2 h-2 rounded-full mr-0.5"
-                              style={{ backgroundColor: step.status.color }}
+                              style={{ backgroundColor: s.status.color }}
                             />
-                            {step.status.name}
+                            {s.status.name}
                           </span>
                         )}
                       </p>
                     </div>
-
-                    {/* 操作ボタン */}
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button
                         onClick={() => {
-                          setEditingStepId(step.id)
+                          setEditingStepId(s.id)
                           setStepForm({
-                            name: step.name,
-                            required_level: step.required_level,
-                            status_id: step.status_id ?? '',
+                            name: s.name,
+                            required_level: s.required_level,
+                            status_id: s.status_id ?? '',
                           })
                           setShowAddForm(false)
                           setError('')
@@ -322,8 +286,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       </button>
                       <button
                         onClick={() => {
-                          if (confirm(`「${step.name}」を削除しますか？`)) {
-                            deleteStepMutation.mutate(step.id)
+                          if (confirm(`「${s.name}」を削除しますか？`)) {
+                            deleteStepMutation.mutate(s.id)
                           }
                         }}
                         className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -333,9 +297,9 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       </button>
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
+                )
+              }
+            />
           </div>
         )}
 

@@ -102,6 +102,29 @@ func (h *RoleHandler) Update(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": role})
 }
 
+// PUT /api/v1/roles/reorder
+func (h *RoleHandler) Reorder(c echo.Context) error {
+	var orgID *uuid.UUID
+	if raw := c.QueryParam("org_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+		}
+		orgID = &parsed
+	}
+	type Request struct {
+		IDs []uint `json:"ids"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := h.roleService.Reorder(orgID, req.IDs); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // DELETE /api/v1/roles/:id
 func (h *RoleHandler) Delete(c echo.Context) error {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)

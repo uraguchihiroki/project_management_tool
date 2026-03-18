@@ -101,6 +101,44 @@ func (h *WorkflowHandler) Update(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": workflow})
 }
 
+// PUT /api/v1/organizations/:orgId/workflows/reorder
+func (h *WorkflowHandler) Reorder(c echo.Context) error {
+	orgID, err := uuid.Parse(c.Param("orgId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	}
+	type Request struct {
+		IDs []uint `json:"ids"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := h.workflowService.Reorder(orgID, req.IDs); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// PUT /api/v1/workflows/:id/steps/reorder
+func (h *WorkflowHandler) ReorderSteps(c echo.Context) error {
+	workflowID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid workflow id")
+	}
+	type Request struct {
+		IDs []uint `json:"ids"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := h.workflowService.ReorderSteps(uint(workflowID), req.IDs); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // DELETE /api/v1/workflows/:id
 func (h *WorkflowHandler) Delete(c echo.Context) error {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -185,7 +223,6 @@ func (h *WorkflowHandler) UpdateStep(c echo.Context) error {
 		Name            string  `json:"name"`
 		RequiredLevel   int     `json:"required_level"`
 		StatusID        *string `json:"status_id"`
-		Order           int     `json:"order"`
 		ApproverType    string  `json:"approver_type"`
 		ApproverUserID  *string `json:"approver_user_id"`
 		MinApprovers    int     `json:"min_approvers"`
@@ -201,9 +238,6 @@ func (h *WorkflowHandler) UpdateStep(c echo.Context) error {
 	}
 	if req.RequiredLevel < 0 || req.RequiredLevel > 9999 {
 		return echo.NewHTTPError(http.StatusBadRequest, "必要レベルは0～9999の範囲で指定してください")
-	}
-	if req.Order < 0 || req.Order > 9999 {
-		return echo.NewHTTPError(http.StatusBadRequest, "表示順は0～9999の範囲で指定してください")
 	}
 	if req.MinApprovers < 0 || req.MinApprovers > 9999 {
 		return echo.NewHTTPError(http.StatusBadRequest, "最小承認人数は0～9999の範囲で指定してください")
@@ -228,7 +262,6 @@ func (h *WorkflowHandler) UpdateStep(c echo.Context) error {
 		Name:             req.Name,
 		RequiredLevel:   req.RequiredLevel,
 		StatusID:        statusID,
-		Order:           req.Order,
 		ApproverType:    req.ApproverType,
 		ApproverUserID:  approverUserID,
 		MinApprovers:    req.MinApprovers,

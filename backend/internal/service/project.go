@@ -33,6 +33,7 @@ type ProjectService interface {
 	Create(input CreateProjectInput) (*model.Project, error)
 	Update(id uuid.UUID, input UpdateProjectInput) (*model.Project, error)
 	Delete(id uuid.UUID) error
+	Reorder(orgID *uuid.UUID, ids []uuid.UUID) error
 	ListStatusesByOrg(orgID uuid.UUID) ([]model.Status, error)
 }
 
@@ -61,6 +62,10 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 	if status == "" {
 		status = "none"
 	}
+	maxOrder, err := s.projectRepo.GetMaxOrder(input.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
 	project := &model.Project{
 		ID:             uuid.New(),
 		Key:            input.Key,
@@ -68,6 +73,7 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 		Description:    input.Description,
 		OwnerID:        input.OwnerID,
 		OrganizationID: input.OrganizationID,
+		Order:          maxOrder + 1,
 		StartDate:      input.StartDate,
 		EndDate:        input.EndDate,
 		Status:         status,
@@ -133,6 +139,10 @@ func (s *projectService) Update(id uuid.UUID, input UpdateProjectInput) (*model.
 
 func (s *projectService) Delete(id uuid.UUID) error {
 	return s.projectRepo.Delete(id)
+}
+
+func (s *projectService) Reorder(orgID *uuid.UUID, ids []uuid.UUID) error {
+	return s.projectRepo.Reorder(orgID, ids)
 }
 
 func (s *projectService) ListStatusesByOrg(orgID uuid.UUID) ([]model.Status, error) {

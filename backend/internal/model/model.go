@@ -59,6 +59,7 @@ type Role struct {
 	ID             uint         `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name           string       `gorm:"size:100;not null;uniqueIndex:idx_role_name_org" json:"name"`
 	Level          int          `gorm:"not null;default:1" json:"level"`
+	Order          int          `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
 	Description    string       `gorm:"size:500" json:"description"`
 	OrganizationID *uuid.UUID   `gorm:"type:uuid;uniqueIndex:idx_role_name_org" json:"organization_id,omitempty"`
 	Organization   Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
@@ -74,6 +75,7 @@ type Project struct {
 	Owner          User         `gorm:"foreignKey:OwnerID" json:"owner,omitempty"`
 	OrganizationID *uuid.UUID   `gorm:"type:uuid" json:"organization_id,omitempty"`
 	Organization   Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+	Order          int          `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
 	StartDate      *time.Time   `json:"start_date,omitempty"`
 	EndDate        *time.Time   `json:"end_date,omitempty"`
 	Status         string       `gorm:"size:20;not null;default:'none'" json:"status"`
@@ -135,6 +137,7 @@ type IssueTemplate struct {
 	DefaultPriority string    `gorm:"size:20;not null;default:'medium'" json:"default_priority"`
 	WorkflowID      *uint     `json:"workflow_id,omitempty"`
 	Workflow        *Workflow `gorm:"foreignKey:WorkflowID" json:"workflow,omitempty"`
+	Order           int       `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
 	CreatedAt       time.Time `json:"created_at"`
 }
 
@@ -154,6 +157,7 @@ type Workflow struct {
 	Organization   Organization   `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
 	Name           string         `gorm:"size:200;not null" json:"name"`
 	Description    string         `gorm:"size:500" json:"description"`
+	Order          int            `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
 	Steps          []WorkflowStep `gorm:"foreignKey:WorkflowID" json:"steps,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
 }

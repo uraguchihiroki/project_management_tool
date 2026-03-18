@@ -164,6 +164,37 @@ func (h *ProjectHandler) Update(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": project})
 }
 
+// PUT /api/v1/projects/reorder
+func (h *ProjectHandler) Reorder(c echo.Context) error {
+	var orgID *uuid.UUID
+	if raw := c.QueryParam("org_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+		}
+		orgID = &parsed
+	}
+	type Request struct {
+		IDs []string `json:"ids"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	ids := make([]uuid.UUID, 0, len(req.IDs))
+	for _, s := range req.IDs {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid id: "+s)
+		}
+		ids = append(ids, id)
+	}
+	if err := h.projectService.Reorder(orgID, ids); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 func (h *ProjectHandler) Delete(c echo.Context) error {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {

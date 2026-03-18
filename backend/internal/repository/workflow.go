@@ -18,6 +18,9 @@ type WorkflowRepository interface {
 	DeleteStep(id uint) error
 	FindStepByID(id uint) (*model.WorkflowStep, error)
 	CountSteps(workflowID uint) (int64, error)
+	Reorder(orgID uuid.UUID, ids []uint) error
+	ReorderSteps(workflowID uint, ids []uint) error
+	GetMaxOrder(orgID uuid.UUID) (int, error)
 }
 
 type workflowRepository struct {
@@ -30,13 +33,13 @@ func NewWorkflowRepository(db *gorm.DB) WorkflowRepository {
 
 func (r *workflowRepository) FindAll() ([]model.Workflow, error) {
 	var workflows []model.Workflow
-	err := r.db.Preload("Organization").Order("created_at DESC").Find(&workflows).Error
+	err := r.db.Preload("Organization").Order("display_order ASC").Find(&workflows).Error
 	return workflows, err
 }
 
 func (r *workflowRepository) FindByOrganizationID(orgID uuid.UUID) ([]model.Workflow, error) {
 	var workflows []model.Workflow
-	err := r.db.Where("organization_id = ?", orgID).Order("created_at DESC").Find(&workflows).Error
+	err := r.db.Where("organization_id = ?", orgID).Order("display_order ASC").Find(&workflows).Error
 	return workflows, err
 }
 
@@ -82,7 +85,6 @@ func (r *workflowRepository) UpdateStep(step *model.WorkflowStep) error {
 		"name":             step.Name,
 		"required_level":   step.RequiredLevel,
 		"status_id":        step.StatusID,
-		"order":            step.Order,
 		"approver_type":    step.ApproverType,
 		"approver_user_id": step.ApproverUserID,
 		"min_approvers":    step.MinApprovers,
@@ -108,4 +110,37 @@ func (r *workflowRepository) CountSteps(workflowID uint) (int64, error) {
 	var count int64
 	err := r.db.Model(&model.WorkflowStep{}).Where("workflow_id = ?", workflowID).Count(&count).Error
 	return count, err
+}
+
+func (r *workflowRepository) GetMaxOrder(orgID uuid.UUID) (int, error) {
+	var maxOrder int
+	err := r.db.Model(&model.Workflow{}).Where("organization_id = ?", orgID).
+		Select("COALESCE(MAX(display_order), 0)").Scan(&maxOrder).Error
+	return maxOrder, err
+}
+
+func (r *workflowRepository) Reorder(orgID uuid.UUID, ids []uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i, id := range ids {
+			if err := tx.Model(&model.Workflow{}).
+				Where("id = ? AND organization_id = ?", id, orgID).
+				Update("display_order", i+1).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *workflowRepository) ReorderSteps(workflowID uint, ids []uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i, id := range ids {
+			if err := tx.Model(&model.WorkflowStep{}).
+				Where("id = ? AND workflow_id = ?", id, workflowID).
+				Update("order", i+1).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

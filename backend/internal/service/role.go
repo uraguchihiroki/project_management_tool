@@ -14,6 +14,7 @@ type RoleService interface {
 	CreateRole(name string, level int, description string, orgID *uuid.UUID) (*model.Role, error)
 	UpdateRole(id uint, name string, level int, description string) (*model.Role, error)
 	DeleteRole(id uint) error
+	Reorder(orgID *uuid.UUID, ids []uint) error
 	AssignRolesToUser(userID uuid.UUID, roleIDs []uint) error
 	GetUserRoles(userID uuid.UUID) ([]model.Role, error)
 }
@@ -38,9 +39,14 @@ func (s *roleService) GetRole(id uint) (*model.Role, error) {
 }
 
 func (s *roleService) CreateRole(name string, level int, description string, orgID *uuid.UUID) (*model.Role, error) {
+	maxOrder, err := s.roleRepo.GetMaxOrder(orgID)
+	if err != nil {
+		return nil, err
+	}
 	role := &model.Role{
 		Name:           name,
 		Level:          level,
+		Order:          maxOrder + 1,
 		Description:    description,
 		OrganizationID: orgID,
 		CreatedAt:      time.Now(),
@@ -49,6 +55,10 @@ func (s *roleService) CreateRole(name string, level int, description string, org
 		return nil, err
 	}
 	return role, nil
+}
+
+func (s *roleService) Reorder(orgID *uuid.UUID, ids []uint) error {
+	return s.roleRepo.Reorder(orgID, ids)
 }
 
 func (s *roleService) UpdateRole(id uint, name string, level int, description string) (*model.Role, error) {

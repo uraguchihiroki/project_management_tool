@@ -36,8 +36,7 @@ func (h *DepartmentHandler) Create(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
 	}
 	type Request struct {
-		Name  string `json:"name"`
-		Order int    `json:"order"`
+		Name string `json:"name"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -49,10 +48,7 @@ func (h *DepartmentHandler) Create(c echo.Context) error {
 	if len(req.Name) > 200 {
 		return echo.NewHTTPError(http.StatusBadRequest, "部署名は200文字以内で指定してください")
 	}
-	if req.Order < 0 || req.Order > 9999 {
-		return echo.NewHTTPError(http.StatusBadRequest, "表示順は0～9999の範囲で指定してください")
-	}
-	dept, err := h.deptService.Create(orgID, req.Name, req.Order)
+	dept, err := h.deptService.Create(orgID, req.Name)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -70,8 +66,7 @@ func (h *DepartmentHandler) Update(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid department id")
 	}
 	type Request struct {
-		Name  string `json:"name"`
-		Order int    `json:"order"`
+		Name string `json:"name"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -90,14 +85,38 @@ func (h *DepartmentHandler) Update(c echo.Context) error {
 	if len(req.Name) > 200 {
 		return echo.NewHTTPError(http.StatusBadRequest, "部署名は200文字以内で指定してください")
 	}
-	if req.Order < 0 || req.Order > 9999 {
-		return echo.NewHTTPError(http.StatusBadRequest, "表示順は0～9999の範囲で指定してください")
-	}
-	updated, err := h.deptService.Update(id, req.Name, req.Order)
+	updated, err := h.deptService.Update(id, req.Name)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": updated})
+}
+
+// PUT /api/v1/organizations/:orgId/departments/reorder
+func (h *DepartmentHandler) Reorder(c echo.Context) error {
+	orgID, err := uuid.Parse(c.Param("orgId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	}
+	type Request struct {
+		IDs []string `json:"ids"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	ids := make([]uuid.UUID, 0, len(req.IDs))
+	for _, s := range req.IDs {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid id: "+s)
+		}
+		ids = append(ids, id)
+	}
+	if err := h.deptService.Reorder(orgID, ids); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // DELETE /api/v1/organizations/:orgId/departments/:id

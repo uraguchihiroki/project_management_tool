@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Check } from 'lucide-react'
 import type { Department } from '@/types'
+import { SortableList, DragHandle } from '@/components/SortableList'
 
 import { useAuth } from '@/context/AuthContext'
 
@@ -28,7 +29,7 @@ export default function DepartmentsPage() {
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', order: 0 })
+  const [form, setForm] = useState({ name: '' })
   const [error, setError] = useState('')
 
   const createMutation = useMutation({
@@ -38,7 +39,7 @@ export default function DepartmentsPage() {
       const res = await fetch(`${API}/organizations/${orgId}/departments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ name: data.name }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -52,7 +53,7 @@ export default function DepartmentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['departments'] })
       setShowForm(false)
-      setForm({ name: '', order: 0 })
+      setForm({ name: '' })
       setError('')
     },
     onError: (e: Error) => setError(e.message),
@@ -65,7 +66,7 @@ export default function DepartmentsPage() {
       const res = await fetch(`${API}/organizations/${orgId}/departments/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ name: data.name }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -79,7 +80,7 @@ export default function DepartmentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['departments'] })
       setEditingId(null)
-      setForm({ name: '', order: 0 })
+      setForm({ name: '' })
       setError('')
     },
     onError: (e: Error) => setError(e.message),
@@ -101,9 +102,26 @@ export default function DepartmentsPage() {
     onError: (e: Error) => setError(e.message),
   })
 
+  const [reorderPending, setReorderPending] = useState(false)
+  const reorderMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const orgId = currentOrg?.id
+      if (!orgId) throw new Error('組織が選択されていません')
+      const res = await fetch(`${API}/organizations/${orgId}/departments/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) throw new Error('並び替えに失敗しました')
+    },
+    onMutate: () => setReorderPending(true),
+    onSettled: () => setReorderPending(false),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['departments'] }),
+  })
+
   const startEdit = (dept: Department) => {
     setEditingId(dept.id)
-    setForm({ name: dept.name, order: dept.order })
+    setForm({ name: dept.name })
     setShowForm(false)
     setError('')
   }
@@ -116,10 +134,6 @@ export default function DepartmentsPage() {
     }
     if (form.name.length > 200) {
       setError('部署名は200文字以内で指定してください')
-      return
-    }
-    if (form.order < 0 || form.order > 9999) {
-      setError('表示順は0～9999の範囲で指定してください')
       return
     }
     if (editingId !== null) {
@@ -146,7 +160,7 @@ export default function DepartmentsPage() {
           <button
             onClick={() => {
               setShowForm(true)
-              setForm({ name: '', order: 0 })
+              setForm({ name: '' })
               setError('')
             }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -163,30 +177,16 @@ export default function DepartmentsPage() {
             {editingId !== null ? '部署を編集' : '新しい部署'}
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">部署名 *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="例: 開発部、予算委員会（200文字以内）"
-                  maxLength={200}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">表示順（0～9999、小さいほど上）</label>
-                <input
-                  type="number"
-                  value={form.order}
-                  onChange={(e) => setForm({ ...form, order: parseInt(e.target.value) || 0 })}
-                  min={0}
-                  max={9999}
-                  placeholder="0"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">部署名 *</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="例: 開発部、予算委員会（200文字以内）"
+                maxLength={200}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
             {error && <p className="text-sm text-red-500">{error}</p>}
             <div className="flex gap-2">
@@ -226,42 +226,50 @@ export default function DepartmentsPage() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="w-10 px-2 py-3"></th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">部署名</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-24">表示順</th>
                 <th className="px-4 py-3 w-20"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {departments.map((dept) => (
-                <tr key={dept.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-gray-900 text-sm">{dept.name}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{dept.order}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <button
-                        onClick={() => startEdit(dept)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="編集"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`「${dept.name}」を削除しますか？`)) {
-                            deleteMutation.mutate(dept.id)
-                          }
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="削除"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              <SortableList
+                items={departments}
+                itemId={(d) => d.id}
+                onReorder={(ids) => reorderMutation.mutate(ids)}
+                disabled={reorderPending}
+                renderItem={(dept, handleProps) => (
+                  <tr className="hover:bg-gray-50 transition-colors">
+                    <td className="px-2 py-3">
+                      <DragHandle handleProps={handleProps} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-gray-900 text-sm">{dept.name}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 justify-end">
+                        <button
+                          onClick={() => startEdit(dept)}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="編集"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`「${dept.name}」を削除しますか？`)) {
+                              deleteMutation.mutate(dept.id)
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="削除"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              />
             </tbody>
           </table>
         )}
