@@ -37,8 +37,6 @@ export interface User {
   created_at: string
 }
 
-export type ProjectStatus = 'none' | 'planning' | 'active' | 'completed'
-
 export interface Project {
   id: string
   key: string
@@ -49,7 +47,6 @@ export interface Project {
   organization_id?: string
   start_date?: string
   end_date?: string
-  status: ProjectStatus
   statuses?: Status[]
   created_at: string
 }

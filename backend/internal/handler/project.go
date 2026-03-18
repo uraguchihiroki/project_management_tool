@@ -54,7 +54,6 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 		OrganizationID string  `json:"organization_id"`
 		StartDate      string  `json:"start_date"`
 		EndDate        string  `json:"end_date"`
-		Status         string  `json:"status"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -71,9 +70,6 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 	}
 	if len(req.Name) > 200 {
 		return echo.NewHTTPError(http.StatusBadRequest, "プロジェクト名は200文字以内で指定してください")
-	}
-	if req.Status != "" && req.Status != "none" && req.Status != "planning" && req.Status != "active" && req.Status != "completed" {
-		return echo.NewHTTPError(http.StatusBadRequest, "ステータスは none, planning, active, completed のいずれかを指定してください")
 	}
 	ownerID, err := uuid.Parse(req.OwnerID)
 	if err != nil {
@@ -106,7 +102,6 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 		OrganizationID: orgID,
 		StartDate:      startDate,
 		EndDate:        endDate,
-		Status:         req.Status,
 	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -124,7 +119,6 @@ func (h *ProjectHandler) Update(c echo.Context) error {
 		Description *string `json:"description"`
 		StartDate   string  `json:"start_date"`
 		EndDate     string  `json:"end_date"`
-		Status      string  `json:"status"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -132,9 +126,6 @@ func (h *ProjectHandler) Update(c echo.Context) error {
 	}
 	if req.Name != nil && len(*req.Name) > 200 {
 		return echo.NewHTTPError(http.StatusBadRequest, "プロジェクト名は200文字以内で指定してください")
-	}
-	if req.Status != "" && req.Status != "none" && req.Status != "planning" && req.Status != "active" && req.Status != "completed" {
-		return echo.NewHTTPError(http.StatusBadRequest, "ステータスは none, planning, active, completed のいずれかを指定してください")
 	}
 	var startDate, endDate *time.Time
 	if req.StartDate != "" {
@@ -147,16 +138,11 @@ func (h *ProjectHandler) Update(c echo.Context) error {
 			endDate = &t
 		}
 	}
-	var status *string
-	if req.Status != "" {
-		status = &req.Status
-	}
 	project, err := h.projectService.Update(id, service.UpdateProjectInput{
 		Name:        req.Name,
 		Description: req.Description,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Status:      status,
 	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "project not found")

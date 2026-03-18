@@ -48,7 +48,6 @@ func TestProject_NormalFlow(t *testing.T) {
 	status, updateResp := ts.req(t, "PUT", "/api/v1/projects/"+projectID, map[string]interface{}{
 		"name":        "初めてのプロジェクト（更新後）",
 		"description": "説明を追加",
-		"status":      "active",
 	})
 	assertStatus(t, status, http.StatusOK, "update project")
 	assertField(t, mustGetString(t, updateResp, "data", "name"), "初めてのプロジェクト（更新後）", "name after update")

@@ -19,7 +19,9 @@ async function fetchWorkflow(id: string): Promise<Workflow> {
 async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
   const res = await fetch(`${API}/organizations/${orgId}/statuses?type=issue`)
   const json = await res.json()
-  return json.data ?? []
+  const data: Status[] = json.data ?? []
+  // ワークフローは組織スコープなので、組織用ステータスのみ表示（プロジェクト固有を除外）
+  return data.filter((s) => s.organization_id && !s.project_id)
 }
 
 const emptyStep = { name: '', required_level: 1, status_id: '' }

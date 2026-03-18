@@ -64,12 +64,11 @@ export const createProject = (data: {
   organization_id?: string
   start_date?: string
   end_date?: string
-  status?: string
 }) => api.post<ApiResponse<Project>>('/projects', data).then((r) => r.data.data)
 
 export const updateProject = (
   id: string,
-  data: { name?: string; description?: string; start_date?: string; end_date?: string; status?: string }
+  data: { name?: string; description?: string; start_date?: string; end_date?: string }
 ) => api.put<ApiResponse<Project>>(`/projects/${id}`, data).then((r) => r.data.data)
 
 export const deleteProject = (id: string) =>

@@ -5,15 +5,8 @@ import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProject, updateProject } from '@/lib/api'
 import { ChevronLeft } from 'lucide-react'
-import type { Project, ProjectStatus } from '@/types'
+import type { Project } from '@/types'
 import { useRequireAdmin } from '@/context/AuthContext'
-
-const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  none: 'なし',
-  planning: '計画中',
-  active: '実行中',
-  completed: '完了',
-}
 
 export default function AdminProjectEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -43,7 +36,6 @@ export default function AdminProjectEditPage({ params }: { params: Promise<{ id:
       description: (formData.get('description') as string) || undefined,
       start_date: (formData.get('start_date') as string) || undefined,
       end_date: (formData.get('end_date') as string) || undefined,
-      status: (formData.get('status') as string) || undefined,
     })
   }
 
@@ -117,21 +109,6 @@ export default function AdminProjectEditPage({ params }: { params: Promise<{ id:
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ライフサイクルステータス</label>
-          <select
-            name="status"
-            defaultValue={project.status ?? 'none'}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {(['none', 'planning', 'active', 'completed'] as const).map((s) => (
-              <option key={s} value={s}>
-                {PROJECT_STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
         </div>
 
         {updateMutation.isError && (

@@ -78,7 +78,6 @@ type Project struct {
 	Order          int          `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
 	StartDate      *time.Time   `json:"start_date,omitempty"`
 	EndDate        *time.Time   `json:"end_date,omitempty"`
-	Status         string       `gorm:"size:20;not null;default:'none'" json:"status"`
 	Statuses       []Status     `gorm:"foreignKey:ProjectID" json:"statuses,omitempty"`
 	CreatedAt      time.Time    `json:"created_at"`
 }

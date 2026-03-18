@@ -16,7 +16,6 @@ type CreateProjectInput struct {
 	OrganizationID *uuid.UUID
 	StartDate      *time.Time
 	EndDate        *time.Time
-	Status         string
 }
 
 type UpdateProjectInput struct {
@@ -24,7 +23,6 @@ type UpdateProjectInput struct {
 	Description *string
 	StartDate   *time.Time
 	EndDate     *time.Time
-	Status      *string
 }
 
 type ProjectService interface {
@@ -58,10 +56,6 @@ func (s *projectService) Get(id uuid.UUID) (*model.Project, error) {
 }
 
 func (s *projectService) Create(input CreateProjectInput) (*model.Project, error) {
-	status := input.Status
-	if status == "" {
-		status = "none"
-	}
 	maxOrder, err := s.projectRepo.GetMaxOrder(input.OrganizationID)
 	if err != nil {
 		return nil, err
@@ -76,7 +70,6 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 		Order:          maxOrder + 1,
 		StartDate:      input.StartDate,
 		EndDate:        input.EndDate,
-		Status:         status,
 		CreatedAt:      time.Now(),
 	}
 	if err := s.projectRepo.Create(project); err != nil {
@@ -128,9 +121,6 @@ func (s *projectService) Update(id uuid.UUID, input UpdateProjectInput) (*model.
 	}
 	if input.EndDate != nil {
 		project.EndDate = input.EndDate
-	}
-	if input.Status != nil {
-		project.Status = *input.Status
 	}
 	if err := s.projectRepo.Update(project); err != nil {
 		return nil, err

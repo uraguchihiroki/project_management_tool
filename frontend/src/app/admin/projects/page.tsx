@@ -5,17 +5,10 @@ import { getProjects, createProject } from '@/lib/api'
 import { useState } from 'react'
 import Link from 'next/link'
 import { Plus, FolderKanban, ChevronRight } from 'lucide-react'
-import type { Project, ProjectStatus } from '@/types'
+import type { Project } from '@/types'
 import { SortableList, DragHandle } from '@/components/SortableList'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
-
-const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  none: 'なし',
-  planning: '計画中',
-  active: '実行中',
-  completed: '完了',
-}
 import { useRequireAdmin, useAuth } from '@/context/AuthContext'
 
 export default function AdminProjectsPage() {
@@ -29,7 +22,6 @@ export default function AdminProjectsPage() {
     description: '',
     start_date: '',
     end_date: '',
-    status: 'none' as ProjectStatus,
   })
 
   const { data: projects = [], isLoading } = useQuery({
@@ -42,7 +34,7 @@ export default function AdminProjectsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       setShowForm(false)
-      setForm({ key: '', name: '', description: '', start_date: '', end_date: '', status: 'none' })
+      setForm({ key: '', name: '', description: '', start_date: '', end_date: '' })
     },
   })
 
@@ -75,7 +67,6 @@ export default function AdminProjectsPage() {
       organization_id: currentOrg?.id,
       start_date: form.start_date || undefined,
       end_date: form.end_date || undefined,
-      status: form.status !== 'none' ? form.status : undefined,
     })
   }
 
@@ -137,11 +128,6 @@ export default function AdminProjectsPage() {
                     )}
                     <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
                       <span>オーナー: {project.owner?.name}</span>
-                      {project.status && project.status !== 'none' && (
-                        <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                          {PROJECT_STATUS_LABELS[project.status as ProjectStatus] ?? project.status}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -215,20 +201,6 @@ export default function AdminProjectsPage() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">ライフサイクルステータス</label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value as ProjectStatus })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {(['none', 'planning', 'active', 'completed'] as const).map((s) => (
-                    <option key={s} value={s}>
-                      {PROJECT_STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
               </div>
               {createMutation.isError && (
                 <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">作成に失敗しました</p>

@@ -109,21 +109,36 @@ ALTER TABLE issues ALTER COLUMN project_id DROP NOT NULL;
 ALTER TABLE statuses ADD COLUMN IF NOT EXISTS organization_id UUID;
 ALTER TABLE statuses ALTER COLUMN project_id DROP NOT NULL;
 
--- 組織用デフォルトステータス（FRS用、project_id なし）
-INSERT INTO statuses (id, project_id, organization_id, name, color, "order")
-SELECT gen_random_uuid(), NULL, '00000000-0000-0000-0000-000000000001', n, c, o
-FROM (VALUES ('未着手', '#6B7280', 1), ('進行中', '#3B82F6', 2), ('完了', '#10B981', 3)) AS t(n, c, o)
-WHERE NOT EXISTS (SELECT 1 FROM statuses WHERE organization_id = '00000000-0000-0000-0000-000000000001' AND project_id IS NULL LIMIT 1);
-
 -- 13a. Status: add type column (issue | project)
 ALTER TABLE statuses ADD COLUMN IF NOT EXISTS type VARCHAR(20) NOT NULL DEFAULT 'issue';
 UPDATE statuses SET type = 'issue' WHERE type IS NULL OR type = '';
 UPDATE statuses SET type = 'issue' WHERE type NOT IN ('issue', 'project');
--- 組織用デフォルト Project ステータス（計画中, 進行中, 完了）
+
+-- 13b. ワークフロー用・プロジェクト用ステータスのSeed（FRS組織、固定UUID）
+-- Issue用: ワークフロー承認後ステータス、Issueのカンバン列
 INSERT INTO statuses (id, project_id, organization_id, name, color, "order", type)
-SELECT gen_random_uuid(), NULL, '00000000-0000-0000-0000-000000000001', n, c, o, 'project'
-FROM (VALUES ('計画中', '#6B7280', 1), ('進行中', '#3B82F6', 2), ('完了', '#10B981', 3)) AS t(n, c, o)
-WHERE NOT EXISTS (SELECT 1 FROM statuses WHERE organization_id = '00000000-0000-0000-0000-000000000001' AND project_id IS NULL AND type = 'project' LIMIT 1);
+VALUES
+  ('10000000-0000-0000-0000-000000000001', NULL, '00000000-0000-0000-0000-000000000001', E'new\u672a\u7740\u624b', '#6B7280', 1, 'issue'),
+  ('10000000-0000-0000-0000-000000000002', NULL, '00000000-0000-0000-0000-000000000001', E'new\u9032\u884c\u4e2d', '#3B82F6', 2, 'issue'),
+  ('10000000-0000-0000-0000-000000000003', NULL, '00000000-0000-0000-0000-000000000001', E'new\u30ec\u30d3\u30e5\u30fc\u4e2d', '#F59E0B', 3, 'issue'),
+  ('10000000-0000-0000-0000-000000000004', NULL, '00000000-0000-0000-0000-000000000001', E'new\u5b8c\u4e86', '#10B981', 4, 'issue')
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  color = EXCLUDED.color,
+  "order" = EXCLUDED."order",
+  type = EXCLUDED.type;
+
+-- Project用: プロジェクトのライフサイクル（計画中, 進行中, 完了）
+INSERT INTO statuses (id, project_id, organization_id, name, color, "order", type)
+VALUES
+  ('20000000-0000-0000-0000-000000000001', NULL, '00000000-0000-0000-0000-000000000001', E'new\u8a08\u753b\u4e2d', '#6B7280', 1, 'project'),
+  ('20000000-0000-0000-0000-000000000002', NULL, '00000000-0000-0000-0000-000000000001', E'new\u9032\u884c\u4e2d', '#3B82F6', 2, 'project'),
+  ('20000000-0000-0000-0000-000000000003', NULL, '00000000-0000-0000-0000-000000000001', E'new\u5b8c\u4e86', '#10B981', 3, 'project')
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  color = EXCLUDED.color,
+  "order" = EXCLUDED."order",
+  type = EXCLUDED.type;
 
 -- 13. WorkflowStep: Phase 5 承認対象拡張
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS approver_type VARCHAR(20) DEFAULT 'role';
@@ -131,6 +146,9 @@ ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS approver_user_id UUID;
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS min_approvers INTEGER DEFAULT 1;
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS exclude_reporter BOOLEAN DEFAULT false;
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS exclude_assignee BOOLEAN DEFAULT false;
+
+-- 13c. projects.status カラム削除（ステータステーブル参照に移行したため未使用）
+ALTER TABLE projects DROP COLUMN IF EXISTS status;
 
 -- 14. Display order columns for drag-and-drop reordering
 ALTER TABLE roles ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 1;
