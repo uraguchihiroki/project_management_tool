@@ -39,7 +39,7 @@ func (r *statusRepository) FindByOrganizationID(orgID uuid.UUID) ([]model.Status
 func (r *statusRepository) FindByOrganizationIDAndType(orgID uuid.UUID, statusType string) ([]model.Status, error) {
 	var statuses []model.Status
 	q := r.db.Where(
-		"project_id IN (SELECT id FROM projects WHERE organization_id = ?) OR organization_id = ?",
+		"project_id IN (SELECT id FROM projects WHERE organization_id = ?) OR organization_id = ? OR status_key IN ('sts_start','sts_goal')",
 		orgID, orgID,
 	)
 	if statusType == "issue" || statusType == "project" {

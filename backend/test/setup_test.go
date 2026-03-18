@@ -91,10 +91,14 @@ func newTestServer(t *testing.T) *testServer {
 		{uuid.New(), "進行中", "#3B82F6", 2, ""},
 		{uuid.New(), "完了", "#10B981", 3, ""},
 	} {
+		orgID := &frsOrg.ID
+		if ds.Key != "" {
+			orgID = nil // sts_start, sts_goal はグローバル（全会社共通）
+		}
 		s := &model.Status{
 			ID:             ds.ID,
 			ProjectID:      nil,
-			OrganizationID: &frsOrg.ID,
+			OrganizationID: orgID,
 			Name:           ds.Name,
 			Color:          ds.Color,
 			Order:          ds.Order,

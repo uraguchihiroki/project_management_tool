@@ -197,12 +197,14 @@ CREATE TABLE IF NOT EXISTS approval_objects (
 ALTER TABLE statuses ADD COLUMN IF NOT EXISTS status_key VARCHAR(50);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_statuses_status_key ON statuses(status_key) WHERE status_key IS NOT NULL AND status_key != '';
 
--- sts_start, sts_goal システムステータス（FRS組織）
+-- sts_start, sts_goal システムステータス（全会社共通・グローバル）
 INSERT INTO statuses (id, project_id, organization_id, name, color, "order", type, status_key)
 VALUES
-  ('30000000-0000-0000-0000-000000000001', NULL, '00000000-0000-0000-0000-000000000001', 'sts_start', '#9CA3AF', 0, 'issue', 'sts_start'),
-  ('30000000-0000-0000-0000-000000000002', NULL, '00000000-0000-0000-0000-000000000001', 'sts_goal', '#9CA3AF', 99, 'issue', 'sts_goal')
-ON CONFLICT (id) DO UPDATE SET status_key = EXCLUDED.status_key, name = EXCLUDED.name;
+  ('30000000-0000-0000-0000-000000000001', NULL, NULL, 'sts_start', '#9CA3AF', 0, 'issue', 'sts_start'),
+  ('30000000-0000-0000-0000-000000000002', NULL, NULL, 'sts_goal', '#9CA3AF', 99, 'issue', 'sts_goal')
+ON CONFLICT (id) DO UPDATE SET status_key = EXCLUDED.status_key, name = EXCLUDED.name, organization_id = NULL;
+
+UPDATE statuses SET organization_id = NULL WHERE status_key IN ('sts_start','sts_goal');
 
 -- workflow_steps: next_status_id 追加
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS next_status_id UUID REFERENCES statuses(id);

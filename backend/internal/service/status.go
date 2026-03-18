@@ -57,6 +57,9 @@ func (s *statusService) Update(id uuid.UUID, name, color string, order int) (*mo
 	if err != nil {
 		return nil, err
 	}
+	if status.StatusKey == "sts_start" || status.StatusKey == "sts_goal" {
+		return nil, fmt.Errorf("システムステータスは変更できません")
+	}
 	if name != "" {
 		if len(name) > 50 {
 			return nil, fmt.Errorf("ステータス名は50文字以内で指定してください")
@@ -77,6 +80,13 @@ func (s *statusService) Update(id uuid.UUID, name, color string, order int) (*mo
 }
 
 func (s *statusService) Delete(id uuid.UUID) error {
+	status, err := s.statusRepo.FindByID(id)
+	if err != nil {
+		return err
+	}
+	if status.StatusKey == "sts_start" || status.StatusKey == "sts_goal" {
+		return fmt.Errorf("システムステータスは削除できません")
+	}
 	count, err := s.statusRepo.CountInUse(id)
 	if err != nil {
 		return err

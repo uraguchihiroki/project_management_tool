@@ -30,8 +30,10 @@ async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
   const res = await fetch(`${API}/organizations/${orgId}/statuses?type=issue`)
   const json = await res.json()
   const data: Status[] = json.data ?? []
-  // 組織用ステータスのみ表示（プロジェクト固有を除外）
-  return data.filter((s) => s.organization_id && !s.project_id)
+  // 組織用ステータス + システムステータス（sts_start, sts_goal）を表示。プロジェクト固有を除外
+  return data.filter((s) =>
+    !s.project_id && (s.organization_id || s.status_key === 'sts_start' || s.status_key === 'sts_goal')
+  )
 }
 
 const emptyStep: { status_id: string; next_status_id: string; description: string; threshold: number } = {

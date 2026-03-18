@@ -12,7 +12,9 @@ async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
   const res = await fetch(`${API}/organizations/${orgId}/statuses`)
   const json = await res.json()
   const data: Status[] = json.data ?? []
-  return data.filter((s) => s.organization_id && !s.project_id)
+  return data.filter((s) =>
+    !s.project_id && (s.organization_id || s.status_key === 'sts_start' || s.status_key === 'sts_goal')
+  )
 }
 
 export default function StatusesPage() {
@@ -290,24 +292,30 @@ export default function StatusesPage() {
                   <td className="px-4 py-3 text-sm text-gray-500">{s.order}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
-                      <button
-                        onClick={() => startEdit(s)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="編集"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`「${s.name}」を削除しますか？`)) {
-                            deleteMutation.mutate(s.id)
-                          }
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="削除"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {(s.status_key !== 'sts_start' && s.status_key !== 'sts_goal') ? (
+                        <>
+                          <button
+                            onClick={() => startEdit(s)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="編集"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`「${s.name}」を削除しますか？`)) {
+                                deleteMutation.mutate(s.id)
+                              }
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="削除"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-400">システム</span>
+                      )}
                     </div>
                   </td>
                 </tr>

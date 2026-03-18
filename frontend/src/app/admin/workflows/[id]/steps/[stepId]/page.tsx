@@ -16,7 +16,9 @@ async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
   const res = await fetch(`${API}/organizations/${orgId}/statuses?type=issue`)
   const json = await res.json()
   const data: Status[] = json.data ?? []
-  return data.filter((s) => s.organization_id && !s.project_id)
+  return data.filter((s) =>
+    !s.project_id && (s.organization_id || s.status_key === 'sts_start' || s.status_key === 'sts_goal')
+  )
 }
 
 async function fetchRoles(orgId?: string): Promise<Role[]> {
