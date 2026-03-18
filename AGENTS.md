@@ -42,3 +42,4 @@ project_management_tool/
 1. **レイヤー責務を守る**: Handler は HTTP の入出力のみ。ビジネスロジックは Service、DB 操作は Repository。
 2. **テストを実行**: `cd backend && go test ./test/... -v` でブラックボックステストを実行。
 3. **API / DB 変更時**: `.sdd/api-spec.md` および `.sdd/db-schema.md` を更新する。
+4. **バックエンド起動**: `go run` は使わない。毎回別の一時パスにビルドされるため、Windows ファイアウォールが毎回ブロックする。必ず `go build -o server.exe ./cmd/server` してから `.\server.exe` を実行する。
