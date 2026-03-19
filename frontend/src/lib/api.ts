@@ -194,7 +194,7 @@ export const updateWorkflowStep = (
       exclude_assignee?: boolean
     }>
   }
-) => api.put<ApiResponse<WorkflowStep>>(`/workflows/${workflowId}/steps/${stepId}`, data).then((r) => r.data.data)
+) => api.put<ApiResponse<WorkflowStep>>(`/workflow-steps/${stepId}`, data).then((r) => r.data.data)
 
 export const deleteWorkflowStep = (workflowId: string, stepId: string) =>
   api.delete(`/workflows/${workflowId}/steps/${stepId}`)

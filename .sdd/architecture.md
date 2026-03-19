@@ -2,6 +2,8 @@
 
 ## 概要
 
+> **設計原則**: 開発はローカル、運用はGCP等のクラウド。詳細は [principles.md](principles.md) を参照。
+
 Jira / Redmine ライクなチケットベースのプロジェクト管理ツール。  
 Go 製 REST API + Next.js フロントエンド + PostgreSQL の3層構成。  
 マルチテナント対応（組織ごとにデータを分離）。
