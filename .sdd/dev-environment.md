@@ -99,10 +99,11 @@ flowchart TB
 2. `bash scripts/setup-wsl.sh` でツールをインストール
 3. `sudo service docker start` で Docker を起動
 4. Windows で Cursor を起動 → WSL に接続 → `~/work/AI/project_management_tool` を開く
+5. 初回のみ: バックエンドを一度起動してマイグレーションを実行後、`cat backend/seed.sql | docker exec -i pmt_db psql -U pmt_user -d pmt_db` で初期データを投入
 
 ---
 
-## 日常の起動手順
+## 毎回の起動手順
 
 1. `sudo service docker start` で Docker を起動
 2. Windows で Cursor を起動 → WSL に接続 → プロジェクトフォルダを開く
