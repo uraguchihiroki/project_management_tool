@@ -51,12 +51,15 @@ func newTestServer(t *testing.T) *testServer {
 		&model.Role{},
 		&model.User{},
 		&model.OrganizationUser{},
+		&model.Department{},
+		&model.OrganizationUserDepartment{},
 		&model.Project{},
 		&model.Status{},
 		&model.Issue{},
 		&model.Comment{},
 		&model.Workflow{},
 		&model.WorkflowStep{},
+		&model.ApprovalObject{},
 		&model.IssueTemplate{},
 		&model.IssueApproval{},
 	); err != nil {
@@ -71,9 +74,44 @@ func newTestServer(t *testing.T) *testServer {
 	}
 	db.Create(&frsOrg)
 
+	// 組織用デフォルトステータス（プロジェクト未割当Issue用）
+	statusRepo := repository.NewStatusRepository(db)
+	stsStartID := uuid.MustParse("30000000-0000-0000-0000-000000000001")
+	stsGoalID := uuid.MustParse("30000000-0000-0000-0000-000000000002")
+	for _, ds := range []struct {
+		ID    uuid.UUID
+		Name  string
+		Color string
+		Order int
+		Key   string
+	}{
+		{stsStartID, "sts_start", "#9CA3AF", 0, "sts_start"},
+		{stsGoalID, "sts_goal", "#9CA3AF", 99, "sts_goal"},
+		{uuid.New(), "未着手", "#6B7280", 1, ""},
+		{uuid.New(), "進行中", "#3B82F6", 2, ""},
+		{uuid.New(), "完了", "#10B981", 3, ""},
+	} {
+		orgID := &frsOrg.ID
+		if ds.Key != "" {
+			orgID = nil // sts_start, sts_goal はグローバル（全会社共通）
+		}
+		s := &model.Status{
+			ID:             ds.ID,
+			ProjectID:      nil,
+			OrganizationID: orgID,
+			Name:           ds.Name,
+			Color:          ds.Color,
+			Order:          ds.Order,
+			Type:           "issue",
+		}
+		if ds.Key != "" {
+			s.StatusKey = ds.Key
+		}
+		statusRepo.Create(s)
+	}
+
 	userRepo := repository.NewUserRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
-	statusRepo := repository.NewStatusRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
@@ -82,17 +120,20 @@ func newTestServer(t *testing.T) *testServer {
 	approvalRepo := repository.NewApprovalRepository(db)
 	orgRepo := repository.NewOrganizationRepository(db)
 	superAdminRepo := repository.NewSuperAdminRepository(db)
+	departmentRepo := repository.NewDepartmentRepository(db)
 
 	userSvc := service.NewUserService(userRepo, orgRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
+	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
 	commentSvc := service.NewCommentService(commentRepo)
 	roleSvc := service.NewRoleService(roleRepo)
-	workflowSvc := service.NewWorkflowService(workflowRepo)
+	workflowSvc := service.NewWorkflowService(workflowRepo, statusRepo)
 	templateSvc := service.NewTemplateService(templateRepo)
 	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
+	statusSvc := service.NewStatusService(statusRepo)
 
 	userH := handler.NewUserHandler(userSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
@@ -104,6 +145,8 @@ func newTestServer(t *testing.T) *testServer {
 	approvalH := handler.NewApprovalHandler(approvalSvc)
 	orgH := handler.NewOrganizationHandler(orgSvc)
 	superAdminH := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
+	departmentH := handler.NewDepartmentHandler(departmentSvc)
+	statusH := handler.NewStatusHandler(statusSvc)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -118,30 +161,42 @@ func newTestServer(t *testing.T) *testServer {
 	api.PUT("/users/:id/roles", roleH.AssignRoles)
 	api.GET("/roles", roleH.List)
 	api.POST("/roles", roleH.Create)
+	api.PUT("/roles/bulk/reorder", roleH.Reorder)
 	api.PUT("/roles/:id", roleH.Update)
 	api.DELETE("/roles/:id", roleH.Delete)
 	api.GET("/workflows", workflowH.List)
 	api.POST("/workflows", workflowH.Create)
+	api.PUT("/workflows/reorder", workflowH.Reorder)
 	api.GET("/workflows/:id", workflowH.Get)
 	api.PUT("/workflows/:id", workflowH.Update)
 	api.DELETE("/workflows/:id", workflowH.Delete)
 	api.POST("/workflows/:id/steps", workflowH.AddStep)
+	api.GET("/workflows/:id/steps/:stepId", workflowH.GetStep)
+	api.PUT("/workflows/:id/steps/reorder", workflowH.ReorderSteps)
 	api.PUT("/workflows/:id/steps/:stepId", workflowH.UpdateStep)
 	api.DELETE("/workflows/:id/steps/:stepId", workflowH.DeleteStep)
-	api.GET("/projects/:projectId/workflows", workflowH.ListByProject)
 	api.GET("/templates", templateH.List)
 	api.POST("/templates", templateH.Create)
 	api.GET("/templates/:id", templateH.Get)
 	api.PUT("/templates/:id", templateH.Update)
 	api.DELETE("/templates/:id", templateH.Delete)
 	api.GET("/projects/:projectId/templates", templateH.ListByProject)
+	api.PUT("/projects/:projectId/templates/reorder", templateH.Reorder)
 	api.GET("/issues/:issueId/approvals", approvalH.List)
 	api.POST("/approvals/:id/approve", approvalH.Approve)
+	api.POST("/issues/:issueId/steps/:stepId/approve", approvalH.ApproveStep)
 	api.POST("/approvals/:id/reject", approvalH.Reject)
 	api.GET("/organizations", orgH.List)
 	api.POST("/organizations", orgH.Create)
 	api.GET("/users/:id/organizations", orgH.ListByUser)
 	api.POST("/organizations/:orgId/users", orgH.AddUser)
+	api.GET("/organizations/:orgId/departments", departmentH.List)
+	api.POST("/organizations/:orgId/departments", departmentH.Create)
+	api.PUT("/organizations/:orgId/departments/reorder", departmentH.Reorder)
+	api.PUT("/organizations/:orgId/departments/:id", departmentH.Update)
+	api.DELETE("/organizations/:orgId/departments/:id", departmentH.Delete)
+	api.GET("/users/:id/departments", departmentH.GetUserDepartments)
+	api.PUT("/users/:id/departments", departmentH.SetUserDepartments)
 	api.POST("/super-admin/login", superAdminH.Login)
 	api.GET("/super-admin/organizations", superAdminH.ListOrganizations)
 	api.POST("/super-admin/organizations", superAdminH.CreateOrganization)
@@ -150,12 +205,22 @@ func newTestServer(t *testing.T) *testServer {
 	api.PUT("/admin/users/:id", userH.UpdateUser)
 	api.DELETE("/admin/users/:id", userH.RemoveFromOrg)
 	api.GET("/projects", projectH.List)
+	api.GET("/organizations/:orgId/statuses", projectH.ListStatusesByOrg)
+	api.POST("/organizations/:orgId/statuses", statusH.Create)
+	api.PUT("/statuses/:id", statusH.Update)
+	api.DELETE("/statuses/:id", statusH.Delete)
 	api.POST("/projects", projectH.Create)
+	api.PUT("/projects/reorder", projectH.Reorder)
 	api.GET("/projects/:id", projectH.Get)
 	api.PUT("/projects/:id", projectH.Update)
 	api.DELETE("/projects/:id", projectH.Delete)
 	api.GET("/projects/:projectId/issues", issueH.List)
 	api.POST("/projects/:projectId/issues", issueH.Create)
+	api.GET("/organizations/:orgId/issues", issueH.ListByOrg)
+	api.POST("/organizations/:orgId/issues", issueH.CreateForOrg)
+	api.GET("/organizations/:orgId/issues/:number", issueH.GetByOrgAndNumber)
+	api.PUT("/organizations/:orgId/issues/:number", issueH.UpdateByOrgAndNumber)
+	api.DELETE("/organizations/:orgId/issues/:number", issueH.DeleteByOrgAndNumber)
 	api.GET("/projects/:projectId/issues/:number", issueH.Get)
 	api.PUT("/projects/:projectId/issues/:number", issueH.Update)
 	api.DELETE("/projects/:projectId/issues/:number", issueH.Delete)
@@ -300,4 +365,18 @@ func getFirstStatusID(t *testing.T, ts *testServer, projectID string) string {
 		t.Fatal("project has no statuses")
 	}
 	return statuses[0].(map[string]interface{})["id"].(string)
+}
+
+// getStatusIDs はプロジェクトのステータスIDを返します
+func getStatusIDs(t *testing.T, ts *testServer, projectID string) []string {
+	t.Helper()
+	status, resp := ts.req(t, "GET", "/api/v1/projects/"+projectID, nil)
+	assertStatus(t, status, http.StatusOK, "getProject for status")
+	data := resp["data"].(map[string]interface{})
+	statuses := data["statuses"].([]interface{})
+	ids := make([]string, len(statuses))
+	for i, s := range statuses {
+		ids[i] = s.(map[string]interface{})["id"].(string)
+	}
+	return ids
 }

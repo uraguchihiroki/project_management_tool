@@ -4,6 +4,14 @@ export interface Organization {
   created_at: string
 }
 
+export interface Department {
+  id: string
+  organization_id: string
+  name: string
+  order: number
+  created_at: string
+}
+
 export interface SuperAdmin {
   id: string
   name: string
@@ -36,16 +44,22 @@ export interface Project {
   description?: string
   owner_id: string
   owner: User
+  organization_id?: string
+  start_date?: string
+  end_date?: string
   statuses?: Status[]
   created_at: string
 }
 
 export interface Status {
   id: string
-  project_id: string
+  project_id?: string
+  organization_id?: string
   name: string
   color: string
   order: number
+  type?: 'issue' | 'project'
+  status_key?: string // sts_start, sts_goal。空=ユーザー定義
 }
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical'
@@ -88,7 +102,8 @@ export interface Issue {
   assignee?: User
   reporter_id: string
   reporter: User
-  project_id: string
+  organization_id: string
+  project_id?: string
   due_date?: string
   template_id?: number
   workflow_id?: number
@@ -107,20 +122,38 @@ export interface Comment {
   updated_at: string
 }
 
+export interface ApprovalObject {
+  id: number
+  workflow_step_id: number
+  order: number
+  type: 'role' | 'user'
+  role_id?: number
+  role?: Role
+  role_operator?: 'eq' | 'gte'
+  user_id?: string
+  user?: User
+  points: number
+  exclude_reporter: boolean
+  exclude_assignee: boolean
+}
+
 export interface WorkflowStep {
   id: number
   workflow_id: number
   order: number
-  name: string
-  required_level: number
-  status_id?: string
+  status_id: string
   status?: Status
+  next_status_id?: string
+  next_status?: Status
+  description?: string
+  threshold?: number
+  approval_objects?: ApprovalObject[]
+  exclude_reporter?: boolean
+  exclude_assignee?: boolean
 }
 
 export interface Workflow {
   id: number
-  project_id: string
-  project?: Project
   name: string
   description: string
   steps?: WorkflowStep[]

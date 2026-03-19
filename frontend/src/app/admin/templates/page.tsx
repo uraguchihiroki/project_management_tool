@@ -6,6 +6,7 @@ import { Plus, Pencil, Trash2, X, Check, GitBranch } from 'lucide-react'
 import { getTemplates, getProjects, createTemplate, updateTemplate, deleteTemplate } from '@/lib/api'
 import type { IssueTemplate, Project, Workflow } from '@/types'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
+import { SortableList, DragHandle } from '@/components/SortableList'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -77,6 +78,21 @@ export default function TemplatesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] }),
   })
 
+  const [reorderPending, setReorderPending] = useState<string | null>(null)
+  const reorderMutation = useMutation({
+    mutationFn: async ({ projectId, ids }: { projectId: string; ids: number[] }) => {
+      const res = await fetch(`${API}/projects/${projectId}/templates/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) throw new Error('並び替えに失敗しました')
+    },
+    onMutate: ({ projectId }) => setReorderPending(projectId),
+    onSettled: () => setReorderPending(null),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] }),
+  })
+
   const startEdit = (tmpl: IssueTemplate) => {
     setEditingId(tmpl.id)
     setForm({
@@ -102,10 +118,8 @@ export default function TemplatesPage() {
     }
   }
 
-  // プロジェクトの絞り込み済みワークフロー
-  const filteredWorkflows = form.project_id
-    ? workflows.filter((w) => w.project_id === form.project_id)
-    : workflows
+  // ワークフローは組織に属さないため全件表示
+  const filteredWorkflows = workflows
 
   const getProjectName = (id: string) => {
     const p = projects.find((p: Project) => p.id === id)
@@ -269,53 +283,57 @@ export default function TemplatesPage() {
                 {getProjectName(projectId)}
               </p>
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                {tmpls.map((tmpl, idx) => (
-                  <div
-                    key={tmpl.id}
-                    className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${idx !== 0 ? 'border-t border-gray-100' : ''}`}
-                  >
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-gray-900 text-sm">{tmpl.name}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_COLORS[tmpl.default_priority]}`}>
-                          {PRIORITY_LABELS[tmpl.default_priority]}
-                        </span>
-                        {tmpl.workflow && (
-                          <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                            <GitBranch className="w-3 h-3" />
-                            {tmpl.workflow.name}
+                <SortableList
+                  items={tmpls}
+                  itemId={(t) => String(t.id)}
+                  onReorder={(ids) => reorderMutation.mutate({ projectId, ids: ids.map(Number) })}
+                  disabled={reorderPending === projectId}
+                  renderItem={(tmpl, { handleProps, setNodeRef, style }) => (
+                    <div ref={setNodeRef} style={style} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-t border-gray-100 first:border-t-0">
+                      <DragHandle handleProps={handleProps} className="pt-0.5" />
+                      <div className="flex-1 min-w-0 pt-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-gray-900 text-sm">{tmpl.name}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_COLORS[tmpl.default_priority]}`}>
+                            {PRIORITY_LABELS[tmpl.default_priority]}
                           </span>
+                          {tmpl.workflow && (
+                            <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                              <GitBranch className="w-3 h-3" />
+                              {tmpl.workflow.name}
+                            </span>
+                          )}
+                        </div>
+                        {tmpl.description && (
+                          <p className="text-xs text-gray-400 mt-0.5">{tmpl.description}</p>
+                        )}
+                        {tmpl.body && (
+                          <p className="text-xs text-gray-300 mt-1 font-mono truncate">{tmpl.body.split('\n')[0]}</p>
                         )}
                       </div>
-                      {tmpl.description && (
-                        <p className="text-xs text-gray-400 mt-0.5">{tmpl.description}</p>
-                      )}
-                      {tmpl.body && (
-                        <p className="text-xs text-gray-300 mt-1 font-mono truncate">{tmpl.body.split('\n')[0]}</p>
-                      )}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => startEdit(tmpl)}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="編集"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`「${tmpl.name}」を削除しますか？`)) {
+                              deleteMutation.mutate(tmpl.id)
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="削除"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => startEdit(tmpl)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="編集"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`「${tmpl.name}」を削除しますか？`)) {
-                            deleteMutation.mutate(tmpl.id)
-                          }
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="削除"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  )}
+                />
               </div>
             </div>
           ))}

@@ -141,11 +141,39 @@ func TestTemplate_Delete(t *testing.T) {
 	})
 }
 
+func TestTemplate_Reorder(t *testing.T) {
+	ts := newTestServer(t)
+	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
+	projectID := createTestProject(t, ts, "TM", "テンプレート並び替え", ownerID)
+	_, r1 := ts.req(t, "POST", "/api/v1/templates", map[string]interface{}{
+		"project_id": projectID, "name": "テンプレートA", "description": "A",
+	})
+	_, r2 := ts.req(t, "POST", "/api/v1/templates", map[string]interface{}{
+		"project_id": projectID, "name": "テンプレートB", "description": "B",
+	})
+	tmplID1 := uint(mustGetFloat(t, r1, "data", "id"))
+	tmplID2 := uint(mustGetFloat(t, r2, "data", "id"))
+
+	status, _ := ts.req(t, "PUT", "/api/v1/projects/"+projectID+"/templates/reorder", map[string]interface{}{
+		"ids": []uint{tmplID2, tmplID1},
+	})
+	assertStatus(t, status, http.StatusNoContent, "reorder templates")
+
+	status, listResp := ts.req(t, "GET", "/api/v1/projects/"+projectID+"/templates", nil)
+	assertStatus(t, status, http.StatusOK, "list after reorder")
+	arr := mustGetArray(t, listResp, "data")
+	if len(arr) != 2 {
+		t.Fatalf("expected 2 templates, got %d", len(arr))
+	}
+	assertField(t, mustGetString(t, arr[0].(map[string]interface{}), "name"), "テンプレートB", "first after reorder")
+	assertField(t, mustGetString(t, arr[1].(map[string]interface{}), "name"), "テンプレートA", "second after reorder")
+}
+
 func TestTemplate_WithWorkflow(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	projectID := createTestProject(t, ts, "TM", "テストプロジェクト", ownerID)
-	wfID := createTestWorkflow(t, ts, projectID, "申請フロー")
+	wfID := createTestWorkflow(t, ts, "申請フロー")
 
 	t.Run("ワークフローを紐付けてテンプレートを作成できる", func(t *testing.T) {
 		wfIDUint := uint(0)
@@ -170,7 +198,7 @@ func TestIssue_CreateFromTemplate(t *testing.T) {
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
 	projectID := createTestProject(t, ts, "TM", "テストプロジェクト", ownerID)
 	statusID := getFirstStatusID(t, ts, projectID)
-	wfID := createTestWorkflow(t, ts, projectID, "申請フロー")
+	wfID := createTestWorkflow(t, ts, "申請フロー")
 
 	wfIDUint := uint(0)
 	fmt.Sscanf(wfID, "%d", &wfIDUint)

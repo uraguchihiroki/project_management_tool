@@ -48,7 +48,13 @@ func (h *RoleHandler) Create(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "役職名は必須です")
+	}
+	if len(req.Name) > 100 {
+		return echo.NewHTTPError(http.StatusBadRequest, "役職名は100文字以内で指定してください")
+	}
+	if req.Level < 0 || req.Level > 9999 {
+		return echo.NewHTTPError(http.StatusBadRequest, "レベルは0～9999の範囲で指定してください")
 	}
 	var orgID *uuid.UUID
 	if req.OrganizationID != "" {
@@ -81,13 +87,42 @@ func (h *RoleHandler) Update(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+		return echo.NewHTTPError(http.StatusBadRequest, "役職名は必須です")
+	}
+	if len(req.Name) > 100 {
+		return echo.NewHTTPError(http.StatusBadRequest, "役職名は100文字以内で指定してください")
+	}
+	if req.Level < 0 || req.Level > 9999 {
+		return echo.NewHTTPError(http.StatusBadRequest, "レベルは0～9999の範囲で指定してください")
 	}
 	role, err := h.roleService.UpdateRole(uint(id), req.Name, req.Level, req.Description)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": role})
+}
+
+// PUT /api/v1/roles/reorder
+func (h *RoleHandler) Reorder(c echo.Context) error {
+	var orgID *uuid.UUID
+	if raw := c.QueryParam("org_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+		}
+		orgID = &parsed
+	}
+	type Request struct {
+		IDs []uint `json:"ids"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := h.roleService.Reorder(orgID, req.IDs); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // DELETE /api/v1/roles/:id

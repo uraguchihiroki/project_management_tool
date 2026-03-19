@@ -5,13 +5,25 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Shield, ShieldOff, X, Check, Plus, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from '@/lib/api'
-import type { Role, User } from '@/types'
+import type { Role, User, Department } from '@/types'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
 async function fetchRoles(orgId?: string): Promise<Role[]> {
   const url = orgId ? `${API}/roles?org_id=${orgId}` : `${API}/roles`
   const res = await fetch(url)
+  const json = await res.json()
+  return json.data ?? []
+}
+
+async function fetchDepartments(orgId: string): Promise<Department[]> {
+  const res = await fetch(`${API}/organizations/${orgId}/departments`)
+  const json = await res.json()
+  return json.data ?? []
+}
+
+async function fetchUserDepartments(orgId: string, userId: string): Promise<Department[]> {
+  const res = await fetch(`${API}/users/${userId}/departments?org_id=${orgId}`)
   const json = await res.json()
   return json.data ?? []
 }
@@ -29,13 +41,21 @@ export default function AdminUsersPage() {
     queryFn: () => fetchRoles(currentOrg?.id),
     enabled: !!currentOrg?.id,
   })
+  const { data: allDepartments = [] } = useQuery({
+    queryKey: ['departments', currentOrg?.id],
+    queryFn: () => fetchDepartments(currentOrg!.id),
+    enabled: !!currentOrg?.id,
+  })
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [createForm, setCreateForm] = useState({ name: '', email: '' })
   const [editingNameUserId, setEditingNameUserId] = useState<string | null>(null)
   const [editingRoleUserId, setEditingRoleUserId] = useState<string | null>(null)
+  const [editingDeptUserId, setEditingDeptUserId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([])
+  const [selectedDeptIds, setSelectedDeptIds] = useState<string[]>([])
+  const [userDepartmentsCache, setUserDepartmentsCache] = useState<Record<string, Department[]>>({})
 
   const createMutation = useMutation({
     mutationFn: () => createAdminUser(currentOrg!.id, createForm.name, createForm.email),
@@ -86,9 +106,33 @@ export default function AdminUsersPage() {
     },
   })
 
+  const assignDepartmentsMutation = useMutation({
+    mutationFn: async ({ userId, deptIds }: { userId: string; deptIds: string[] }) => {
+      const res = await fetch(`${API}/users/${userId}/departments?org_id=${currentOrg!.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ department_ids: deptIds }),
+      })
+      if (!res.ok) throw new Error('部署の更新に失敗しました')
+    },
+    onSuccess: (_, { userId, deptIds }) => {
+      const depts = allDepartments.filter((d) => deptIds.includes(d.id))
+      setUserDepartmentsCache((c) => ({ ...c, [userId]: depts }))
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      setEditingDeptUserId(null)
+    },
+  })
+
   const startRoleEdit = (user: User) => {
     setEditingRoleUserId(user.id)
     setSelectedRoleIds((user.roles ?? []).map((r) => r.id))
+  }
+
+  const startDeptEdit = async (user: User) => {
+    setEditingDeptUserId(user.id)
+    const depts = await fetchUserDepartments(currentOrg!.id, user.id)
+    setSelectedDeptIds(depts.map((d) => d.id))
+    setUserDepartmentsCache((c) => ({ ...c, [user.id]: depts }))
   }
 
   const startNameEdit = (user: User) => {
@@ -99,6 +143,12 @@ export default function AdminUsersPage() {
   const toggleRole = (roleId: number) => {
     setSelectedRoleIds((prev) =>
       prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId]
+    )
+  }
+
+  const toggleDept = (deptId: string) => {
+    setSelectedDeptIds((prev) =>
+      prev.includes(deptId) ? prev.filter((id) => id !== deptId) : [...prev, deptId]
     )
   }
 
@@ -189,6 +239,7 @@ export default function AdminUsersPage() {
               <tr>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">ユーザー</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">役職</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">部署</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-24">管理者</th>
                 <th className="px-4 py-3 w-32"></th>
               </tr>
@@ -301,6 +352,69 @@ export default function AdminUsersPage() {
                       </button>
                     ) : null}
                   </td>
+                  <td className="px-4 py-3">
+                    {editingDeptUserId === user.id ? (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {allDepartments.length === 0 ? (
+                            <span className="text-xs text-gray-400">部署がありません</span>
+                          ) : (
+                            allDepartments.map((dept) => (
+                              <button
+                                key={dept.id}
+                                onClick={() => toggleDept(dept.id)}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
+                                  selectedDeptIds.includes(dept.id)
+                                    ? 'bg-green-100 text-green-700 border-green-300'
+                                    : 'bg-white text-gray-500 border-gray-300 hover:border-green-300'
+                                }`}
+                              >
+                                {dept.name}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => assignDepartmentsMutation.mutate({ userId: user.id, deptIds: selectedDeptIds })}
+                            disabled={assignDepartmentsMutation.isPending}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white rounded-md text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                          >
+                            <Check className="w-3 h-3" />
+                            保存
+                          </button>
+                          <button
+                            onClick={() => setEditingDeptUserId(null)}
+                            className="flex items-center gap-1 px-2.5 py-1 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                            キャンセル
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startDeptEdit(user)}
+                        className="flex flex-wrap gap-1 group"
+                        title="クリックして部署を編集"
+                      >
+                        {(userDepartmentsCache[user.id] ?? []).length === 0 && editingDeptUserId !== user.id ? (
+                          <span className="text-xs text-gray-400 group-hover:text-blue-500 transition-colors">
+                            部署なし（クリックして設定）
+                          </span>
+                        ) : (
+                          (userDepartmentsCache[user.id] ?? []).map((dept) => (
+                            <span
+                              key={dept.id}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-md text-xs font-medium"
+                            >
+                              {dept.name}
+                            </span>
+                          ))
+                        )}
+                      </button>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <button
                       onClick={() => {
@@ -319,13 +433,19 @@ export default function AdminUsersPage() {
                     </button>
                   </td>
                   <td className="px-4 py-3">
-                    {editingNameUserId !== user.id && editingRoleUserId !== user.id && (
+                    {editingNameUserId !== user.id && editingRoleUserId !== user.id && editingDeptUserId !== user.id && (
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => startRoleEdit(user)}
                           className="text-xs text-blue-600 hover:underline"
                         >
                           役職編集
+                        </button>
+                        <button
+                          onClick={() => startDeptEdit(user)}
+                          className="text-xs text-green-600 hover:underline"
+                        >
+                          部署編集
                         </button>
                         <button
                           onClick={() => {

@@ -1,5 +1,22 @@
 # データベース設計
 
+## 論理削除（本番環境）
+
+**本番では基本的にすべてのデータは論理削除とする。**
+
+- 全テーブルで共通のカラム名を使用する: **`deleted_at`**
+- このカラムに日時が入っていたら削除されたレコードとみなす
+- `deleted_at` が NULL のレコードのみ有効（未削除）
+- クエリ時は原則 `WHERE deleted_at IS NULL` を付与する
+
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| deleted_at | TIMESTAMP | NULL = 有効、日時が入っている = 削除済み |
+
+> **Note:** 実装時は各テーブルに `deleted_at` を追加し、Repository 層で削除時は物理削除ではなく `UPDATE ... SET deleted_at = NOW()` とする。一覧取得・検索時は `deleted_at IS NULL` を条件に含める。
+
+---
+
 ## ER図
 
 ```
@@ -83,18 +100,28 @@ comments
 
 workflows
 ├── id (PK, auto)
-├── project_id (FK → projects.id)
 ├── name
 ├── description
 └── created_at
 
-workflow_steps
+workflow_steps（ステータス参照の双方向リスト）
 ├── id (PK, auto)
 ├── workflow_id (FK → workflows.id)
+├── status_id (FK → statuses.id, NOT NULL)   # このステップのステータス。表示名は status.name を使用
+├── next_status_id (FK → statuses.id, nullable) # 承認後ステータス。ゴールでは NULL
+├── description (nullable)           # ステップの説明
+├── threshold (default 10)           # 閾値（点数合計>=で遷移）。ゴールでは無効
+approval_objects (承認オブジェクト, 1ステップ:N。goal ステップには紐づかない)
+├── id (PK, auto)
+├── workflow_step_id (FK → workflow_steps.id)
 ├── order
-├── name
-├── required_level
-└── status_id (FK → statuses.id, nullable)
+├── type (role / user)
+├── role_id (FK → roles.id, nullable)      # type=role のとき
+├── role_operator (eq / gte, nullable)     # イコール / 以上
+├── user_id (FK → users.id, nullable)      # type=user のとき
+├── points (default 1)                      # 承認時に加算する点数。同一人物は1回のみ、複数該当時は最高点で加算
+├── exclude_reporter (default false)        # 起票者をこの承認オブジェクトの承認者から除外
+└── exclude_assignee (default false)        # 担当者をこの承認オブジェクトの承認者から除外
 
 issue_templates
 ├── id (PK, auto)
@@ -189,10 +216,13 @@ issue_approvals
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | UUID | PK | ステータスID |
-| project_id | UUID | FK | 所属プロジェクト |
+| project_id | UUID | FK, nullable | 所属プロジェクト（組織用は NULL） |
+| organization_id | UUID | FK, nullable | 所属組織 |
 | name | VARCHAR(50) | NOT NULL | ステータス名 |
 | color | VARCHAR(7) | NOT NULL | HEXカラー (#RRGGBB) |
 | order | INTEGER | NOT NULL | 表示順 |
+| type | VARCHAR(20) | NOT NULL | issue / project |
+| status_key | VARCHAR(50) | nullable, UNIQUE | システム用: sts_start, sts_goal。NULL=ユーザー定義 |
 
 ### issues
 
@@ -229,21 +259,41 @@ issue_approvals
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | SERIAL | PK | ワークフローID |
-| project_id | UUID | FK | 所属プロジェクト |
 | name | VARCHAR(200) | NOT NULL | ワークフロー名 |
 | description | VARCHAR(500) | | 説明 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
-### workflow_steps
+> **Note:** ワークフローは組織に属さない（グローバル）。
+
+### workflow_steps（ステータス参照の双方向リスト）
+
+表示順は意味を持たない。status_id → next_status_id のリンクで辿る。
 
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | SERIAL | PK | ステップID |
 | workflow_id | INTEGER | FK | 所属ワークフロー |
+| status_id | UUID | FK, NOT NULL | このステップのステータス。表示名は status.name |
+| next_status_id | UUID | FK, nullable | 承認後ステータス。ゴールでは NULL |
+| description | TEXT | nullable | ステップの説明 |
+| threshold | INTEGER | NOT NULL, DEFAULT 10 | 閾値（点数合計>=で遷移）。ゴールでは無効 |
+
+**システムステータス（ユーザー変更不可）:** sts_start（最初のステップ）, sts_goal（最後のステップ）
+
+### approval_objects（承認オブジェクト）
+
+| カラム | 型 | 制約 | 説明 |
+|-------|-----|------|------|
+| id | SERIAL | PK | 承認オブジェクトID |
+| workflow_step_id | INTEGER | FK | 所属ステップ |
 | order | INTEGER | NOT NULL, DEFAULT 1 | 表示順 |
-| name | VARCHAR(200) | NOT NULL | ステップ名 |
-| required_level | INTEGER | NOT NULL, DEFAULT 1 | 承認に必要な役職レベル |
-| status_id | UUID | FK, nullable | 紐づくステータス |
+| type | VARCHAR(20) | NOT NULL | role / user |
+| role_id | INTEGER | FK, nullable | type=role のとき対象役職 |
+| role_operator | VARCHAR(10) | nullable | type=role のとき: eq（イコール）/ gte（以上） |
+| user_id | UUID | FK, nullable | type=user のとき対象ユーザー |
+| points | INTEGER | NOT NULL, DEFAULT 1 | 承認時に加算する点数 |
+| exclude_reporter | BOOLEAN | DEFAULT false | 起票者をこの承認オブジェクトの承認者から除外 |
+| exclude_assignee | BOOLEAN | DEFAULT false | 担当者をこの承認オブジェクトの承認者から除外 |
 
 ### issue_templates
 
@@ -270,6 +320,21 @@ issue_approvals
 | comment | TEXT | | コメント |
 | acted_at | TIMESTAMP | nullable | 承認/却下日時 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
+
+---
+
+## ワークフローステップ（ステータス参照の双方向リスト）
+
+表示順は意味を持たない。`status_id` → `next_status_id` のリンクで辿る。
+
+| IDX | status | 説明 | 閾値 | 承認後ステータス |
+|:----|:-------|:-----|:-----|:----------------|
+| 1 | sts_start | 最初のステップ。ユーザー変更不可 | 10 | 未着手 |
+| 2 | 未着手 | ユーザーで変更可能 | 10 | 進行中 |
+| 3 | 進行中 | ユーザーで変更可能 | 10 | sts_goal |
+| 4 | sts_goal | 最後のステップ。ユーザー変更不可 | - | - |
+
+**システムステータス:** `sts_start`, `sts_goal` は `status_key` で識別し、編集・削除不可。
 
 ---
 

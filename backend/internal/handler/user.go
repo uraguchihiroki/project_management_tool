@@ -46,6 +46,18 @@ func (h *UserHandler) Create(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+	if req.Name == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "名前は必須です")
+	}
+	if len(req.Name) > 100 {
+		return echo.NewHTTPError(http.StatusBadRequest, "名前は100文字以内で指定してください")
+	}
+	if req.Email == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "メールアドレスは必須です")
+	}
+	if len(req.Email) > 255 {
+		return echo.NewHTTPError(http.StatusBadRequest, "メールアドレスは255文字以内で指定してください")
+	}
 	user, err := h.userService.Create(req.Name, req.Email)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())

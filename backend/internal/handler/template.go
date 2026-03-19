@@ -107,6 +107,25 @@ func (h *TemplateHandler) Update(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": tmpl})
 }
 
+// PUT /api/v1/projects/:projectId/templates/reorder
+func (h *TemplateHandler) Reorder(c echo.Context) error {
+	projectID, err := uuid.Parse(c.Param("projectId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
+	}
+	type Request struct {
+		IDs []uint `json:"ids"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := h.templateService.Reorder(projectID, req.IDs); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // DELETE /api/v1/templates/:id
 func (h *TemplateHandler) Delete(c echo.Context) error {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)

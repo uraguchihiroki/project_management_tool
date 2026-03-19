@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Check } from 'lucide-react'
 import type { Role } from '@/types'
+import { SortableList, DragHandle } from '@/components/SortableList'
 
 import { useAuth } from '@/context/AuthContext'
 
@@ -78,6 +79,24 @@ export default function RolesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['roles'] }),
   })
 
+  const [reorderPending, setReorderPending] = useState(false)
+  const reorderMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const url = currentOrg?.id
+        ? `${API}/roles/bulk/reorder?org_id=${currentOrg.id}`
+        : `${API}/roles/bulk/reorder`
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) throw new Error('並び替えに失敗しました')
+    },
+    onMutate: () => setReorderPending(true),
+    onSettled: () => setReorderPending(false),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['roles'] }),
+  })
+
   const startEdit = (role: Role) => {
     setEditingId(role.id)
     setForm({ name: role.name, level: role.level, description: role.description })
@@ -88,6 +107,10 @@ export default function RolesPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name.trim()) { setError('名前は必須です'); return }
+    if (form.level < 0 || form.level > 9999) {
+      setError('レベルは0～9999の範囲で指定してください')
+      return
+    }
     if (editingId !== null) {
       updateMutation.mutate({ id: editingId, data: form })
     } else {
@@ -133,15 +156,15 @@ export default function RolesPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
-                  レベル *
-                  <span className="ml-1 font-normal text-gray-400">（大きいほど上位）</span>
+                  レベル（0～9999、大きいほど上位） *
                 </label>
                 <input
                   type="number"
-                  min={1}
-                  max={99}
+                  min={0}
+                  max={9999}
                   value={form.level}
                   onChange={(e) => setForm({ ...form, level: parseInt(e.target.value) || 1 })}
+                  placeholder="1"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -191,6 +214,7 @@ export default function RolesPage() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="w-10 px-2 py-3"></th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">役職名</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-24">レベル</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">説明</th>
@@ -198,41 +222,50 @@ export default function RolesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {roles.map((role) => (
-                <tr key={role.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-gray-900 text-sm">{role.name}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
-                      {role.level}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{role.description || '—'}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <button
-                        onClick={() => startEdit(role)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="編集"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`「${role.name}」を削除しますか？`)) {
-                            deleteMutation.mutate(role.id)
-                          }
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="削除"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              <SortableList
+                items={roles}
+                itemId={(r) => String(r.id)}
+                onReorder={(ids) => reorderMutation.mutate(ids.map(Number))}
+                disabled={reorderPending}
+                renderItem={(role, { handleProps, setNodeRef, style }) => (
+                  <tr ref={setNodeRef} style={style} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-2 py-3">
+                      <DragHandle handleProps={handleProps} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-gray-900 text-sm">{role.name}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
+                        {role.level}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{role.description || '—'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 justify-end">
+                        <button
+                          onClick={() => startEdit(role)}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="編集"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`「${role.name}」を削除しますか？`)) {
+                              deleteMutation.mutate(role.id)
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="削除"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              />
             </tbody>
           </table>
         )}

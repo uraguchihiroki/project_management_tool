@@ -15,6 +15,7 @@ type TemplateService interface {
 	CreateTemplate(projectID uuid.UUID, name, description, body, defaultPriority string, workflowID *uint) (*model.IssueTemplate, error)
 	UpdateTemplate(id uint, name, description, body, defaultPriority string, workflowID *uint) (*model.IssueTemplate, error)
 	DeleteTemplate(id uint) error
+	Reorder(projectID uuid.UUID, ids []uint) error
 }
 
 type templateService struct {
@@ -41,6 +42,10 @@ func (s *templateService) CreateTemplate(projectID uuid.UUID, name, description,
 	if defaultPriority == "" {
 		defaultPriority = "medium"
 	}
+	maxOrder, err := s.templateRepo.GetMaxOrder(projectID)
+	if err != nil {
+		return nil, err
+	}
 	template := &model.IssueTemplate{
 		ProjectID:       projectID,
 		Name:            name,
@@ -48,6 +53,7 @@ func (s *templateService) CreateTemplate(projectID uuid.UUID, name, description,
 		Body:            body,
 		DefaultPriority: defaultPriority,
 		WorkflowID:      workflowID,
+		Order:           maxOrder + 1,
 		CreatedAt:       time.Now(),
 	}
 	if err := s.templateRepo.Create(template); err != nil {
@@ -77,4 +83,8 @@ func (s *templateService) UpdateTemplate(id uint, name, description, body, defau
 
 func (s *templateService) DeleteTemplate(id uint) error {
 	return s.templateRepo.Delete(id)
+}
+
+func (s *templateService) Reorder(projectID uuid.UUID, ids []uint) error {
+	return s.templateRepo.Reorder(projectID, ids)
 }

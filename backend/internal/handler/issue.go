@@ -160,3 +160,149 @@ func (h *IssueHandler) Delete(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"message": "deleted"})
 }
+
+// GET /api/v1/organizations/:orgId/issues
+func (h *IssueHandler) ListByOrg(c echo.Context) error {
+	orgID, err := uuid.Parse(c.Param("orgId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	}
+	issues, err := h.issueService.ListByOrg(orgID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": issues})
+}
+
+// POST /api/v1/organizations/:orgId/issues
+func (h *IssueHandler) CreateForOrg(c echo.Context) error {
+	orgID, err := uuid.Parse(c.Param("orgId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	}
+	type Request struct {
+		Title       string  `json:"title" validate:"required"`
+		Description *string `json:"description"`
+		StatusID    string  `json:"status_id" validate:"required,uuid"`
+		Priority    string  `json:"priority"`
+		AssigneeID  *string `json:"assignee_id"`
+		ReporterID  string  `json:"reporter_id" validate:"required,uuid"`
+		TemplateID  *uint   `json:"template_id"`
+		WorkflowID  *uint   `json:"workflow_id"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	statusID, err := uuid.Parse(req.StatusID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid status_id")
+	}
+	reporterID, err := uuid.Parse(req.ReporterID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid reporter_id")
+	}
+	input := service.CreateIssueInput{
+		Title:       req.Title,
+		Description: req.Description,
+		StatusID:    statusID,
+		Priority:    req.Priority,
+		ReporterID:  reporterID,
+		TemplateID:  req.TemplateID,
+		WorkflowID:  req.WorkflowID,
+	}
+	if req.AssigneeID != nil {
+		aid, err := uuid.Parse(*req.AssigneeID)
+		if err == nil {
+			input.AssigneeID = &aid
+		}
+	}
+	issue, err := h.issueService.CreateForOrg(orgID, input)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	if issue.WorkflowID != nil {
+		if err := h.approvalService.InitializeForIssue(issue.ID, *issue.WorkflowID); err != nil {
+			log.Printf("failed to initialize approvals for issue %s: %v", issue.ID, err)
+		}
+	}
+	return c.JSON(http.StatusCreated, map[string]interface{}{"data": issue})
+}
+
+// GET /api/v1/organizations/:orgId/issues/:number
+func (h *IssueHandler) GetByOrgAndNumber(c echo.Context) error {
+	orgID, err := uuid.Parse(c.Param("orgId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	}
+	number, err := strconv.Atoi(c.Param("number"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid issue number")
+	}
+	issue, err := h.issueService.GetByOrgAndNumber(orgID, number)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": issue})
+}
+
+// PUT /api/v1/organizations/:orgId/issues/:number
+func (h *IssueHandler) UpdateByOrgAndNumber(c echo.Context) error {
+	orgID, err := uuid.Parse(c.Param("orgId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	}
+	number, err := strconv.Atoi(c.Param("number"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid issue number")
+	}
+	type Request struct {
+		Title       *string `json:"title"`
+		Description *string `json:"description"`
+		StatusID    *string `json:"status_id"`
+		Priority    *string `json:"priority"`
+		AssigneeID  *string `json:"assignee_id"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	input := service.UpdateIssueInput{
+		Title:       req.Title,
+		Description: req.Description,
+		Priority:    req.Priority,
+	}
+	if req.StatusID != nil {
+		sid, err := uuid.Parse(*req.StatusID)
+		if err == nil {
+			input.StatusID = &sid
+		}
+	}
+	if req.AssigneeID != nil {
+		aid, err := uuid.Parse(*req.AssigneeID)
+		if err == nil {
+			input.AssigneeID = &aid
+		}
+	}
+	issue, err := h.issueService.UpdateByOrgAndNumber(orgID, number, input)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": issue})
+}
+
+// DELETE /api/v1/organizations/:orgId/issues/:number
+func (h *IssueHandler) DeleteByOrgAndNumber(c echo.Context) error {
+	orgID, err := uuid.Parse(c.Param("orgId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	}
+	number, err := strconv.Atoi(c.Param("number"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid issue number")
+	}
+	if err := h.issueService.DeleteByOrgAndNumber(orgID, number); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"message": "deleted"})
+}

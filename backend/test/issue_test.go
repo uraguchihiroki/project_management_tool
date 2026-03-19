@@ -196,3 +196,71 @@ func TestIssue_Delete(t *testing.T) {
 		assertStatus(t, getStatus, http.StatusNotFound, "GET after DELETE issue")
 	})
 }
+
+func getFirstOrgStatusID(t *testing.T, ts *testServer, orgID string) string {
+	t.Helper()
+	status, resp := ts.req(t, "GET", "/api/v1/organizations/"+orgID+"/statuses", nil)
+	assertStatus(t, status, http.StatusOK, "getOrgStatuses")
+	data := resp["data"]
+	arr, ok := data.([]interface{})
+	if !ok || len(arr) == 0 {
+		t.Fatal("org has no statuses")
+	}
+	return arr[0].(map[string]interface{})["id"].(string)
+}
+
+func TestIssue_OrgScoped(t *testing.T) {
+	ts := newTestServer(t)
+	ownerID := createTestUser(t, ts, "オーナー", "org@example.com")
+	createTestProject(t, ts, "ORG", "組織Issueテスト", ownerID)
+	orgStatusID := getFirstOrgStatusID(t, ts, testOrgID)
+
+	t.Run("組織別にIssueを作成できる（project_idなし）", func(t *testing.T) {
+		status, resp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/issues", map[string]interface{}{
+			"title":       "組織直下Issue",
+			"status_id":   orgStatusID,
+			"reporter_id": ownerID,
+		})
+		assertStatus(t, status, http.StatusCreated, "create org-scoped issue")
+		assertField(t, mustGetString(t, resp, "data", "title"), "組織直下Issue", "title")
+		if mustGetFloat(t, resp, "data", "number") <= 0 {
+			t.Error("issue number should be positive")
+		}
+	})
+
+	t.Run("組織別Issue一覧を取得できる", func(t *testing.T) {
+		ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/issues", map[string]interface{}{
+			"title":       "一覧用Issue", "status_id": orgStatusID, "reporter_id": ownerID,
+		})
+		status, resp := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/issues", nil)
+		assertStatus(t, status, http.StatusOK, "list org issues")
+		arr := mustGetArray(t, resp, "data")
+		if len(arr) < 2 {
+			t.Errorf("expected at least 2 org issues, got %d", len(arr))
+		}
+	})
+
+	t.Run("組織別Issueは番号で取得・更新・削除できる", func(t *testing.T) {
+		_, createResp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/issues", map[string]interface{}{
+			"title": "CRUDテスト", "status_id": orgStatusID, "reporter_id": ownerID,
+		})
+		num := int(mustGetFloat(t, createResp, "data", "number"))
+
+		// Get
+		status, getResp := ts.req(t, "GET", fmt.Sprintf("/api/v1/organizations/%s/issues/%d", testOrgID, num), nil)
+		assertStatus(t, status, http.StatusOK, "get org issue")
+		assertField(t, mustGetString(t, getResp, "data", "title"), "CRUDテスト", "title")
+
+		// Update
+		ts.req(t, "PUT", fmt.Sprintf("/api/v1/organizations/%s/issues/%d", testOrgID, num),
+			map[string]string{"title": "更新後"})
+		_, upResp := ts.req(t, "GET", fmt.Sprintf("/api/v1/organizations/%s/issues/%d", testOrgID, num), nil)
+		assertField(t, mustGetString(t, upResp, "data", "title"), "更新後", "title")
+
+		// Delete
+		delStatus, _ := ts.req(t, "DELETE", fmt.Sprintf("/api/v1/organizations/%s/issues/%d", testOrgID, num), nil)
+		assertStatus(t, delStatus, http.StatusOK, "delete org issue")
+		afterStatus, _ := ts.req(t, "GET", fmt.Sprintf("/api/v1/organizations/%s/issues/%d", testOrgID, num), nil)
+		assertStatus(t, afterStatus, http.StatusNotFound, "get after delete")
+	})
+}

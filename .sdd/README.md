@@ -10,6 +10,7 @@
 |-------------|------|
 | [architecture.md](architecture.md) | システムアーキテクチャ、技術スタック、ディレクトリ構成 |
 | [layer-responsibility.md](layer-responsibility.md) | Handler / Service / Repository の責務分担と境界線 |
+| [domain-model.md](domain-model.md) | エンティティ関係・ドメインモデル |
 | [db-schema.md](db-schema.md) | データベース設計・テーブル定義 |
 | [api-spec.md](api-spec.md) | REST API 仕様・エンドポイント一覧 |
 | [key-flows.md](key-flows.md) | 認証・マルチテナント・承認の主要フロー |
@@ -22,16 +23,18 @@
 
 1. **全体像を把握する** → [architecture.md](architecture.md)
 2. **コードの書き方・責務を理解する** → [layer-responsibility.md](layer-responsibility.md)
-3. **データ構造を確認する** → [db-schema.md](db-schema.md)
-4. **API の仕様を確認する** → [api-spec.md](api-spec.md)
-5. **業務フローを理解する** → [key-flows.md](key-flows.md)
-6. **開発・変更を行う** → [dev-guide.md](dev-guide.md)、[testing.md](testing.md)
+3. **エンティティ関係を把握する** → [domain-model.md](domain-model.md)
+4. **データ構造を確認する** → [db-schema.md](db-schema.md)
+5. **API の仕様を確認する** → [api-spec.md](api-spec.md)
+6. **業務フローを理解する** → [key-flows.md](key-flows.md)
+7. **開発・変更を行う** → [dev-guide.md](dev-guide.md)、[testing.md](testing.md)
 
 ---
 
 ## ドキュメント更新のルール
 
 - **API を追加・変更したとき** → [api-spec.md](api-spec.md) を更新
+- **エンティティ関係・ドメインが変わったとき** → [domain-model.md](domain-model.md) を更新
 - **テーブル・モデルを変更したとき** → [db-schema.md](db-schema.md) を更新
 - **アーキテクチャ・構成が変わったとき** → [architecture.md](architecture.md) を更新
 - **新規フローが追加されたとき** → [key-flows.md](key-flows.md) を更新

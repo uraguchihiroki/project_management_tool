@@ -13,6 +13,8 @@ type TemplateRepository interface {
 	Create(template *model.IssueTemplate) error
 	Update(template *model.IssueTemplate) error
 	Delete(id uint) error
+	Reorder(projectID uuid.UUID, ids []uint) error
+	GetMaxOrder(projectID uuid.UUID) (int, error)
 }
 
 type templateRepository struct {
@@ -31,7 +33,7 @@ func (r *templateRepository) FindAll() ([]model.IssueTemplate, error) {
 
 func (r *templateRepository) FindByProjectID(projectID uuid.UUID) ([]model.IssueTemplate, error) {
 	var templates []model.IssueTemplate
-	err := r.db.Preload("Workflow").Where("project_id = ?", projectID).Order("name ASC").Find(&templates).Error
+	err := r.db.Preload("Workflow").Where("project_id = ?", projectID).Order("display_order ASC").Find(&templates).Error
 	return templates, err
 }
 
@@ -60,4 +62,24 @@ func (r *templateRepository) Update(template *model.IssueTemplate) error {
 
 func (r *templateRepository) Delete(id uint) error {
 	return r.db.Delete(&model.IssueTemplate{}, id).Error
+}
+
+func (r *templateRepository) GetMaxOrder(projectID uuid.UUID) (int, error) {
+	var maxOrder int
+	err := r.db.Model(&model.IssueTemplate{}).Where("project_id = ?", projectID).
+		Select("COALESCE(MAX(display_order), 0)").Scan(&maxOrder).Error
+	return maxOrder, err
+}
+
+func (r *templateRepository) Reorder(projectID uuid.UUID, ids []uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i, id := range ids {
+			if err := tx.Model(&model.IssueTemplate{}).
+				Where("id = ? AND project_id = ?", id, projectID).
+				Update("display_order", i+1).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

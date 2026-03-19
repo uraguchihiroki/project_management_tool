@@ -9,12 +9,14 @@ import (
 type IssueRepository interface {
 	FindByProject(projectID uuid.UUID) ([]model.Issue, error)
 	FindByNumber(projectID uuid.UUID, number int) (*model.Issue, error)
+	FindByOrgAndNumber(orgID uuid.UUID, number int) (*model.Issue, error)
 	FindByID(id uuid.UUID) (*model.Issue, error)
 	Create(issue *model.Issue) error
 	Update(issue *model.Issue) error
 	UpdateStatus(id uuid.UUID, statusID uuid.UUID) error
 	Delete(id uuid.UUID) error
 	NextNumber(projectID uuid.UUID) (int, error)
+	NextNumberForOrg(orgID uuid.UUID) (int, error)
 	FindByOrg(orgID uuid.UUID) ([]model.Issue, error)
 }
 
@@ -36,6 +38,21 @@ func (r *issueRepository) FindByProject(projectID uuid.UUID) ([]model.Issue, err
 		Order("number desc").
 		Find(&issues).Error
 	return issues, err
+}
+
+func (r *issueRepository) FindByOrgAndNumber(orgID uuid.UUID, number int) (*model.Issue, error) {
+	var issue model.Issue
+	err := r.db.
+		Preload("Status").
+		Preload("Assignee").
+		Preload("Reporter").
+		Preload("Comments.Author").
+		Where("organization_id = ? AND project_id IS NULL AND number = ?", orgID, number).
+		First(&issue).Error
+	if err != nil {
+		return nil, err
+	}
+	return &issue, nil
 }
 
 func (r *issueRepository) FindByNumber(projectID uuid.UUID, number int) (*model.Issue, error) {
@@ -92,9 +109,8 @@ func (r *issueRepository) FindByOrg(orgID uuid.UUID) ([]model.Issue, error) {
 		Preload("Status").
 		Preload("Assignee").
 		Preload("Reporter").
-		Joins("JOIN projects ON projects.id = issues.project_id").
-		Where("projects.organization_id = ?", orgID).
-		Order("issues.created_at DESC").
+		Where("organization_id = ?", orgID).
+		Order("created_at DESC").
 		Find(&issues).Error
 	return issues, err
 }
@@ -102,5 +118,13 @@ func (r *issueRepository) FindByOrg(orgID uuid.UUID) ([]model.Issue, error) {
 func (r *issueRepository) NextNumber(projectID uuid.UUID) (int, error) {
 	var maxNumber int
 	r.db.Model(&model.Issue{}).Where("project_id = ?", projectID).Select("COALESCE(MAX(number), 0)").Scan(&maxNumber)
+	return maxNumber + 1, nil
+}
+
+func (r *issueRepository) NextNumberForOrg(orgID uuid.UUID) (int, error) {
+	var maxNumber int
+	r.db.Model(&model.Issue{}).
+		Where("organization_id = ? AND project_id IS NULL", orgID).
+		Select("COALESCE(MAX(number), 0)").Scan(&maxNumber)
 	return maxNumber + 1, nil
 }

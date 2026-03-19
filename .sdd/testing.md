@@ -10,10 +10,29 @@
 
 ## 実行方法
 
+### バックエンド単体テスト
+
 ```powershell
 cd backend
 go test ./test/... -v
 ```
+
+### E2E テスト（Playwright）
+
+役職のドラッグ並び替えを検証する E2E テストがあります。
+
+**前提条件**:
+- バックエンド（`localhost:8080`）が起動していること
+- フロントエンド（`localhost:3000`）が起動していること
+- `seed.sql` 実行済みで組織（FRS）が存在すること
+
+**実行**:
+```powershell
+cd frontend
+npm run test:e2e
+```
+
+**注意**: ルート変更（例: `/roles/reorder` → `/roles/bulk/reorder`）を行った場合は、**バックエンドを再起動**してください。
 
 ---
 
@@ -23,11 +42,12 @@ go test ./test/... -v
 |----------|------------|
 | [setup_test.go](backend/test/setup_test.go) | テストサーバー起動、共通ヘルパー（req, createTestUser, createTestProject 等） |
 | [user_test.go](backend/test/user_test.go) | ユーザー CRUD（Create, List, Get） |
-| [project_test.go](backend/test/project_test.go) | プロジェクト CRUD |
+| [project_test.go](backend/test/project_test.go) | プロジェクト CRUD、正常系フロー（一覧→作成→取得→更新→削除） |
 | [issue_test.go](backend/test/issue_test.go) | Issue CRUD |
 | [comment_test.go](backend/test/comment_test.go) | コメント CRUD |
 | [role_test.go](backend/test/role_test.go) | 役職 CRUD、ユーザーへの役職割り当て、管理者一覧 |
 | [workflow_test.go](backend/test/workflow_test.go) | ワークフロー CRUD、ステップ追加・更新・削除 |
+| [department_test.go](backend/test/department_test.go) | 部署 CRUD、正常系フロー（一覧→作成→更新→削除）、ユーザー部署紐づけ |
 | [template_test.go](backend/test/template_test.go) | テンプレート CRUD、テンプレートからの Issue 作成 |
 | [approval_test.go](backend/test/approval_test.go) | 承認の自動作成、承認/却下、レベル・順序チェック |
 | [organization_test.go](backend/test/organization_test.go) | 組織 CRUD、ユーザー追加、SuperAdmin ログイン、管理画面ユーザー一覧 |

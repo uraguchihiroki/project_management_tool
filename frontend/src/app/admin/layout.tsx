@@ -2,13 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Settings, Users, Shield, GitBranch, FileText, FolderKanban } from 'lucide-react'
+import { Settings, Users, Shield, GitBranch, FileText, FolderKanban, Building2, Tag } from 'lucide-react'
 import Header from '@/components/Header'
 import { useRequireAdmin } from '@/context/AuthContext'
 
 const navItems = [
   { href: '/admin/projects', label: 'プロジェクト管理', icon: FolderKanban },
+  { href: '/admin/departments', label: '部署管理', icon: Building2 },
   { href: '/admin/roles', label: '役職管理', icon: Shield },
+  { href: '/admin/statuses', label: 'ステータス管理', icon: Tag },
   { href: '/admin/users', label: 'ユーザー管理', icon: Users },
   { href: '/admin/workflows', label: 'ワークフロー', icon: GitBranch },
   { href: '/admin/templates', label: 'Issueテンプレート', icon: FileText },
@@ -41,7 +43,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 key={href}
                 href={href}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  pathname === href
+                  pathname === href ||
+                  (href === '/admin/projects' && pathname.startsWith('/admin/projects/')) ||
+                  (href === '/admin/workflows' && pathname.startsWith('/admin/workflows'))
                     ? 'bg-blue-50 text-blue-700 font-medium'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}

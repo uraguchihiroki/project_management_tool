@@ -5,6 +5,68 @@ import (
 	"testing"
 )
 
+// TestProject_NormalFlow はプロジェクト管理の正常系ブラックボックステスト（一覧→作成→一覧反映→取得→更新→取得で反映確認→削除）
+func TestProject_NormalFlow(t *testing.T) {
+	ts := newTestServer(t)
+	ownerID := createTestUser(t, ts, "オーナー", "normalflow@example.com")
+
+	// 1. 一覧取得（初期は空）
+	status, listResp := ts.req(t, "GET", "/api/v1/projects", nil)
+	assertStatus(t, status, http.StatusOK, "list projects (initial)")
+	arr := mustGetArray(t, listResp, "data")
+	if len(arr) != 0 {
+		t.Errorf("expected 0 projects initially, got %d", len(arr))
+	}
+
+	// 2. 作成
+	status, createResp := ts.req(t, "POST", "/api/v1/projects", map[string]interface{}{
+		"key":             "FIRST",
+		"name":            "初めてのプロジェクト",
+		"owner_id":        ownerID,
+		"organization_id": testOrgID,
+	})
+	assertStatus(t, status, http.StatusCreated, "create project")
+	projectID := mustGetString(t, createResp, "data", "id")
+	assertNotEmpty(t, projectID, "id")
+	assertField(t, mustGetString(t, createResp, "data", "name"), "初めてのプロジェクト", "name")
+
+	// 3. 一覧に反映されていること
+	status, listResp = ts.req(t, "GET", "/api/v1/projects", nil)
+	assertStatus(t, status, http.StatusOK, "list projects (after create)")
+	arr = mustGetArray(t, listResp, "data")
+	if len(arr) != 1 {
+		t.Errorf("expected 1 project after create, got %d", len(arr))
+	}
+	assertField(t, mustGetString(t, arr[0].(map[string]interface{}), "name"), "初めてのプロジェクト", "list[0].name")
+
+	// 4. 取得
+	status, getResp := ts.req(t, "GET", "/api/v1/projects/"+projectID, nil)
+	assertStatus(t, status, http.StatusOK, "get project")
+	assertField(t, mustGetString(t, getResp, "data", "name"), "初めてのプロジェクト", "name")
+
+	// 5. 更新
+	status, updateResp := ts.req(t, "PUT", "/api/v1/projects/"+projectID, map[string]interface{}{
+		"name":        "初めてのプロジェクト（更新後）",
+		"description": "説明を追加",
+	})
+	assertStatus(t, status, http.StatusOK, "update project")
+	assertField(t, mustGetString(t, updateResp, "data", "name"), "初めてのプロジェクト（更新後）", "name after update")
+
+	// 6. 取得で更新が反映されていること
+	status, getResp = ts.req(t, "GET", "/api/v1/projects/"+projectID, nil)
+	assertStatus(t, status, http.StatusOK, "get project (after update)")
+	assertField(t, mustGetString(t, getResp, "data", "name"), "初めてのプロジェクト（更新後）", "name after update")
+	assertField(t, mustGetString(t, getResp, "data", "description"), "説明を追加", "description after update")
+
+	// 7. 削除
+	status, _ = ts.req(t, "DELETE", "/api/v1/projects/"+projectID, nil)
+	assertStatus(t, status, http.StatusOK, "delete project")
+
+	// 8. 取得で404になること
+	status, _ = ts.req(t, "GET", "/api/v1/projects/"+projectID, nil)
+	assertStatus(t, status, http.StatusNotFound, "get after delete")
+}
+
 func TestProject_Create(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
@@ -122,4 +184,31 @@ func TestProject_Delete(t *testing.T) {
 		getStatus, _ := ts.req(t, "GET", "/api/v1/projects/"+projectID, nil)
 		assertStatus(t, getStatus, http.StatusNotFound, "GET after DELETE")
 	})
+}
+
+func TestProject_Reorder(t *testing.T) {
+	ts := newTestServer(t)
+	ownerID := createTestUser(t, ts, "オーナー", "reorder@example.com")
+	_, r1 := ts.req(t, "POST", "/api/v1/projects", map[string]interface{}{
+		"key": "PA", "name": "プロジェクトA", "owner_id": ownerID, "organization_id": testOrgID,
+	})
+	_, r2 := ts.req(t, "POST", "/api/v1/projects", map[string]interface{}{
+		"key": "PB", "name": "プロジェクトB", "owner_id": ownerID, "organization_id": testOrgID,
+	})
+	id1 := mustGetString(t, r1, "data", "id")
+	id2 := mustGetString(t, r2, "data", "id")
+
+	status, _ := ts.req(t, "PUT", "/api/v1/projects/reorder?org_id="+testOrgID, map[string]interface{}{
+		"ids": []string{id2, id1},
+	})
+	assertStatus(t, status, http.StatusNoContent, "reorder projects")
+
+	status, listResp := ts.req(t, "GET", "/api/v1/projects?org_id="+testOrgID, nil)
+	assertStatus(t, status, http.StatusOK, "list after reorder")
+	arr := mustGetArray(t, listResp, "data")
+	if len(arr) != 2 {
+		t.Fatalf("expected 2 projects, got %d", len(arr))
+	}
+	assertField(t, mustGetString(t, arr[0].(map[string]interface{}), "name"), "プロジェクトB", "first after reorder")
+	assertField(t, mustGetString(t, arr[1].(map[string]interface{}), "name"), "プロジェクトA", "second after reorder")
 }

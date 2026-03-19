@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, X, Check, ArrowUp, ArrowDown, ChevronLeft } from 'lucide-react'
+import { Plus, Trash2, X, Check, ChevronLeft, Pencil, GitBranch } from 'lucide-react'
 import type { Workflow, Status } from '@/types'
+import { SortableList, DragHandle } from '@/components/SortableList'
+import { useAuth } from '@/context/AuthContext'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -15,17 +17,36 @@ async function fetchWorkflow(id: string): Promise<Workflow> {
   return json.data
 }
 
-async function fetchProjectStatuses(projectId: string): Promise<Status[]> {
-  const res = await fetch(`${API}/projects/${projectId}`)
-  const json = await res.json()
-  return json.data?.statuses ?? []
+async function updateWorkflow(id: string, data: { name: string; description: string }) {
+  const res = await fetch(`${API}/workflows/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error('更新に失敗しました')
 }
 
-const emptyStep = { name: '', required_level: 1, status_id: '' }
+async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
+  const res = await fetch(`${API}/organizations/${orgId}/statuses?type=issue`)
+  const json = await res.json()
+  const data: Status[] = json.data ?? []
+  // 組織用ステータス + システムステータス（sts_start, sts_goal）を表示。プロジェクト固有を除外
+  return data.filter((s) =>
+    !s.project_id && (s.organization_id || s.status_key === 'sts_start' || s.status_key === 'sts_goal')
+  )
+}
+
+const emptyStep: { status_id: string; next_status_id: string; description: string; threshold: number } = {
+  status_id: '',
+  next_status_id: '',
+  description: '',
+  threshold: 10,
+}
 
 export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const queryClient = useQueryClient()
+  const { currentOrg } = useAuth()
 
   const { data: workflow, isLoading } = useQuery({
     queryKey: ['workflow', id],
@@ -33,57 +54,52 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   })
 
   const { data: statuses = [] } = useQuery({
-    queryKey: ['project-statuses', workflow?.project_id],
-    queryFn: () => fetchProjectStatuses(workflow!.project_id),
-    enabled: !!workflow?.project_id,
+    queryKey: ['org-statuses', currentOrg?.id],
+    queryFn: () => fetchOrgStatuses(currentOrg!.id),
+    enabled: !!currentOrg?.id,
   })
 
   const [showAddForm, setShowAddForm] = useState(false)
-  const [editingStepId, setEditingStepId] = useState<number | null>(null)
   const [stepForm, setStepForm] = useState(emptyStep)
   const [error, setError] = useState('')
+  const [editingWorkflow, setEditingWorkflow] = useState(false)
+  const [workflowForm, setWorkflowForm] = useState({ name: '', description: '' })
 
-  const addStepMutation = useMutation({
-    mutationFn: async (data: typeof emptyStep) => {
-      const body: Record<string, unknown> = {
-        name: data.name,
-        required_level: data.required_level,
-      }
-      if (data.status_id) body.status_id = data.status_id
-      const res = await fetch(`${API}/workflows/${id}/steps`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error('追加に失敗しました')
-    },
+  const updateWorkflowMutation = useMutation({
+    mutationFn: (data: { name: string; description: string }) => updateWorkflow(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow', id] })
-      setShowAddForm(false)
-      setStepForm(emptyStep)
+      queryClient.invalidateQueries({ queryKey: ['workflows'] })
+      setEditingWorkflow(false)
       setError('')
     },
     onError: (e: Error) => setError(e.message),
   })
 
-  const updateStepMutation = useMutation({
-    mutationFn: async ({ stepId, data, order }: { stepId: number; data: typeof emptyStep; order: number }) => {
-      const body: Record<string, unknown> = {
-        name: data.name,
-        required_level: data.required_level,
-        order,
+  const addStepMutation = useMutation({
+    mutationFn: async (data: typeof emptyStep) => {
+      if (!data.status_id) throw new Error('ステータスは必須です')
+      if (data.threshold < 1) throw new Error('閾値は1以上で指定してください')
+      const body = {
+        status_id: data.status_id,
+        next_status_id: data.next_status_id || undefined,
+        description: data.description,
+        threshold: data.threshold,
+        approval_objects: [],
       }
-      if (data.status_id) body.status_id = data.status_id
-      const res = await fetch(`${API}/workflows/${id}/steps/${stepId}`, {
-        method: 'PUT',
+      const res = await fetch(`${API}/workflows/${id}/steps`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error('更新に失敗しました')
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.message ?? '追加に失敗しました')
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow', id] })
-      setEditingStepId(null)
+      setShowAddForm(false)
       setStepForm(emptyStep)
       setError('')
     },
@@ -97,39 +113,28 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', id] }),
   })
 
-  const moveStepMutation = useMutation({
-    mutationFn: async ({ stepId, name, requiredLevel, statusId, newOrder }: {
-      stepId: number; name: string; requiredLevel: number; statusId?: string; newOrder: number
-    }) => {
-      const body: Record<string, unknown> = { name, required_level: requiredLevel, order: newOrder }
-      if (statusId) body.status_id = statusId
-      await fetch(`${API}/workflows/${id}/steps/${stepId}`, {
+  const [reorderPending, setReorderPending] = useState(false)
+  const reorderStepsMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await fetch(`${API}/workflows/${id}/steps/reorder`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ids }),
       })
+      if (!res.ok) throw new Error('並び替えに失敗しました')
     },
+    onMutate: () => setReorderPending(true),
+    onSettled: () => setReorderPending(false),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', id] }),
   })
 
-  const handleMoveStep = async (index: number, direction: 'up' | 'down') => {
-    const steps = workflow?.steps ?? []
-    const step = steps[index]
-    const swapIndex = direction === 'up' ? index - 1 : index + 1
-    const swapStep = steps[swapIndex]
-    if (!step || !swapStep) return
-
-    await moveStepMutation.mutateAsync({
-      stepId: step.id, name: step.name, requiredLevel: step.required_level,
-      statusId: step.status_id, newOrder: swapStep.order,
-    })
-    await moveStepMutation.mutateAsync({
-      stepId: swapStep.id, name: swapStep.name, requiredLevel: swapStep.required_level,
-      statusId: swapStep.status_id, newOrder: step.order,
-    })
-  }
-
   const steps = workflow?.steps ?? []
+
+  useEffect(() => {
+    if (workflow) {
+      setWorkflowForm({ name: workflow.name, description: workflow.description ?? '' })
+    }
+  }, [workflow])
 
   if (isLoading) {
     return <div className="text-gray-400 text-sm">読み込み中...</div>
@@ -138,85 +143,156 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     return <div className="text-red-500 text-sm">ワークフローが見つかりません</div>
   }
 
-  const StepForm = ({ onSubmit, loading }: { onSubmit: (data: typeof emptyStep) => void; loading: boolean }) => (
+  const renderStepForm = (onSubmit: (data: typeof emptyStep) => void, loading: boolean) => (
     <form
       onSubmit={(e) => { e.preventDefault(); onSubmit(stepForm) }}
-      className="grid grid-cols-12 gap-3 items-end"
+      className="space-y-3"
     >
-      <div className="col-span-4">
-        <label className="block text-xs font-medium text-gray-500 mb-1">ステップ名 *</label>
+      <div className="grid grid-cols-12 gap-3">
+        <div className="col-span-3">
+          <label className="block text-xs font-medium text-gray-500 mb-1">ステータス *</label>
+          <select
+            value={stepForm.status_id}
+            onChange={(e) => setStepForm((prev) => ({ ...prev, status_id: e.target.value }))}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">選択</option>
+            {statuses.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="col-span-3">
+          <label className="block text-xs font-medium text-gray-500 mb-1">承認後ステータス</label>
+          <select
+            value={stepForm.next_status_id}
+            onChange={(e) => setStepForm((prev) => ({ ...prev, next_status_id: e.target.value }))}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">（なし・ゴール）</option>
+            {statuses.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-500 mb-1">閾値</label>
+          <input
+            type="number"
+            min={1}
+            max={99999}
+            value={stepForm.threshold}
+            onChange={(e) => setStepForm((prev) => ({ ...prev, threshold: parseInt(e.target.value) || 1 }))}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="col-span-2 flex gap-1.5 items-end">
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            <Check className="w-3.5 h-3.5" />
+            追加
+          </button>
+          <button
+            type="button"
+            onClick={() => { setShowAddForm(false); setStepForm(emptyStep); setError('') }}
+            className="flex items-center gap-1 px-2.5 py-2 border border-gray-300 text-gray-600 rounded-lg text-xs hover:bg-gray-50 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">説明</label>
         <input
           type="text"
-          value={stepForm.name}
-          onChange={(e) => setStepForm({ ...stepForm, name: e.target.value })}
-          placeholder="例: 上司承認"
+          value={stepForm.description}
+          onChange={(e) => setStepForm((prev) => ({ ...prev, description: e.target.value }))}
+          placeholder="ステップの説明（任意）"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
-      <div className="col-span-3">
-        <label className="block text-xs font-medium text-gray-500 mb-1">
-          必要Lv *
-          <span className="ml-1 font-normal text-gray-400">（以上）</span>
-        </label>
-        <input
-          type="number"
-          min={1}
-          max={99}
-          value={stepForm.required_level}
-          onChange={(e) => setStepForm({ ...stepForm, required_level: parseInt(e.target.value) || 1 })}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-      <div className="col-span-3">
-        <label className="block text-xs font-medium text-gray-500 mb-1">承認後ステータス</label>
-        <select
-          value={stepForm.status_id}
-          onChange={(e) => setStepForm({ ...stepForm, status_id: e.target.value })}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">（変更なし）</option>
-          {statuses.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-      </div>
-      <div className="col-span-2 flex gap-1.5">
-        <button
-          type="submit"
-          disabled={loading}
-          className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
-          <Check className="w-3.5 h-3.5" />
-          保存
-        </button>
-        <button
-          type="button"
-          onClick={() => { setShowAddForm(false); setEditingStepId(null); setStepForm(emptyStep); setError('') }}
-          className="flex items-center gap-1 px-2.5 py-2 border border-gray-300 text-gray-600 rounded-lg text-xs hover:bg-gray-50 transition-colors"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <p className="text-xs text-gray-400">追加後、ステップをクリックして承認オブジェクトを設定できます。</p>
     </form>
   )
+
+  const handleWorkflowSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!workflowForm.name.trim()) { setError('ワークフロー名は必須です'); return }
+    updateWorkflowMutation.mutate(workflowForm)
+  }
 
   return (
     <div className="max-w-3xl">
       {/* ヘッダー */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link
-          href="/admin/workflows"
-          className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          ワークフロー一覧
-        </Link>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-xl font-bold text-gray-900">{workflow.name}</h1>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/admin/workflows"
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            ワークフロー一覧
+          </Link>
+          <span className="text-gray-300">/</span>
+          {editingWorkflow ? (
+            <form onSubmit={handleWorkflowSubmit} className="flex items-center gap-2 flex-1">
+              <input
+                type="text"
+                value={workflowForm.name}
+                onChange={(e) => setWorkflowForm((p) => ({ ...p, name: e.target.value }))}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="ワークフロー名"
+              />
+              <button
+                type="submit"
+                disabled={updateWorkflowMutation.isPending}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                保存
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditingWorkflow(false); setWorkflowForm({ name: workflow.name, description: workflow.description ?? '' }); setError('') }}
+                className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg text-xs hover:bg-gray-50"
+              >
+                キャンセル
+              </button>
+            </form>
+          ) : (
+            <>
+              <GitBranch className="w-5 h-5 text-blue-500 flex-shrink-0" />
+              <h1 className="text-xl font-bold text-gray-900">{workflow.name}</h1>
+              <button
+                onClick={() => setEditingWorkflow(true)}
+                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                title="ワークフローを編集"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {workflow.description && (
+      {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
+
+      {!editingWorkflow && workflow.description && (
         <p className="text-sm text-gray-500 mb-6">{workflow.description}</p>
+      )}
+      {editingWorkflow && (
+        <div className="mb-6">
+          <label className="block text-xs font-medium text-gray-600 mb-1">説明</label>
+          <input
+            type="text"
+            value={workflowForm.description}
+            onChange={(e) => setWorkflowForm((p) => ({ ...p, description: e.target.value }))}
+            placeholder="例: 一般的な業務申請に使用"
+            className="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
       )}
 
       {/* ステップ一覧 */}
@@ -232,83 +308,55 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {steps.map((step, idx) => (
-              <div key={step.id}>
-                {editingStepId === step.id ? (
-                  <div className="px-4 py-3 bg-blue-50">
-                    {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
-                    <StepForm
-                      onSubmit={(data) => {
-                        if (!data.name.trim()) { setError('ステップ名は必須です'); return }
-                        updateStepMutation.mutate({ stepId: step.id, data, order: step.order })
-                      }}
-                      loading={updateStepMutation.isPending}
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
-                    {/* 並び替えボタン */}
-                    <div className="flex flex-col gap-0.5 flex-shrink-0">
-                      <button
-                        onClick={() => handleMoveStep(idx, 'up')}
-                        disabled={idx === 0 || moveStepMutation.isPending}
-                        className="p-0.5 text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors"
-                      >
-                        <ArrowUp className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => handleMoveStep(idx, 'down')}
-                        disabled={idx === steps.length - 1 || moveStepMutation.isPending}
-                        className="p-0.5 text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors"
-                      >
-                        <ArrowDown className="w-3 h-3" />
-                      </button>
-                    </div>
-
-                    {/* ステップ番号 */}
+            <SortableList
+              items={steps}
+              itemId={(s) => String(s.id)}
+              onReorder={(ids) => reorderStepsMutation.mutate(ids.map(Number))}
+              disabled={reorderPending}
+              renderItem={(s, { handleProps, setNodeRef, style }) => (
+                  <div ref={setNodeRef} style={style} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                    <DragHandle handleProps={handleProps} />
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                      {step.order}
+                      {steps.findIndex((x) => x.id === s.id) + 1}
                     </span>
-
-                    {/* ステップ情報 */}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 text-sm">{step.name}</p>
+                      <p className="font-medium text-gray-900 text-sm">
+                        {s.status?.status_key === 'sts_start' && '🏁 '}
+                        {s.status?.status_key === 'sts_goal' && '🎯 '}
+                        {s.status?.name ?? s.status_id}
+                      </p>
                       <p className="text-xs text-gray-400">
-                        Level {step.required_level} 以上が承認可能
-                        {step.status && (
-                          <span className="ml-2">
-                            → <span
-                              className="inline-block w-2 h-2 rounded-full mr-0.5"
-                              style={{ backgroundColor: step.status.color }}
-                            />
-                            {step.status.name}
-                          </span>
+                        {s.next_status_id && (
+                          <>
+                            閾値 {s.threshold ?? 10} 点
+                            {(s.approval_objects?.length ?? 0) > 0 && (
+                              <span className="ml-2">（承認オブジェクト {(s.approval_objects?.length ?? 0)} 件）</span>
+                            )}
+                            {s.next_status && (
+                              <span className="ml-2">
+                                → <span
+                                  className="inline-block w-2 h-2 rounded-full mr-0.5"
+                                  style={{ backgroundColor: s.next_status.color }}
+                                />
+                                {s.next_status.name}
+                              </span>
+                            )}
+                          </>
                         )}
                       </p>
                     </div>
-
-                    {/* 操作ボタン */}
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => {
-                          setEditingStepId(step.id)
-                          setStepForm({
-                            name: step.name,
-                            required_level: step.required_level,
-                            status_id: step.status_id ?? '',
-                          })
-                          setShowAddForm(false)
-                          setError('')
-                        }}
+                      <Link
+                        href={`/admin/workflows/${id}/steps/${s.id}`}
                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="編集"
                       >
-                        <Plus className="w-3.5 h-3.5 rotate-45" />
-                      </button>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Link>
                       <button
                         onClick={() => {
-                          if (confirm(`「${step.name}」を削除しますか？`)) {
-                            deleteStepMutation.mutate(step.id)
+                          if (confirm(`「${s.status?.name ?? s.status_id}」を削除しますか？`)) {
+                            deleteStepMutation.mutate(s.id)
                           }
                         }}
                         className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -318,9 +366,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       </button>
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
+              )}
+            />
           </div>
         )}
 
@@ -328,18 +375,18 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         {showAddForm && (
           <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
             {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
-            <StepForm
-              onSubmit={(data) => {
-                if (!data.name.trim()) { setError('ステップ名は必須です'); return }
+            {renderStepForm(
+              (data) => {
+                if (!data.status_id) { setError('ステータスは必須です'); return }
                 addStepMutation.mutate(data)
-              }}
-              loading={addStepMutation.isPending}
-            />
+              },
+              addStepMutation.isPending
+            )}
           </div>
         )}
       </div>
 
-      {!showAddForm && editingStepId === null && (
+      {!showAddForm && (
         <button
           onClick={() => { setShowAddForm(true); setStepForm(emptyStep); setError('') }}
           className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 text-gray-500 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 transition-colors w-full justify-center"

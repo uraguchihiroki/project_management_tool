@@ -94,6 +94,28 @@ func TestRoleDelete(t *testing.T) {
 	})
 }
 
+func TestRole_Reorder(t *testing.T) {
+	ts := newTestServer(t)
+	_, r1 := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "課長", "level": 5, "organization_id": testOrgID})
+	_, r2 := ts.req(t, "POST", "/api/v1/roles", map[string]interface{}{"name": "部長", "level": 7, "organization_id": testOrgID})
+	roleID1 := uint(mustGetFloat(t, r1, "data", "id"))
+	roleID2 := uint(mustGetFloat(t, r2, "data", "id"))
+
+	status, _ := ts.req(t, "PUT", "/api/v1/roles/bulk/reorder?org_id="+testOrgID, map[string]interface{}{
+		"ids": []uint{roleID2, roleID1},
+	})
+	assertStatus(t, status, http.StatusNoContent, "reorder roles")
+
+	status, listResp := ts.req(t, "GET", "/api/v1/roles?org_id="+testOrgID, nil)
+	assertStatus(t, status, http.StatusOK, "list after reorder")
+	roles := mustGetArray(t, listResp, "data")
+	if len(roles) != 2 {
+		t.Fatalf("expected 2 roles, got %d", len(roles))
+	}
+	assertField(t, mustGetString(t, roles[0].(map[string]interface{}), "name"), "部長", "first after reorder")
+	assertField(t, mustGetString(t, roles[1].(map[string]interface{}), "name"), "課長", "second after reorder")
+}
+
 func TestUserRoleAssignment(t *testing.T) {
 	ts := newTestServer(t)
 

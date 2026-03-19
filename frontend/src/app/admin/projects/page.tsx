@@ -6,6 +6,9 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Plus, FolderKanban, ChevronRight } from 'lucide-react'
 import type { Project } from '@/types'
+import { SortableList, DragHandle } from '@/components/SortableList'
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 import { useRequireAdmin, useAuth } from '@/context/AuthContext'
 
 export default function AdminProjectsPage() {
@@ -13,7 +16,13 @@ export default function AdminProjectsPage() {
   const { currentOrg } = useAuth()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ key: '', name: '', description: '' })
+  const [form, setForm] = useState({
+    key: '',
+    name: '',
+    description: '',
+    start_date: '',
+    end_date: '',
+  })
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects', currentOrg?.id],
@@ -25,8 +34,26 @@ export default function AdminProjectsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       setShowForm(false)
-      setForm({ key: '', name: '', description: '' })
+      setForm({ key: '', name: '', description: '', start_date: '', end_date: '' })
     },
+  })
+
+  const [reorderPending, setReorderPending] = useState(false)
+  const reorderMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const url = currentOrg?.id
+        ? `${API}/projects/reorder?org_id=${currentOrg.id}`
+        : `${API}/projects/reorder`
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) throw new Error('並び替えに失敗しました')
+    },
+    onMutate: () => setReorderPending(true),
+    onSettled: () => setReorderPending(false),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -38,6 +65,8 @@ export default function AdminProjectsPage() {
       description: form.description || undefined,
       owner_id: currentUser.id,
       organization_id: currentOrg?.id,
+      start_date: form.start_date || undefined,
+      end_date: form.end_date || undefined,
     })
   }
 
@@ -74,27 +103,39 @@ export default function AdminProjectsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {projects.map((project: Project) => (
-            <Link
-              key={project.id}
-              href={`/projects/${project.id}`}
-              className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:shadow-md transition-all group flex items-center justify-between"
-            >
-              <div>
-                <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                  {project.key}
-                </span>
-                <h3 className="mt-2 text-base font-semibold text-gray-900 group-hover:text-blue-600">
-                  {project.name}
-                </h3>
-                {project.description && (
-                  <p className="mt-1 text-sm text-gray-500 line-clamp-1">{project.description}</p>
-                )}
-                <p className="mt-2 text-xs text-gray-400">オーナー: {project.owner?.name}</p>
+          <SortableList
+            items={projects}
+            itemId={(p) => p.id}
+            onReorder={(ids) => reorderMutation.mutate(ids)}
+            disabled={reorderPending}
+            renderItem={(project, { handleProps, setNodeRef, style }) => (
+              <div ref={setNodeRef} style={style}>
+                <Link
+                  href={`/admin/projects/${project.id}`}
+                  className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:shadow-md transition-all group flex items-center justify-between block"
+                >
+                <div className="flex items-start gap-2 flex-1 min-w-0">
+                  <DragHandle handleProps={handleProps} className="flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                      {project.key}
+                    </span>
+                    <h3 className="mt-2 text-base font-semibold text-gray-900 group-hover:text-blue-600">
+                      {project.name}
+                    </h3>
+                    {project.description && (
+                      <p className="mt-1 text-sm text-gray-500 line-clamp-1">{project.description}</p>
+                    )}
+                    <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+                      <span>オーナー: {project.owner?.name}</span>
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 flex-shrink-0 ml-4" />
+                </Link>
               </div>
-              <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 flex-shrink-0 ml-4" />
-            </Link>
-          ))}
+            )}
+          />
         </div>
       )}
 
@@ -140,6 +181,26 @@ export default function AdminProjectsPage() {
                   rows={3}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">開始日</label>
+                  <input
+                    type="date"
+                    value={form.start_date}
+                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">終了日</label>
+                  <input
+                    type="date"
+                    value={form.end_date}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
               {createMutation.isError && (
                 <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">作成に失敗しました</p>

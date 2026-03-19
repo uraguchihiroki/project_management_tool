@@ -13,6 +13,8 @@ type ProjectRepository interface {
 	Create(project *model.Project) error
 	Update(project *model.Project) error
 	Delete(id uuid.UUID) error
+	Reorder(orgID *uuid.UUID, ids []uuid.UUID) error
+	GetMaxOrder(orgID *uuid.UUID) (int, error)
 }
 
 type projectRepository struct {
@@ -25,13 +27,13 @@ func NewProjectRepository(db *gorm.DB) ProjectRepository {
 
 func (r *projectRepository) FindAll() ([]model.Project, error) {
 	var projects []model.Project
-	err := r.db.Preload("Owner").Find(&projects).Error
+	err := r.db.Preload("Owner").Order("display_order ASC").Find(&projects).Error
 	return projects, err
 }
 
 func (r *projectRepository) FindByOrg(orgID uuid.UUID) ([]model.Project, error) {
 	var projects []model.Project
-	err := r.db.Preload("Owner").Where("organization_id = ?", orgID).Find(&projects).Error
+	err := r.db.Preload("Owner").Where("organization_id = ?", orgID).Order("display_order ASC").Find(&projects).Error
 	return projects, err
 }
 
@@ -54,4 +56,29 @@ func (r *projectRepository) Update(project *model.Project) error {
 
 func (r *projectRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&model.Project{}, "id = ?", id).Error
+}
+
+func (r *projectRepository) GetMaxOrder(orgID *uuid.UUID) (int, error) {
+	var maxOrder int
+	q := r.db.Model(&model.Project{})
+	if orgID != nil {
+		q = q.Where("organization_id = ?", orgID)
+	}
+	err := q.Select("COALESCE(MAX(display_order), 0)").Scan(&maxOrder).Error
+	return maxOrder, err
+}
+
+func (r *projectRepository) Reorder(orgID *uuid.UUID, ids []uuid.UUID) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i, id := range ids {
+			q := tx.Model(&model.Project{}).Where("id = ?", id)
+			if orgID != nil {
+				q = q.Where("organization_id = ?", orgID)
+			}
+			if err := q.Update("display_order", i+1).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
