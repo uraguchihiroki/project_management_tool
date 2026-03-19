@@ -8,6 +8,7 @@
 
 | ドキュメント | 内容 |
 |-------------|------|
+| [principles.md](principles.md) | 設計原則（開発はローカル、運用はクラウド） |
 | [architecture.md](architecture.md) | システムアーキテクチャ、技術スタック、ディレクトリ構成 |
 | [layer-responsibility.md](layer-responsibility.md) | Handler / Service / Repository の責務分担と境界線 |
 | [domain-model.md](domain-model.md) | エンティティ関係・ドメインモデル |
@@ -21,13 +22,14 @@
 
 ## 初めて読む方へ
 
-1. **全体像を把握する** → [architecture.md](architecture.md)
-2. **コードの書き方・責務を理解する** → [layer-responsibility.md](layer-responsibility.md)
-3. **エンティティ関係を把握する** → [domain-model.md](domain-model.md)
-4. **データ構造を確認する** → [db-schema.md](db-schema.md)
-5. **API の仕様を確認する** → [api-spec.md](api-spec.md)
-6. **業務フローを理解する** → [key-flows.md](key-flows.md)
-7. **開発・変更を行う** → [dev-guide.md](dev-guide.md)、[testing.md](testing.md)
+1. **設計原則を確認する** → [principles.md](principles.md)
+2. **全体像を把握する** → [architecture.md](architecture.md)
+3. **コードの書き方・責務を理解する** → [layer-responsibility.md](layer-responsibility.md)
+4. **エンティティ関係を把握する** → [domain-model.md](domain-model.md)
+5. **データ構造を確認する** → [db-schema.md](db-schema.md)
+6. **API の仕様を確認する** → [api-spec.md](api-spec.md)
+7. **業務フローを理解する** → [key-flows.md](key-flows.md)
+8. **開発・変更を行う** → [dev-guide.md](dev-guide.md)、[testing.md](testing.md)
 
 ---
 
