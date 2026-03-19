@@ -99,6 +99,9 @@ func main() {
 		AllowHeaders: []string{"Content-Type", "Authorization"},
 	}))
 
+	// ステップ更新: 最優先で登録（/workflows/:id との競合を完全回避）
+	e.PUT("/api/v1/workflow-steps/:stepId", workflowHandler.UpdateStep)
+
 	// Routes
 	api := e.Group("/api/v1")
 
@@ -118,7 +121,7 @@ func main() {
 	api.DELETE("/roles/:id", roleHandler.Delete)
 
 	// Workflows（組織に属さない、グローバル）
-	// /workflows/:id より具体的な /workflows/:id/steps/... を先に登録（Echoは先に登録したルートを優先）
+	// /workflows/:id より具体的な /workflows/:id/steps/ を先に登録
 	api.GET("/workflows", workflowHandler.List)
 	api.POST("/workflows", workflowHandler.Create)
 	api.PUT("/workflows/reorder", workflowHandler.Reorder)
