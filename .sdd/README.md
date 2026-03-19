@@ -9,6 +9,7 @@
 | ドキュメント | 内容 |
 |-------------|------|
 | [principles.md](principles.md) | 設計原則（開発はローカル、運用はクラウド） |
+| [dev-environment.md](dev-environment.md) | 開発環境の構成・リソース配置・使用ツール |
 | [architecture.md](architecture.md) | システムアーキテクチャ、技術スタック、ディレクトリ構成 |
 | [layer-responsibility.md](layer-responsibility.md) | Handler / Service / Repository の責務分担と境界線 |
 | [domain-model.md](domain-model.md) | エンティティ関係・ドメインモデル |
