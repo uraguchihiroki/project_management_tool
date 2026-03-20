@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { SuperAdmin } from '@/types'
+import { setAuthToken } from '@/lib/authToken'
 
 const SA_SESSION_KEY = 'currentSuperAdmin'
 
@@ -40,6 +41,9 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       if (!res.ok) return { ok: false, error: 'メールアドレスが見つかりません' }
       const json = await res.json()
       const admin: SuperAdmin = json.data
+      const token: string | undefined = json.token
+      if (!admin || !token) return { ok: false, error: 'ログインに失敗しました' }
+      setAuthToken(token)
       sessionStorage.setItem(SA_SESSION_KEY, JSON.stringify(admin))
       setCurrentSuperAdmin(admin)
       return { ok: true }
@@ -49,6 +53,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   }, [])
 
   const logout = useCallback(() => {
+    setAuthToken(null)
     sessionStorage.removeItem(SA_SESSION_KEY)
     setCurrentSuperAdmin(null)
     router.push('/super-admin/login')

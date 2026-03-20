@@ -1,10 +1,20 @@
 import axios from 'axios'
 import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate, IssueApproval, Organization, SuperAdmin, Workflow, WorkflowStep, ApprovalObject } from '@/types'
+import { getAuthToken } from '@/lib/authToken'
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
+})
+
+api.interceptors.request.use((config) => {
+  const token = getAuthToken()
+  if (token) {
+    config.headers = config.headers ?? {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
 })
 
 // Users

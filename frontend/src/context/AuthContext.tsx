@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { User, Organization } from '@/types'
+import { setAuthToken } from '@/lib/authToken'
 
 const SESSION_KEY = 'currentUser'
 const ORG_KEY = 'currentOrg'
@@ -84,19 +85,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, asAdmin?: boolean): Promise<{ ok: boolean; error?: string }> => {
     try {
       const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
-      const res = await fetch(`${base}/users`)
+      const res = await fetch(`${base}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
       if (!res.ok) throw new Error('APIエラー')
       const json = await res.json()
-      const users: User[] = json.data ?? []
-      const found = users.find((u) => u.email === email)
-      if (!found) return { ok: false, error: 'メールアドレスが見つかりません' }
-      // DBのis_adminも更新する
-      await fetch(`${base}/users/${found.id}/admin`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_admin: asAdmin ?? false }),
-      })
-      const user = { ...found, is_admin: asAdmin ?? false }
+      const payload = json.data ?? {}
+      const found = payload.user as User | undefined
+      const token = payload.token as string | undefined
+      if (!found || !token) return { ok: false, error: 'メールアドレスが見つかりません' }
+      const user = { ...found, is_admin: asAdmin ?? found.is_admin }
+      setAuthToken(token)
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
       setCurrentUser(user)
       const { dest, error } = await handleOrgSelection(found.id)
@@ -109,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [handleOrgSelection, router])
 
   const logout = useCallback(() => {
+    setAuthToken(null)
     sessionStorage.removeItem(SESSION_KEY)
     sessionStorage.removeItem(ORG_KEY)
     setCurrentUser(null)
@@ -137,17 +139,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ is_admin: asAdmin }),
         })
       }
-      const user = { ...created, is_admin: asAdmin ?? created.is_admin }
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
-      setCurrentUser(user)
-      const { dest, error } = await handleOrgSelection(created.id)
-      if (error) return { ok: false, error }
-      router.push(dest)
-      return { ok: true }
+      // 新規登録後はJWT発行を伴うログインフローへ委譲
+      return await login(email, asAdmin)
     } catch {
       return { ok: false, error: '登録に失敗しました' }
     }
-  }, [handleOrgSelection, router])
+  }, [login])
 
   return (
     <AuthContext.Provider value={{ currentUser, currentOrg, login, logout, register, selectOrg }}>
