@@ -18,9 +18,29 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+function getInitialUser(): User | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const stored = sessionStorage.getItem(SESSION_KEY)
+    return stored ? JSON.parse(stored) : null
+  } catch {
+    return null
+  }
+}
+
+function getInitialOrg(): Organization | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const stored = sessionStorage.getItem(ORG_KEY)
+    return stored ? JSON.parse(stored) : null
+  } catch {
+    return null
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [currentOrg, setCurrentOrg] = useState<Organization | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(getInitialUser)
+  const [currentOrg, setCurrentOrg] = useState<Organization | null>(getInitialOrg)
   const router = useRouter()
 
   useEffect(() => {
