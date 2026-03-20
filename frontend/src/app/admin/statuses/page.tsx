@@ -9,12 +9,10 @@ import { useAuth } from '@/context/AuthContext'
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
 async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
-  const res = await fetch(`${API}/organizations/${orgId}/statuses`)
+  const res = await fetch(`${API}/organizations/${orgId}/statuses?exclude_system=1`)
   const json = await res.json()
   const data: Status[] = json.data ?? []
-  return data.filter((s) =>
-    !s.project_id && (s.organization_id || s.status_key === 'sts_start' || s.status_key === 'sts_goal')
-  )
+  return data.filter((s) => !s.project_id && s.organization_id)
 }
 
 export default function StatusesPage() {

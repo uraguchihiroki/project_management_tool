@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -103,7 +104,7 @@ func (s *workflowService) Reorder(ids []uint) error {
 }
 
 func (s *workflowService) ReorderSteps(workflowID uint, ids []uint) error {
-	return s.workflowRepo.ReorderSteps(workflowID, ids)
+	return s.workflowRepo.ReorderStepsWithNextStatus(workflowID, ids)
 }
 
 func (s *workflowService) UpdateWorkflow(id uint, name, description string) (*model.Workflow, error) {
@@ -136,12 +137,47 @@ func (s *workflowService) AddStep(workflowID uint, input AddStepInput) (*model.W
 	if threshold < 1 {
 		threshold = 10
 	}
+
+	if count == 0 {
+		return s.addFirstStep(workflow, input, threshold)
+	}
+	return s.addSubsequentStep(workflow, input, threshold)
+}
+
+func (s *workflowService) addFirstStep(workflow *model.Workflow, input AddStepInput, threshold int) (*model.WorkflowStep, error) {
+	stsStart, err := s.statusRepo.FindByStatusKey("sts_start")
+	if err != nil {
+		return nil, err
+	}
+	stsGoal, err := s.statusRepo.FindByStatusKey("sts_goal")
+	if err != nil {
+		return nil, err
+	}
+
+	// 1. sts_start (order=0, next=user)
+	stepStart := &model.WorkflowStep{
+		OrganizationID: workflow.OrganizationID,
+		WorkflowID:     workflow.ID,
+		Order:          0,
+		StatusID:       stsStart.ID,
+		NextStatusID:   &input.StatusID,
+		Description:    "",
+		Threshold:      10,
+	}
+	if err := s.workflowRepo.CreateStep(stepStart); err != nil {
+		return nil, err
+	}
+	stepStart.Key = keygen.PrefixedID("ws", stepStart.ID)
+	_ = s.workflowRepo.UpdateStep(stepStart)
+
+	// 2. user step (order=1, next=sts_goal)
+	nextGoal := stsGoal.ID
 	step := &model.WorkflowStep{
 		OrganizationID:  workflow.OrganizationID,
-		WorkflowID:      workflowID,
-		Order:           int(count) + 1,
+		WorkflowID:      workflow.ID,
+		Order:           1,
 		StatusID:        input.StatusID,
-		NextStatusID:    input.NextStatusID,
+		NextStatusID:    &nextGoal,
 		Description:     input.Description,
 		Threshold:       threshold,
 		ExcludeReporter: input.ExcludeReporter,
@@ -152,6 +188,85 @@ func (s *workflowService) AddStep(workflowID uint, input AddStepInput) (*model.W
 	}
 	step.Key = keygen.PrefixedID("ws", step.ID)
 	_ = s.workflowRepo.UpdateStep(step)
+
+	// 3. sts_goal (order=2, next=nil)
+	stepGoal := &model.WorkflowStep{
+		OrganizationID: workflow.OrganizationID,
+		WorkflowID:     workflow.ID,
+		Order:          2,
+		StatusID:       stsGoal.ID,
+		NextStatusID:   nil,
+		Description:    "",
+		Threshold:      10,
+	}
+	if err := s.workflowRepo.CreateStep(stepGoal); err != nil {
+		return nil, err
+	}
+	stepGoal.Key = keygen.PrefixedID("ws", stepGoal.ID)
+	_ = s.workflowRepo.UpdateStep(stepGoal)
+
+	for i, ao := range input.ApprovalObjects {
+		obj := s.approvalObjectInputToModel(ao, step.ID, workflow.OrganizationID, i+1)
+		if obj != nil {
+			_ = s.workflowRepo.CreateApprovalObject(obj)
+			obj.Key = keygen.PrefixedID("ao", obj.ID)
+			_ = s.workflowRepo.UpdateApprovalObject(obj)
+		}
+	}
+	return s.workflowRepo.FindStepByID(step.ID)
+}
+
+func (s *workflowService) addSubsequentStep(workflow *model.Workflow, input AddStepInput, threshold int) (*model.WorkflowStep, error) {
+	steps, err := s.workflowRepo.FindStepsByWorkflowID(workflow.ID)
+	if err != nil {
+		return nil, err
+	}
+	var stsGoalStep *model.WorkflowStep
+	var prevUserStep *model.WorkflowStep
+	for i := range steps {
+		if steps[i].Status != nil && steps[i].Status.StatusKey == "sts_goal" {
+			stsGoalStep = &steps[i]
+			if i > 0 {
+				prevUserStep = &steps[i-1]
+			}
+			break
+		}
+	}
+	if stsGoalStep == nil {
+		return nil, errors.New("sts_goal step not found")
+	}
+
+	insertOrder := stsGoalStep.Order
+	stsGoalStatusID := stsGoalStep.StatusID
+
+	// 新ステップを sts_goal の直前に挿入
+	step := &model.WorkflowStep{
+		OrganizationID:  workflow.OrganizationID,
+		WorkflowID:      workflow.ID,
+		Order:           insertOrder,
+		StatusID:        input.StatusID,
+		NextStatusID:    &stsGoalStatusID,
+		Description:     input.Description,
+		Threshold:       threshold,
+		ExcludeReporter: input.ExcludeReporter,
+		ExcludeAssignee: input.ExcludeAssignee,
+	}
+	if err := s.workflowRepo.CreateStep(step); err != nil {
+		return nil, err
+	}
+	step.Key = keygen.PrefixedID("ws", step.ID)
+	_ = s.workflowRepo.UpdateStep(step)
+
+	// sts_goal の order を +1
+	stsGoalStep.Order = insertOrder + 1
+	_ = s.workflowRepo.UpdateStep(stsGoalStep)
+
+	// 直前ユーザーステップの next_status_id を新ステップに
+	if prevUserStep != nil {
+		prevUserStep.NextStatusID = &input.StatusID
+		_ = s.workflowRepo.UpdateStep(prevUserStep)
+	}
+
 	for i, ao := range input.ApprovalObjects {
 		obj := s.approvalObjectInputToModel(ao, step.ID, workflow.OrganizationID, i+1)
 		if obj != nil {
@@ -200,9 +315,7 @@ func (s *workflowService) UpdateStep(stepID uint, input UpdateStepInput) (*model
 	if input.StatusID != nil {
 		step.StatusID = *input.StatusID
 	}
-	if input.NextStatusID != nil {
-		step.NextStatusID = input.NextStatusID
-	}
+	// next_status_id は ReorderSteps でのみ更新。ここでは無視する
 	step.Description = input.Description
 	if input.Threshold >= 1 {
 		step.Threshold = input.Threshold

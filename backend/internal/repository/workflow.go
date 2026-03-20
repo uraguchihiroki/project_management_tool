@@ -8,6 +8,7 @@ import (
 type WorkflowRepository interface {
 	FindAll() ([]model.Workflow, error)
 	FindByID(id uint) (*model.Workflow, error)
+	FindStepsByWorkflowID(workflowID uint) ([]model.WorkflowStep, error)
 	Create(workflow *model.Workflow) error
 	Update(workflow *model.Workflow) error
 	Delete(id uint) error
@@ -18,6 +19,7 @@ type WorkflowRepository interface {
 	CountSteps(workflowID uint) (int64, error)
 	Reorder(ids []uint) error
 	ReorderSteps(workflowID uint, ids []uint) error
+	ReorderStepsWithNextStatus(workflowID uint, ids []uint) error
 	GetMaxOrder() (int, error)
 	CreateApprovalObject(obj *model.ApprovalObject) error
 	UpdateApprovalObject(obj *model.ApprovalObject) error
@@ -36,8 +38,23 @@ func NewWorkflowRepository(db *gorm.DB) WorkflowRepository {
 
 func (r *workflowRepository) FindAll() ([]model.Workflow, error) {
 	var workflows []model.Workflow
-	err := r.db.Order("display_order ASC").Find(&workflows).Error
+	err := r.db.
+		Joins("JOIN workflow_steps ON workflow_steps.workflow_id = workflows.id AND workflow_steps.deleted_at IS NULL").
+		Joins("JOIN statuses ON statuses.id = workflow_steps.status_id AND statuses.deleted_at IS NULL").
+		Where("COALESCE(statuses.status_key, '') NOT IN ('sts_start','sts_goal')").
+		Group("workflows.id").
+		Order("workflows.display_order ASC").
+		Find(&workflows).Error
 	return workflows, err
+}
+
+func (r *workflowRepository) FindStepsByWorkflowID(workflowID uint) ([]model.WorkflowStep, error) {
+	var steps []model.WorkflowStep
+	err := r.db.Where("workflow_id = ?", workflowID).
+		Preload("Status").
+		Order("\"order\" ASC").
+		Find(&steps).Error
+	return steps, err
 }
 
 func (r *workflowRepository) FindByID(id uint) (*model.Workflow, error) {
@@ -158,6 +175,68 @@ func (r *workflowRepository) ReorderSteps(workflowID uint, ids []uint) error {
 			if err := tx.Model(&model.WorkflowStep{}).
 				Where("id = ? AND workflow_id = ?", id, workflowID).
 				Update("order", i+1).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *workflowRepository) ReorderStepsWithNextStatus(workflowID uint, ids []uint) error {
+	steps, err := r.FindStepsByWorkflowID(workflowID)
+	if err != nil {
+		return err
+	}
+	idSet := make(map[uint]bool)
+	for _, id := range ids {
+		idSet[id] = true
+	}
+	var stsStart, stsGoal *model.WorkflowStep
+	var userSteps []model.WorkflowStep
+	for i := range steps {
+		s := &steps[i]
+		if s.Status != nil {
+			switch s.Status.StatusKey {
+			case "sts_start":
+				stsStart = s
+			case "sts_goal":
+				stsGoal = s
+			default:
+				if idSet[s.ID] {
+					userSteps = append(userSteps, *s)
+				}
+			}
+		}
+	}
+	// Build ordered list: sts_start, userSteps in ids order, sts_goal
+	ordered := make([]*model.WorkflowStep, 0, len(steps))
+	userStepByID := make(map[uint]*model.WorkflowStep)
+	for i := range userSteps {
+		userStepByID[userSteps[i].ID] = &userSteps[i]
+	}
+	if stsStart != nil {
+		ordered = append(ordered, stsStart)
+	}
+	for _, id := range ids {
+		if s := userStepByID[id]; s != nil {
+			ordered = append(ordered, s)
+		}
+	}
+	if stsGoal != nil {
+		ordered = append(ordered, stsGoal)
+	}
+
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i, step := range ordered {
+			updates := map[string]interface{}{"order": i}
+			if i+1 < len(ordered) {
+				updates["next_status_id"] = ordered[i+1].StatusID
+			} else {
+				updates["next_status_id"] = nil
+			}
+			if err := tx.Model(&model.WorkflowStep{}).
+				Where("id = ? AND workflow_id = ?", step.ID, workflowID).
+				Updates(updates).Error; err != nil {
 				return err
 			}
 		}

@@ -10,11 +10,11 @@ test.describe('組織管理者: ワークフロー ステップ追加', () => {
   })
 
   test('ステータス選択 → ステップ追加 → 一覧に表示', async ({ page }) => {
-    const statusesRes = await fetch(`${API}/organizations/${TEST_ORG_ID}/statuses?type=issue`)
+    const statusesRes = await fetch(`${API}/organizations/${TEST_ORG_ID}/statuses?type=issue&exclude_system=1`)
     const statusesJson = await statusesRes.json()
     const statuses = statusesJson.data ?? []
     const firstStatus = statuses[0]
-    if (!firstStatus) throw new Error('ステータスが取得できません')
+    if (!firstStatus) throw new Error('ステータスが取得できません（ユーザー作成ステータスが必要）')
 
     const workflowsRes = await fetch(`${API}/workflows`)
     const workflowsJson = await workflowsRes.json()
@@ -23,7 +23,11 @@ test.describe('組織管理者: ワークフロー ステップ追加', () => {
       const createRes = await fetch(`${API}/workflows`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'E2Eワークフロー', description: '' }),
+        body: JSON.stringify({
+          organization_id: TEST_ORG_ID,
+          name: 'E2Eワークフロー',
+          description: '',
+        }),
       })
       const createJson = await createRes.json()
       workflow = createJson.data

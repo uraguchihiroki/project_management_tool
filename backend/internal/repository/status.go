@@ -10,6 +10,7 @@ type StatusRepository interface {
 	FindByProject(projectID uuid.UUID) ([]model.Status, error)
 	FindByOrganizationID(orgID uuid.UUID) ([]model.Status, error)
 	FindByOrganizationIDAndType(orgID uuid.UUID, statusType string) ([]model.Status, error)
+	FindByOrganizationIDAndTypeExcludeSystem(orgID uuid.UUID, statusType string) ([]model.Status, error)
 	FindByOrgNameType(orgID uuid.UUID, projectID *uuid.UUID, name, statusType string) (*model.Status, error)
 	FindByID(id uuid.UUID) (*model.Status, error)
 	FindByStatusKey(key string) (*model.Status, error)
@@ -41,6 +42,19 @@ func (r *statusRepository) FindByOrganizationIDAndType(orgID uuid.UUID, statusTy
 	var statuses []model.Status
 	q := r.db.Where(
 		"project_id IN (SELECT id FROM projects WHERE organization_id = ?) OR organization_id = ? OR status_key IN ('sts_start','sts_goal')",
+		orgID, orgID,
+	)
+	if statusType == "issue" || statusType == "project" {
+		q = q.Where("type = ?", statusType)
+	}
+	err := q.Order(`"order" asc`).Find(&statuses).Error
+	return statuses, err
+}
+
+func (r *statusRepository) FindByOrganizationIDAndTypeExcludeSystem(orgID uuid.UUID, statusType string) ([]model.Status, error) {
+	var statuses []model.Status
+	q := r.db.Where(
+		"(project_id IN (SELECT id FROM projects WHERE organization_id = ?) OR organization_id = ?) AND (COALESCE(status_key, '') NOT IN ('sts_start','sts_goal'))",
 		orgID, orgID,
 	)
 	if statusType == "issue" || statusType == "project" {

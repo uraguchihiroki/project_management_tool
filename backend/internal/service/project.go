@@ -32,7 +32,7 @@ type ProjectService interface {
 	Update(id uuid.UUID, input UpdateProjectInput) (*model.Project, error)
 	Delete(id uuid.UUID) error
 	Reorder(orgID *uuid.UUID, ids []uuid.UUID) error
-	ListStatusesByOrg(orgID uuid.UUID, statusType string) ([]model.Status, error)
+	ListStatusesByOrg(orgID uuid.UUID, statusType string, excludeSystem bool) ([]model.Status, error)
 }
 
 type projectService struct {
@@ -139,6 +139,9 @@ func (s *projectService) Reorder(orgID *uuid.UUID, ids []uuid.UUID) error {
 	return s.projectRepo.Reorder(orgID, ids)
 }
 
-func (s *projectService) ListStatusesByOrg(orgID uuid.UUID, statusType string) ([]model.Status, error) {
+func (s *projectService) ListStatusesByOrg(orgID uuid.UUID, statusType string, excludeSystem bool) ([]model.Status, error) {
+	if excludeSystem {
+		return s.statusRepo.FindByOrganizationIDAndTypeExcludeSystem(orgID, statusType)
+	}
 	return s.statusRepo.FindByOrganizationIDAndType(orgID, statusType)
 }
