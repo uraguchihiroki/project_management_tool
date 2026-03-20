@@ -18,6 +18,17 @@ func NewOrganizationHandler(orgService service.OrganizationService) *Organizatio
 
 // GET /api/v1/organizations
 func (h *OrganizationHandler) List(c echo.Context) error {
+	orgID, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
+	if !isSuperAdmin && orgID != nil {
+		org, err := h.orgService.Get(*orgID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusNotFound, "organization not found")
+		}
+		return c.JSON(http.StatusOK, map[string]interface{}{"data": []interface{}{org}})
+	}
 	orgs, err := h.orgService.List()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -27,6 +38,13 @@ func (h *OrganizationHandler) List(c echo.Context) error {
 
 // POST /api/v1/organizations
 func (h *OrganizationHandler) Create(c echo.Context) error {
+	_, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
+	if !isSuperAdmin {
+		return echo.NewHTTPError(http.StatusForbidden, "only super admin can create organizations")
+	}
 	type Request struct {
 		Name string `json:"name"`
 	}
@@ -46,6 +64,10 @@ func (h *OrganizationHandler) Create(c echo.Context) error {
 
 // GET /api/v1/users/:id/organizations
 func (h *OrganizationHandler) ListByUser(c echo.Context) error {
+	orgID, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
@@ -54,14 +76,23 @@ func (h *OrganizationHandler) ListByUser(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
+	if !isSuperAdmin && orgID != nil {
+		filtered := make([]interface{}, 0, len(orgs))
+		for _, org := range orgs {
+			if org.ID == *orgID {
+				filtered = append(filtered, org)
+			}
+		}
+		return c.JSON(http.StatusOK, map[string]interface{}{"data": filtered})
+	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": orgs})
 }
 
 // POST /api/v1/organizations/:orgId/users
 func (h *OrganizationHandler) AddUser(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	type Request struct {
 		UserID     string `json:"user_id"`

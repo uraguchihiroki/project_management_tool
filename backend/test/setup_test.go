@@ -18,6 +18,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/handler"
+	"github.com/uraguchihiroki/project_management_tool/internal/auth"
+	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
@@ -32,6 +34,7 @@ const testOrgID = "00000000-0000-0000-0000-000000000001"
 type testServer struct {
 	server *httptest.Server
 	db     *gorm.DB
+	token  string
 }
 
 // newTestServer はSQLiteを使ったテスト用サーバーを起動します
@@ -145,11 +148,11 @@ func newTestServer(t *testing.T) *testServer {
 
 	userH := handler.NewUserHandler(userSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
-	issueH := handler.NewIssueHandler(issueSvc, approvalSvc)
+	issueH := handler.NewIssueHandler(issueSvc, approvalSvc, projectSvc)
 	commentH := handler.NewCommentHandler(commentSvc)
 	roleH := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowH := handler.NewWorkflowHandler(workflowSvc)
-	templateH := handler.NewTemplateHandler(templateSvc)
+	templateH := handler.NewTemplateHandler(templateSvc, projectSvc)
 	approvalH := handler.NewApprovalHandler(approvalSvc)
 	orgH := handler.NewOrganizationHandler(orgSvc)
 	superAdminH := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
@@ -160,9 +163,21 @@ func newTestServer(t *testing.T) *testServer {
 	e.HideBanner = true
 	e.Use(middleware.Recover())
 
+	superAdmin := model.SuperAdmin{
+		ID:    uuid.New(),
+		Email: "test-super-admin@example.com",
+	}
+	db.Create(&superAdmin)
+	token, _ := auth.GenerateSuperAdminToken(superAdmin.ID)
+
 	api := e.Group("/api/v1")
+	api.Use(authmw.RequireJWT)
+	public := e.Group("/api/v1")
+	public.Use(authmw.OptionalJWT)
 	api.GET("/users", userH.List)
-	api.POST("/users", userH.Create)
+	public.POST("/users", userH.Create)
+	public.POST("/admin/login", userH.AdminLogin)
+	public.POST("/super-admin/login", superAdminH.Login)
 	api.GET("/users/:id", userH.Get)
 	api.PUT("/users/:id/admin", userH.SetAdmin)
 	api.GET("/users/:id/roles", roleH.GetUserRoles)
@@ -205,7 +220,6 @@ func newTestServer(t *testing.T) *testServer {
 	api.DELETE("/organizations/:orgId/departments/:id", departmentH.Delete)
 	api.GET("/users/:id/departments", departmentH.GetUserDepartments)
 	api.PUT("/users/:id/departments", departmentH.SetUserDepartments)
-	api.POST("/super-admin/login", superAdminH.Login)
 	api.GET("/super-admin/organizations", superAdminH.ListOrganizations)
 	api.POST("/super-admin/organizations", superAdminH.CreateOrganization)
 	api.GET("/admin/users", userH.ListWithRoles)
@@ -242,11 +256,16 @@ func newTestServer(t *testing.T) *testServer {
 		srv.Close()
 	})
 
-	return &testServer{server: srv, db: db}
+	return &testServer{server: srv, db: db, token: token}
 }
 
 // req はテスト用HTTPリクエストを送信し、レスポンスのbodyを返します
 func (ts *testServer) req(t *testing.T, method, path string, body interface{}) (int, map[string]interface{}) {
+	t.Helper()
+	return ts.reqWithToken(t, ts.token, method, path, body)
+}
+
+func (ts *testServer) reqWithToken(t *testing.T, token, method, path string, body interface{}) (int, map[string]interface{}) {
 	t.Helper()
 
 	var bodyReader io.Reader
@@ -256,6 +275,9 @@ func (ts *testServer) req(t *testing.T, method, path string, body interface{}) (
 	}
 
 	req, _ := http.NewRequest(method, ts.server.URL+path, bodyReader)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

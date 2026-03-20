@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/handler"
+	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
@@ -81,11 +82,11 @@ func main() {
 	// Handlers
 	userHandler := handler.NewUserHandler(userSvc)
 	projectHandler := handler.NewProjectHandler(projectSvc)
-	issueHandler := handler.NewIssueHandler(issueSvc, approvalSvc)
+	issueHandler := handler.NewIssueHandler(issueSvc, approvalSvc, projectSvc)
 	commentHandler := handler.NewCommentHandler(commentSvc)
 	roleHandler := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowHandler := handler.NewWorkflowHandler(workflowSvc)
-	templateHandler := handler.NewTemplateHandler(templateSvc)
+	templateHandler := handler.NewTemplateHandler(templateSvc, projectSvc)
 	approvalHandler := handler.NewApprovalHandler(approvalSvc)
 	orgHandler := handler.NewOrganizationHandler(orgSvc)
 	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
@@ -106,14 +107,20 @@ func main() {
 	e.Match([]string{"GET", "HEAD"}, "/api/v1/health", func(c echo.Context) error { return c.NoContent(200) })
 
 	// ステップ更新: 最優先で登録（/workflows/:id との競合を完全回避）
-	e.PUT("/api/v1/workflow-steps/:stepId", workflowHandler.UpdateStep)
+	e.PUT("/api/v1/workflow-steps/:stepId", workflowHandler.UpdateStep, authmw.RequireJWT)
 
 	// Routes
 	api := e.Group("/api/v1")
+	api.Use(authmw.RequireJWT)
+
+	public := e.Group("/api/v1")
+	public.Use(authmw.OptionalJWT)
 
 	// Users
+	public.POST("/users", userHandler.Create)
+	public.POST("/admin/login", userHandler.AdminLogin)
+	public.POST("/super-admin/login", superAdminHandler.Login)
 	api.GET("/users", userHandler.List)
-	api.POST("/users", userHandler.Create)
 	api.GET("/users/:id", userHandler.Get)
 	api.PUT("/users/:id/admin", userHandler.SetAdmin)
 	api.GET("/users/:id/roles", roleHandler.GetUserRoles)
@@ -171,7 +178,6 @@ func main() {
 	api.PUT("/users/:id/departments", departmentHandler.SetUserDepartments)
 
 	// Super Admin
-	api.POST("/super-admin/login", superAdminHandler.Login)
 	api.GET("/super-admin/organizations", superAdminHandler.ListOrganizations)
 	api.POST("/super-admin/organizations", superAdminHandler.CreateOrganization)
 

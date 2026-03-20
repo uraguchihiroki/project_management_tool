@@ -17,6 +17,7 @@ type UserService interface {
 	ListWithRoles() ([]model.User, error)
 	ListByOrg(orgID uuid.UUID) ([]model.User, error)
 	Get(id uuid.UUID) (*model.User, error)
+	FindByEmail(email string) (*model.User, error)
 	Create(name, email string) (*model.User, error)
 	CreateForOrg(orgID uuid.UUID, name, email string) (*model.User, error)
 	Update(id uuid.UUID, name string) error
@@ -47,6 +48,10 @@ func (s *userService) ListByOrg(orgID uuid.UUID) ([]model.User, error) {
 
 func (s *userService) Get(id uuid.UUID) (*model.User, error) {
 	return s.userRepo.FindByID(id)
+}
+
+func (s *userService) FindByEmail(email string) (*model.User, error) {
+	return s.userRepo.FindByEmail(email)
 }
 
 func (s *userService) Create(name, email string) (*model.User, error) {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/uraguchihiroki/project_management_tool/internal/auth"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
 )
@@ -18,6 +19,17 @@ func NewUserHandler(userService service.UserService) *UserHandler {
 }
 
 func (h *UserHandler) List(c echo.Context) error {
+	orgID, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
+	if !isSuperAdmin && orgID != nil {
+		users, err := h.userService.ListByOrg(*orgID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, map[string]interface{}{"data": users})
+	}
 	users, err := h.userService.List()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -26,12 +38,19 @@ func (h *UserHandler) List(c echo.Context) error {
 }
 
 func (h *UserHandler) Get(c echo.Context) error {
+	orgID, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
 	}
 	user, err := h.userService.Get(id)
 	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "user not found")
+	}
+	if !isSuperAdmin && (orgID == nil || user.OrganizationID != *orgID) {
 		return echo.NewHTTPError(http.StatusNotFound, "user not found")
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": user})
@@ -65,8 +84,40 @@ func (h *UserHandler) Create(c echo.Context) error {
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": user})
 }
 
+// POST /api/v1/admin/login
+func (h *UserHandler) AdminLogin(c echo.Context) error {
+	type Request struct {
+		Email string `json:"email"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if req.Email == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "email is required")
+	}
+	user, err := h.userService.FindByEmail(req.Email)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "メールアドレスが見つかりません")
+	}
+	token, err := auth.GenerateUserToken(user.ID, user.OrganizationID, user.IsAdmin)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to issue token")
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"data": map[string]interface{}{
+			"user":  user,
+			"token": token,
+		},
+	})
+}
+
 // GET /api/v1/admin/users （ロール付きユーザー一覧、org_id で組織フィルタ）
 func (h *UserHandler) ListWithRoles(c echo.Context) error {
+	orgIDScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	var users []model.User
 	var err error
 	if orgIDStr := c.QueryParam("org_id"); orgIDStr != "" {
@@ -74,9 +125,16 @@ func (h *UserHandler) ListWithRoles(c echo.Context) error {
 		if parseErr != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
 		}
+		if !isSuperAdmin && (orgIDScope == nil || orgID != *orgIDScope) {
+			return echo.NewHTTPError(http.StatusForbidden, "forbidden for this organization")
+		}
 		users, err = h.userService.ListByOrg(orgID)
 	} else {
-		users, err = h.userService.ListWithRoles()
+		if !isSuperAdmin && orgIDScope != nil {
+			users, err = h.userService.ListByOrg(*orgIDScope)
+		} else {
+			users, err = h.userService.ListWithRoles()
+		}
 	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -86,6 +144,10 @@ func (h *UserHandler) ListWithRoles(c echo.Context) error {
 
 // POST /api/v1/admin/users （組織にユーザーを追加）
 func (h *UserHandler) CreateForOrg(c echo.Context) error {
+	orgIDScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	type Request struct {
 		OrgID string `json:"org_id"`
 		Name  string `json:"name"`
@@ -99,6 +161,9 @@ func (h *UserHandler) CreateForOrg(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "org_id and email are required")
 	}
 	orgID, err := uuid.Parse(req.OrgID)
+	if !isSuperAdmin && (orgIDScope == nil || orgID != *orgIDScope) {
+		return echo.NewHTTPError(http.StatusForbidden, "forbidden for this organization")
+	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
 	}
@@ -111,7 +176,18 @@ func (h *UserHandler) CreateForOrg(c echo.Context) error {
 
 // PUT /api/v1/admin/users/:id （ユーザー名を更新）
 func (h *UserHandler) UpdateUser(c echo.Context) error {
+	orgIDScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	id, err := uuid.Parse(c.Param("id"))
+	existing, err := h.userService.Get(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "user not found")
+	}
+	if !isSuperAdmin && (orgIDScope == nil || existing.OrganizationID != *orgIDScope) {
+		return echo.NewHTTPError(http.StatusNotFound, "user not found")
+	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
 	}
@@ -133,6 +209,10 @@ func (h *UserHandler) UpdateUser(c echo.Context) error {
 
 // DELETE /api/v1/admin/users/:id （組織からユーザーを除外）
 func (h *UserHandler) RemoveFromOrg(c echo.Context) error {
+	orgIDScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
@@ -142,6 +222,9 @@ func (h *UserHandler) RemoveFromOrg(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "org_id is required")
 	}
 	orgID, err := uuid.Parse(orgIDStr)
+	if !isSuperAdmin && (orgIDScope == nil || orgID != *orgIDScope) {
+		return echo.NewHTTPError(http.StatusForbidden, "forbidden for this organization")
+	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
 	}

@@ -12,9 +12,14 @@ import (
 var colorRegex = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 type StatusService interface {
+	Get(id uuid.UUID) (*model.Status, error)
 	Create(orgID uuid.UUID, name, color, statusType string, order int) (*model.Status, error)
 	Update(id uuid.UUID, name, color string, order int) (*model.Status, error)
 	Delete(id uuid.UUID) error
+}
+
+func (s *statusService) Get(id uuid.UUID) (*model.Status, error) {
+	return s.statusRepo.FindByID(id)
 }
 
 type statusService struct {

@@ -18,6 +18,10 @@ func NewProjectHandler(projectService service.ProjectService) *ProjectHandler {
 }
 
 func (h *ProjectHandler) List(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	var orgID *uuid.UUID
 	if raw := c.QueryParam("org_id"); raw != "" {
 		parsed, err := uuid.Parse(raw)
@@ -25,6 +29,9 @@ func (h *ProjectHandler) List(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
 		}
 		orgID = &parsed
+	}
+	if !isSuperAdmin {
+		orgID = orgScope
 	}
 	projects, err := h.projectService.List(orgID)
 	if err != nil {
@@ -34,6 +41,10 @@ func (h *ProjectHandler) List(c echo.Context) error {
 }
 
 func (h *ProjectHandler) Get(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
@@ -42,10 +53,17 @@ func (h *ProjectHandler) Get(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "project not found")
 	}
+	if !isSuperAdmin && (orgScope == nil || project.OrganizationID != *orgScope) {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": project})
 }
 
 func (h *ProjectHandler) Create(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	type Request struct {
 		Key            string  `json:"key" validate:"required,max=10"`
 		Name           string  `json:"name" validate:"required,max=200"`
@@ -79,6 +97,9 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "organization_id is required")
 	}
 	parsed, err := uuid.Parse(req.OrganizationID)
+	if !isSuperAdmin && (orgScope == nil || parsed != *orgScope) {
+		return echo.NewHTTPError(http.StatusForbidden, "forbidden for this organization")
+	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
 	}
@@ -109,9 +130,20 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 }
 
 func (h *ProjectHandler) Update(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
+	}
+	existing, err := h.projectService.Get(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	}
+	if !isSuperAdmin && (orgScope == nil || existing.OrganizationID != *orgScope) {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
 	}
 	type Request struct {
 		Name        *string `json:"name"`
@@ -151,6 +183,10 @@ func (h *ProjectHandler) Update(c echo.Context) error {
 
 // PUT /api/v1/projects/reorder
 func (h *ProjectHandler) Reorder(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	var orgID *uuid.UUID
 	if raw := c.QueryParam("org_id"); raw != "" {
 		parsed, err := uuid.Parse(raw)
@@ -158,6 +194,9 @@ func (h *ProjectHandler) Reorder(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
 		}
 		orgID = &parsed
+	}
+	if !isSuperAdmin {
+		orgID = orgScope
 	}
 	type Request struct {
 		IDs []string `json:"ids"`
@@ -181,9 +220,20 @@ func (h *ProjectHandler) Reorder(c echo.Context) error {
 }
 
 func (h *ProjectHandler) Delete(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
+	}
+	existing, err := h.projectService.Get(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	}
+	if !isSuperAdmin && (orgScope == nil || existing.OrganizationID != *orgScope) {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
 	}
 	if err := h.projectService.Delete(id); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -193,9 +243,9 @@ func (h *ProjectHandler) Delete(c echo.Context) error {
 
 // GET /api/v1/organizations/:orgId/statuses
 func (h *ProjectHandler) ListStatusesByOrg(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	statusType := c.QueryParam("type") // issue | project | "" (all)
 	excludeSystem := c.QueryParam("exclude_system") == "1" || c.QueryParam("exclude_system") == "true"

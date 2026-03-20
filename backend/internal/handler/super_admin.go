@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/uraguchihiroki/project_management_tool/internal/auth"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
 )
 
@@ -32,7 +33,14 @@ func (h *SuperAdminHandler) Login(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "メールアドレスが見つかりません")
 	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"data": admin})
+	token, err := auth.GenerateSuperAdminToken(admin.ID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to issue token")
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"data":  admin,
+		"token": token,
+	})
 }
 
 // GET /api/v1/super-admin/organizations
