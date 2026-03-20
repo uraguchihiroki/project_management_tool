@@ -8,6 +8,10 @@ alwaysApply: true
 **最重要事項（開発はローカル・運用はクラウド、WSL 移行理由、Cursor の WSL 接続必須）の正本**  
 → [AGENTS.md](../../AGENTS.md#最重要事項人ai-ともに必ず認識すること) を必ず参照すること
 
+## ユーザースキル
+
+タスク実行前に `/mnt/c/Users/diversion/.cursor/skills/`（= `C:\Users\diversion\.cursor\skills\`）内のスキルを必ず確認すること。該当するスキルがあれば SKILL.md の手順に従う。
+
 ## ターミナル・シェル
 
 - WSL Ubuntu の bash を使用する（PowerShell は使用しない）
