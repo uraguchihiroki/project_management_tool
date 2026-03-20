@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
+	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
@@ -41,8 +42,14 @@ func (s *departmentService) Create(orgID uuid.UUID, name string) (*model.Departm
 	if err != nil {
 		return nil, err
 	}
+	deptID := uuid.New()
+	key := keygen.Slug(name)
+	if key == "" {
+		key = keygen.UUIDKey(deptID)
+	}
 	d := &model.Department{
-		ID:             uuid.New(),
+		ID:             deptID,
+		Key:            key,
 		OrganizationID: orgID,
 		Name:           name,
 		Order:          maxOrder + 1,

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -162,8 +163,10 @@ func (s *orgSeedService) upsertOrgStatus(orgID uuid.UUID, projectID *uuid.UUID, 
 	if err != gorm.ErrRecordNotFound {
 		return err
 	}
+	statusID := uuid.New()
 	status := &model.Status{
-		ID:        uuid.New(),
+		ID:        statusID,
+		Key:       "sts-" + statusID.String(),
 		ProjectID: projectID,
 		Name:      name,
 		Color:     color,
@@ -185,12 +188,17 @@ func (s *orgSeedService) upsertRole(orgID uuid.UUID, name string, level int) err
 	if err != gorm.ErrRecordNotFound {
 		return err
 	}
-	return s.roleRepo.Create(&model.Role{
+	role := &model.Role{
 		Name:           name,
 		Level:          level,
 		OrganizationID: &orgID,
 		CreatedAt:      time.Now(),
-	})
+	}
+	if err := s.roleRepo.Create(role); err != nil {
+		return err
+	}
+	role.Key = fmt.Sprintf("role-%d", role.ID)
+	return s.roleRepo.Update(role)
 }
 
 func (s *orgSeedService) upsertSampleProject(orgID uuid.UUID, ownerID uuid.UUID) (*model.Project, error) {
@@ -230,8 +238,14 @@ func (s *orgSeedService) upsertDepartment(orgID uuid.UUID, name string, _ int) e
 		return err
 	}
 	maxOrder, _ := s.departmentRepo.GetMaxOrder(orgID)
+	deptID := uuid.New()
+	key := strings.ReplaceAll(strings.ToLower(name), " ", "-")
+	if key == "" {
+		key = deptID.String()
+	}
 	return s.departmentRepo.Create(&model.Department{
-		ID:             uuid.New(),
+		ID:             deptID,
+		Key:            key,
 		OrganizationID: orgID,
 		Name:           name,
 		Order:          maxOrder + 1,
@@ -250,8 +264,14 @@ func (s *orgSeedService) upsertSampleIssue(orgID uuid.UUID, projectID uuid.UUID,
 	}
 	number, _ := s.issueRepo.NextNumber(projectID)
 	now := time.Now()
+	project, _ := s.projectRepo.FindByID(projectID)
+	issueKey := uuid.New().String()
+	if project != nil {
+		issueKey = fmt.Sprintf("%s-%d", project.Key, number)
+	}
 	return s.issueRepo.Create(&model.Issue{
 		ID:             uuid.New(),
+		Key:            issueKey,
 		Number:         number,
 		Title:          "サンプルチケット",
 		Description:    strPtr("動作確認用のサンプルです。"),

@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
+	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
@@ -54,8 +55,10 @@ func (s *approvalService) InitializeForIssue(issueID uuid.UUID, workflowID uint)
 		return fmt.Errorf("workflow not found: %w", err)
 	}
 	for _, step := range workflow.Steps {
+		approvalID := uuid.New()
 		approval := &model.IssueApproval{
-			ID:             uuid.New(),
+			ID:             approvalID,
+			Key:            keygen.UUIDKey(approvalID),
 			OrganizationID: issue.OrganizationID,
 			IssueID:        issueID,
 			WorkflowStepID: step.ID,
@@ -286,8 +289,10 @@ func (s *approvalService) ApproveStep(issueID uuid.UUID, stepID uint, approverID
 		return nil, fmt.Errorf("issue not found: %w", err)
 	}
 	now := time.Now()
+	approvalID := uuid.New()
 	approval := &model.IssueApproval{
-		ID:             uuid.New(),
+		ID:             approvalID,
+		Key:            keygen.UUIDKey(approvalID),
 		OrganizationID: issue.OrganizationID,
 		IssueID:        issueID,
 		WorkflowStepID: stepID,

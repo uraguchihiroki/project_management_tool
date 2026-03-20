@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
+	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
@@ -88,6 +89,12 @@ func (s *workflowService) CreateWorkflow(orgID uuid.UUID, name, description stri
 	if err := s.workflowRepo.Create(workflow); err != nil {
 		return nil, err
 	}
+	key := keygen.Slug(name)
+	if key == "" {
+		key = keygen.PrefixedID("wf", workflow.ID)
+	}
+	workflow.Key = key
+	_ = s.workflowRepo.Update(workflow)
 	return s.workflowRepo.FindByID(workflow.ID)
 }
 
@@ -143,10 +150,14 @@ func (s *workflowService) AddStep(workflowID uint, input AddStepInput) (*model.W
 	if err := s.workflowRepo.CreateStep(step); err != nil {
 		return nil, err
 	}
+	step.Key = keygen.PrefixedID("ws", step.ID)
+	_ = s.workflowRepo.UpdateStep(step)
 	for i, ao := range input.ApprovalObjects {
 		obj := s.approvalObjectInputToModel(ao, step.ID, workflow.OrganizationID, i+1)
 		if obj != nil {
 			_ = s.workflowRepo.CreateApprovalObject(obj)
+			obj.Key = keygen.PrefixedID("ao", obj.ID)
+			_ = s.workflowRepo.UpdateApprovalObject(obj)
 		}
 	}
 	return s.workflowRepo.FindStepByID(step.ID)
@@ -212,6 +223,8 @@ func (s *workflowService) UpdateStep(stepID uint, input UpdateStepInput) (*model
 			obj := s.approvalObjectInputToModel(ao, stepID, orgID, i+1)
 			if obj != nil {
 				_ = s.workflowRepo.CreateApprovalObject(obj)
+				obj.Key = keygen.PrefixedID("ao", obj.ID)
+				_ = s.workflowRepo.UpdateApprovalObject(obj)
 			}
 		}
 	}

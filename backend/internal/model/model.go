@@ -9,6 +9,7 @@ import (
 
 type Organization struct {
 	ID         uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key        string         `gorm:"size:255;not null" json:"key"`
 	Name       string         `gorm:"size:200;not null;uniqueIndex" json:"name"`
 	AdminEmail string         `gorm:"size:255" json:"admin_email"`
 	CreatedAt  time.Time      `json:"created_at"`
@@ -17,6 +18,7 @@ type Organization struct {
 
 type SuperAdmin struct {
 	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key       string         `gorm:"size:255;not null" json:"key"`
 	Name      string         `gorm:"size:100;not null" json:"name"`
 	Email     string         `gorm:"size:255;uniqueIndex;not null" json:"email"`
 	CreatedAt time.Time      `json:"created_at"`
@@ -25,6 +27,7 @@ type SuperAdmin struct {
 
 type Department struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null" json:"organization_id"`
 	Organization   Organization   `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
 	Name           string         `gorm:"size:200;not null" json:"name"`
@@ -35,14 +38,16 @@ type Department struct {
 
 type OrganizationUserDepartment struct {
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;primaryKey" json:"organization_id"`
-	UserID         uuid.UUID      `gorm:"type:uuid;not null;primaryKey" json:"user_id"`
-	DepartmentID   uuid.UUID      `gorm:"type:uuid;not null;primaryKey" json:"department_id"`
-	Department     Department     `gorm:"foreignKey:DepartmentID" json:"department,omitempty"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+	UserID        uuid.UUID       `gorm:"type:uuid;not null;primaryKey" json:"user_id"`
+	DepartmentID  uuid.UUID       `gorm:"type:uuid;not null;primaryKey" json:"department_id"`
+	Key           string         `gorm:"size:255;not null" json:"key"`
+	Department    Department     `gorm:"foreignKey:DepartmentID" json:"department,omitempty"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 type User struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;uniqueIndex:idx_user_org_email" json:"organization_id"`
 	Organization   Organization   `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
 	Name           string         `gorm:"size:100;not null" json:"name"`
@@ -51,13 +56,22 @@ type User struct {
 	IsAdmin        bool           `gorm:"default:false" json:"is_admin"`
 	IsOrgAdmin     bool           `gorm:"default:false" json:"is_org_admin"`
 	JoinedAt       time.Time      `json:"joined_at"`
-	Roles          []Role         `gorm:"many2many:user_roles;" json:"roles,omitempty"`
+	Roles          []Role         `gorm:"many2many:user_roles;joinForeignKey:UserID;joinReferences:RoleID" json:"roles,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
+type UserRole struct {
+	UserID uuid.UUID `gorm:"type:uuid;not null;primaryKey" json:"user_id"`
+	RoleID uint     `gorm:"not null;primaryKey" json:"role_id"`
+	Key    string   `gorm:"size:255;not null" json:"key"`
+}
+
+func (UserRole) TableName() string { return "user_roles" }
+
 type Role struct {
 	ID             uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
 	Name           string         `gorm:"size:100;not null;uniqueIndex:idx_role_name_org" json:"name"`
 	Level          int            `gorm:"not null;default:1" json:"level"`
 	Order          int            `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
@@ -87,6 +101,7 @@ type Project struct {
 
 type Status struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
 	ProjectID      *uuid.UUID     `gorm:"type:uuid" json:"project_id,omitempty"`
 	OrganizationID *uuid.UUID     `gorm:"type:uuid" json:"organization_id,omitempty"`
 	Name           string         `gorm:"size:50;not null" json:"name"`
@@ -99,6 +114,7 @@ type Status struct {
 
 type Issue struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
 	Number         int            `gorm:"not null" json:"number"`
 	Title          string         `gorm:"size:500;not null" json:"title"`
 	Description    *string        `json:"description,omitempty"`
@@ -122,6 +138,7 @@ type Issue struct {
 
 type IssueApproval struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null" json:"organization_id"`
 	IssueID        uuid.UUID      `gorm:"type:uuid;not null" json:"issue_id"`
 	WorkflowStepID uint           `gorm:"not null" json:"workflow_step_id"`
@@ -137,6 +154,7 @@ type IssueApproval struct {
 
 type IssueTemplate struct {
 	ID              uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Key             string         `gorm:"size:255;not null" json:"key"`
 	OrganizationID  uuid.UUID      `gorm:"type:uuid;not null" json:"organization_id"`
 	ProjectID       uuid.UUID      `gorm:"type:uuid;not null" json:"project_id"`
 	Project         Project        `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
@@ -153,6 +171,7 @@ type IssueTemplate struct {
 
 type Comment struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null" json:"organization_id"`
 	IssueID       uuid.UUID      `gorm:"type:uuid;not null" json:"issue_id"`
 	AuthorID      uuid.UUID      `gorm:"type:uuid;not null" json:"author_id"`
@@ -165,6 +184,7 @@ type Comment struct {
 
 type Workflow struct {
 	ID             uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null" json:"organization_id"`
 	Organization   Organization   `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
 	Name           string         `gorm:"size:200;not null" json:"name"`
@@ -177,6 +197,7 @@ type Workflow struct {
 
 type WorkflowStep struct {
 	ID               uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	Key              string     `gorm:"size:255;not null" json:"key"`
 	OrganizationID   uuid.UUID  `gorm:"type:uuid;not null" json:"organization_id"`
 	WorkflowID       uint       `gorm:"not null" json:"workflow_id"`
 	StatusID         uuid.UUID  `gorm:"type:uuid;not null" json:"status_id"` // このステップのステータス。表示名は Status.Name
@@ -195,6 +216,7 @@ type WorkflowStep struct {
 
 type ApprovalObject struct {
 	ID               uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	Key              string     `gorm:"size:255;not null" json:"key"`
 	OrganizationID   uuid.UUID  `gorm:"type:uuid;not null" json:"organization_id"`
 	WorkflowStepID   uint       `gorm:"not null" json:"workflow_step_id"`
 	Order          int        `gorm:"column:sort_order;not null;default:1" json:"order"`

@@ -28,6 +28,7 @@ func (s *superAdminService) FindByEmail(email string) (*model.SuperAdmin, error)
 func (s *superAdminService) Create(name, email string) (*model.SuperAdmin, error) {
 	admin := &model.SuperAdmin{
 		ID:        uuid.New(),
+		Key:       email,
 		Name:      name,
 		Email:     email,
 		CreatedAt: time.Now(),

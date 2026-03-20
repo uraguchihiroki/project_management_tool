@@ -38,8 +38,11 @@ func (s *statusService) Create(orgID uuid.UUID, name, color, statusType string, 
 	if statusType != "issue" && statusType != "project" {
 		statusType = "issue"
 	}
+	statusID := uuid.New()
+	key := "sts-" + statusID.String()
 	status := &model.Status{
-		ID:             uuid.New(),
+		ID:             statusID,
+		Key:            key,
 		OrganizationID: &orgID,
 		Name:           name,
 		Color:          color,

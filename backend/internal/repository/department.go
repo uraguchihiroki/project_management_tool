@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"gorm.io/gorm"
@@ -92,10 +94,12 @@ func (r *departmentRepository) Delete(id uuid.UUID) error {
 }
 
 func (r *departmentRepository) AddUserToDepartment(orgID, userID, departmentID uuid.UUID) error {
+	key := fmt.Sprintf("%s-%s-%s", orgID.String(), userID.String(), departmentID.String())
 	oud := &model.OrganizationUserDepartment{
 		OrganizationID: orgID,
 		UserID:         userID,
 		DepartmentID:   departmentID,
+		Key:            key,
 	}
 	return r.db.Where("organization_id = ? AND user_id = ? AND department_id = ?", orgID, userID, departmentID).
 		FirstOrCreate(oud).Error

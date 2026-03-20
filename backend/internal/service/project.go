@@ -89,8 +89,10 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 		{"完了", "#10B981", 4},
 	}
 	for _, ds := range defaultStatuses {
+		statusID := uuid.New()
 		status := &model.Status{
-			ID:        uuid.New(),
+			ID:        statusID,
+			Key:       "sts-" + statusID.String(),
 			ProjectID: &project.ID,
 			Name:      ds.Name,
 			Color:     ds.Color,

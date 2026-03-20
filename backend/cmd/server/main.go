@@ -25,6 +25,9 @@ func main() {
 		log.Fatalf("failed to connect database: %v", err)
 	}
 
+	// user_roles 中間テーブルに key カラムを持たせるためカスタム JoinTable を設定
+	db.SetupJoinTable(&model.User{}, "Roles", &model.UserRole{})
+
 	// AutoMigrate
 	if err := db.AutoMigrate(
 		&model.Organization{},
@@ -94,10 +97,13 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://localhost:3000"},
+		AllowOrigins: []string{"http://localhost:3000", "http://frontend:3000"},
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{"Content-Type", "Authorization"},
 	}))
+
+	// Health check (for Docker / E2E; wget --spider uses HEAD)
+	e.Match([]string{"GET", "HEAD"}, "/api/v1/health", func(c echo.Context) error { return c.NoContent(200) })
 
 	// ステップ更新: 最優先で登録（/workflows/:id との競合を完全回避）
 	e.PUT("/api/v1/workflow-steps/:stepId", workflowHandler.UpdateStep)

@@ -64,6 +64,7 @@ func (s *userService) Create(name, email string) (*model.User, error) {
 	userID := uuid.New()
 	user := &model.User{
 		ID:             userID,
+		Key:            email,
 		OrganizationID: orgID,
 		Name:           name,
 		Email:          email,
@@ -85,6 +86,7 @@ func (s *userService) CreateForOrg(orgID uuid.UUID, name, email string) (*model.
 	newUserID := uuid.New()
 	user := &model.User{
 		ID:             newUserID,
+		Key:            email,
 		OrganizationID: orgID,
 		Name:           name,
 		Email:          email,

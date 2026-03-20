@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
+	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
@@ -35,8 +36,14 @@ func (s *organizationService) Get(id uuid.UUID) (*model.Organization, error) {
 }
 
 func (s *organizationService) Create(name, adminEmail, adminName string) (*model.Organization, error) {
+	orgID := uuid.New()
+	key := keygen.Slug(name)
+	if key == "" {
+		key = keygen.UUIDKey(orgID)
+	}
 	org := &model.Organization{
-		ID:         uuid.New(),
+		ID:         orgID,
+		Key:        key,
 		Name:       name,
 		AdminEmail: adminEmail,
 		CreatedAt:  time.Now(),
@@ -50,6 +57,7 @@ func (s *organizationService) Create(name, adminEmail, adminName string) (*model
 		userID := uuid.New()
 		user := &model.User{
 			ID:             userID,
+			Key:            adminEmail,
 			OrganizationID: org.ID,
 			Name:           adminName,
 			Email:          adminEmail,
@@ -90,6 +98,7 @@ func (s *organizationService) AddUser(orgID uuid.UUID, existingUserID uuid.UUID,
 	newUserID := uuid.New()
 	user := &model.User{
 		ID:             newUserID,
+		Key:            existing.Email,
 		OrganizationID: orgID,
 		Name:           existing.Name,
 		Email:          existing.Email,

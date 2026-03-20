@@ -60,10 +60,14 @@ func (r *workflowRepository) Create(workflow *model.Workflow) error {
 }
 
 func (r *workflowRepository) Update(workflow *model.Workflow) error {
-	return r.db.Model(&model.Workflow{}).Where("id = ?", workflow.ID).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"name":        workflow.Name,
 		"description": workflow.Description,
-	}).Error
+	}
+	if workflow.Key != "" {
+		updates["key"] = workflow.Key
+	}
+	return r.db.Model(&model.Workflow{}).Where("id = ?", workflow.ID).Updates(updates).Error
 }
 
 func (r *workflowRepository) Delete(id uint) error {
@@ -88,14 +92,18 @@ func (r *workflowRepository) CreateStep(step *model.WorkflowStep) error {
 }
 
 func (r *workflowRepository) UpdateStep(step *model.WorkflowStep) error {
-	return r.db.Model(&model.WorkflowStep{}).Where("id = ?", step.ID).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"status_id":        step.StatusID,
 		"next_status_id":   step.NextStatusID,
-		"description":     step.Description,
-		"threshold":       step.Threshold,
+		"description":      step.Description,
+		"threshold":        step.Threshold,
 		"exclude_reporter": step.ExcludeReporter,
 		"exclude_assignee": step.ExcludeAssignee,
-	}).Error
+	}
+	if step.Key != "" {
+		updates["key"] = step.Key
+	}
+	return r.db.Model(&model.WorkflowStep{}).Where("id = ?", step.ID).Updates(updates).Error
 }
 
 func (r *workflowRepository) DeleteStep(id uint) error {
@@ -162,16 +170,20 @@ func (r *workflowRepository) CreateApprovalObject(obj *model.ApprovalObject) err
 }
 
 func (r *workflowRepository) UpdateApprovalObject(obj *model.ApprovalObject) error {
-	return r.db.Model(&model.ApprovalObject{}).Where("id = ?", obj.ID).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"sort_order":       obj.Order,
-		"type":            obj.Type,
-		"role_id":         obj.RoleID,
-		"role_operator":   obj.RoleOperator,
-		"user_id":         obj.UserID,
-		"points":          obj.Points,
+		"type":             obj.Type,
+		"role_id":          obj.RoleID,
+		"role_operator":    obj.RoleOperator,
+		"user_id":          obj.UserID,
+		"points":           obj.Points,
 		"exclude_reporter": obj.ExcludeReporter,
 		"exclude_assignee": obj.ExcludeAssignee,
-	}).Error
+	}
+	if obj.Key != "" {
+		updates["key"] = obj.Key
+	}
+	return r.db.Model(&model.ApprovalObject{}).Where("id = ?", obj.ID).Updates(updates).Error
 }
 
 func (r *workflowRepository) DeleteApprovalObject(id uint) error {

@@ -14,8 +14,9 @@ ALTER TABLE organizations ADD COLUMN IF NOT EXISTS admin_email VARCHAR(255);
 
 -- 3. Insert "F.R.S." organization with fixed UUID
 --    Name stored as Unicode escape to avoid encoding issues
-INSERT INTO organizations (id, name, admin_email, created_at)
+INSERT INTO organizations (id, key, name, admin_email, created_at)
 VALUES (
+    '00000000-0000-0000-0000-000000000001',
     '00000000-0000-0000-0000-000000000001',
     E'\uff26\uff0e\uff32\uff0e\uff33\uff0e',
     '',
@@ -263,16 +264,76 @@ CREATE INDEX IF NOT EXISTS idx_approval_objects_deleted_at ON approval_objects(d
 CREATE INDEX IF NOT EXISTS idx_issue_templates_deleted_at ON issue_templates(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_issue_approvals_deleted_at ON issue_approvals(deleted_at);
 
+-- 14h. 全テーブルに key カラム追加（VARCHAR(255), NOT NULL）
+-- projects は既に key あり（組織内識別キー）のためスキップ
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE organizations SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE organizations ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE super_admins SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE super_admins ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE users SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE users ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE roles ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE roles SET key = 'role-' || id::text WHERE key IS NULL OR key = '';
+ALTER TABLE roles ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE departments SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE departments ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE organization_user_departments ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE organization_user_departments SET key = organization_id::text || '-' || user_id::text || '-' || department_id::text WHERE key IS NULL OR key = '';
+ALTER TABLE organization_user_departments ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE statuses ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE statuses SET key = COALESCE(NULLIF(TRIM(status_key), ''), 'sts-' || id::text) WHERE key IS NULL OR key = '';
+UPDATE statuses SET key = id::text WHERE key IS NULL OR key = '';  -- fallback for any remaining
+ALTER TABLE statuses ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE issues SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE issues ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE comments SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE comments ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE workflows ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE workflows SET key = 'wf-' || id::text WHERE key IS NULL OR key = '';
+ALTER TABLE workflows ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE workflow_steps SET key = 'ws-' || id::text WHERE key IS NULL OR key = '';
+ALTER TABLE workflow_steps ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE approval_objects ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE approval_objects SET key = 'ao-' || id::text WHERE key IS NULL OR key = '';
+ALTER TABLE approval_objects ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE issue_templates ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE issue_templates SET key = 'tmpl-' || id::text WHERE key IS NULL OR key = '';
+ALTER TABLE issue_templates ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE issue_approvals ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE issue_approvals SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE issue_approvals ALTER COLUMN key SET NOT NULL;
+
+-- user_roles（GORM many2many 中間テーブル）
+ALTER TABLE user_roles ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE user_roles SET key = user_id::text || '-' || role_id::text WHERE key IS NULL OR key = '';
+ALTER TABLE user_roles ALTER COLUMN key SET NOT NULL;
+
 -- 15. Create initial super admin account
 --    Email: superadmin@frs.example.com  (change as needed)
-INSERT INTO super_admins (id, name, email, created_at)
-VALUES (
-    gen_random_uuid(),
-    E'\u30b7\u30b9\u30c6\u30e0\u7ba1\u7406\u8005',
-    'superadmin@frs.example.com',
-    NOW()
-)
-ON CONFLICT (email) DO NOTHING;
+INSERT INTO super_admins (id, key, name, email, created_at)
+SELECT gen_random_uuid(), 'superadmin@frs.example.com', E'\u30b7\u30b9\u30c6\u30e0\u7ba1\u7406\u8005', 'superadmin@frs.example.com', NOW()
+WHERE NOT EXISTS (SELECT 1 FROM super_admins WHERE email = 'superadmin@frs.example.com');
+UPDATE super_admins SET key = COALESCE(NULLIF(key, ''), id::text) WHERE key IS NULL OR key = '';
 
 -- 16. Display order backfill complete
 SELECT 'Seed completed successfully.' AS result;

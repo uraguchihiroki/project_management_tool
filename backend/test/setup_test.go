@@ -45,6 +45,8 @@ func newTestServer(t *testing.T) *testServer {
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
 
+	db.SetupJoinTable(&model.User{}, "Roles", &model.UserRole{})
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
@@ -68,6 +70,7 @@ func newTestServer(t *testing.T) *testServer {
 	// テスト用固定組織（FRS）をシード
 	frsOrg := model.Organization{
 		ID:        uuid.MustParse(testOrgID),
+		Key:       testOrgID,
 		Name:      "FRS",
 		CreatedAt: time.Now(),
 	}
@@ -94,8 +97,13 @@ func newTestServer(t *testing.T) *testServer {
 		if ds.Key != "" {
 			orgID = nil // sts_start, sts_goal はグローバル（全会社共通）
 		}
+		key := "sts-" + ds.ID.String()
+		if ds.Key != "" {
+			key = ds.Key
+		}
 		s := &model.Status{
 			ID:             ds.ID,
+			Key:            key,
 			ProjectID:      nil,
 			OrganizationID: orgID,
 			Name:           ds.Name,

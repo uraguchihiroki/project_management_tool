@@ -149,8 +149,8 @@ func TestSuperAdmin_Login(t *testing.T) {
 	})
 
 	// スーパーアドミンを直接DBに挿入
-	ts.db.Exec("INSERT INTO super_admins (id, name, email, created_at) VALUES (?, ?, ?, datetime('now'))",
-		"00000000-0000-0000-0000-000000000099", "SA管理者", "sa@example.com")
+	ts.db.Exec("INSERT INTO super_admins (id, key, name, email, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+		"00000000-0000-0000-0000-000000000099", "sa@example.com", "SA管理者", "sa@example.com")
 
 	t.Run("登録済みメールでログインできる", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/super-admin/login", map[string]interface{}{

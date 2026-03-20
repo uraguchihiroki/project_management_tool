@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
+	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
@@ -33,8 +34,10 @@ func (s *commentService) Create(issueID, authorID uuid.UUID, body string) (*mode
 	if err != nil {
 		return nil, err
 	}
+	commentID := uuid.New()
 	comment := &model.Comment{
-		ID:             uuid.New(),
+		ID:             commentID,
+		Key:            keygen.UUIDKey(commentID),
 		OrganizationID: issue.OrganizationID,
 		IssueID:        issueID,
 		AuthorID:       authorID,

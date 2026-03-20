@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"gorm.io/gorm"
@@ -63,11 +65,15 @@ func (r *roleRepository) Create(role *model.Role) error {
 }
 
 func (r *roleRepository) Update(role *model.Role) error {
-	return r.db.Model(&model.Role{}).Where("id = ?", role.ID).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"name":        role.Name,
 		"level":       role.Level,
 		"description": role.Description,
-	}).Error
+	}
+	if role.Key != "" {
+		updates["key"] = role.Key
+	}
+	return r.db.Model(&model.Role{}).Where("id = ?", role.ID).Updates(updates).Error
 }
 
 func (r *roleRepository) Delete(id uint) error {
@@ -75,15 +81,21 @@ func (r *roleRepository) Delete(id uint) error {
 }
 
 func (r *roleRepository) AssignRolesToUser(userID uuid.UUID, roleIDs []uint) error {
-	user := &model.User{ID: userID}
-	if len(roleIDs) == 0 {
-		return r.db.Model(user).Association("Roles").Clear()
-	}
-	var roles []model.Role
-	if err := r.db.Find(&roles, roleIDs).Error; err != nil {
+	if err := r.db.Where("user_id = ?", userID).Delete(&model.UserRole{}).Error; err != nil {
 		return err
 	}
-	return r.db.Model(user).Association("Roles").Replace(roles)
+	for _, roleID := range roleIDs {
+		key := fmt.Sprintf("%s-%d", userID.String(), roleID)
+		ur := &model.UserRole{
+			UserID: userID,
+			RoleID: roleID,
+			Key:    key,
+		}
+		if err := r.db.Create(ur).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *roleRepository) FindRolesByUserID(userID uuid.UUID) ([]model.Role, error) {
