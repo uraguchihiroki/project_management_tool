@@ -42,7 +42,7 @@ type WorkflowService interface {
 	ListAll() ([]model.Workflow, error)
 	GetWorkflow(id uint) (*model.Workflow, error)
 	GetStep(stepID uint) (*model.WorkflowStep, error)
-	CreateWorkflow(name, description string) (*model.Workflow, error)
+	CreateWorkflow(orgID uuid.UUID, name, description string) (*model.Workflow, error)
 	UpdateWorkflow(id uint, name, description string) (*model.Workflow, error)
 	DeleteWorkflow(id uint) error
 	Reorder(ids []uint) error
@@ -73,16 +73,17 @@ func (s *workflowService) GetStep(stepID uint) (*model.WorkflowStep, error) {
 	return s.workflowRepo.FindStepByID(stepID)
 }
 
-func (s *workflowService) CreateWorkflow(name, description string) (*model.Workflow, error) {
+func (s *workflowService) CreateWorkflow(orgID uuid.UUID, name, description string) (*model.Workflow, error) {
 	maxOrder, err := s.workflowRepo.GetMaxOrder()
 	if err != nil {
 		return nil, err
 	}
 	workflow := &model.Workflow{
-		Name:      name,
-		Description: description,
-		Order:     maxOrder + 1,
-		CreatedAt: time.Now(),
+		OrganizationID: orgID,
+		Name:           name,
+		Description:    description,
+		Order:          maxOrder + 1,
+		CreatedAt:      time.Now(),
 	}
 	if err := s.workflowRepo.Create(workflow); err != nil {
 		return nil, err
@@ -116,6 +117,10 @@ func (s *workflowService) DeleteWorkflow(id uint) error {
 }
 
 func (s *workflowService) AddStep(workflowID uint, input AddStepInput) (*model.WorkflowStep, error) {
+	workflow, err := s.workflowRepo.FindByID(workflowID)
+	if err != nil {
+		return nil, err
+	}
 	count, err := s.workflowRepo.CountSteps(workflowID)
 	if err != nil {
 		return nil, err
@@ -125,6 +130,7 @@ func (s *workflowService) AddStep(workflowID uint, input AddStepInput) (*model.W
 		threshold = 10
 	}
 	step := &model.WorkflowStep{
+		OrganizationID:  workflow.OrganizationID,
 		WorkflowID:      workflowID,
 		Order:           int(count) + 1,
 		StatusID:        input.StatusID,
@@ -138,7 +144,7 @@ func (s *workflowService) AddStep(workflowID uint, input AddStepInput) (*model.W
 		return nil, err
 	}
 	for i, ao := range input.ApprovalObjects {
-		obj := s.approvalObjectInputToModel(ao, step.ID, i+1)
+		obj := s.approvalObjectInputToModel(ao, step.ID, workflow.OrganizationID, i+1)
 		if obj != nil {
 			_ = s.workflowRepo.CreateApprovalObject(obj)
 		}
@@ -146,11 +152,12 @@ func (s *workflowService) AddStep(workflowID uint, input AddStepInput) (*model.W
 	return s.workflowRepo.FindStepByID(step.ID)
 }
 
-func (s *workflowService) approvalObjectInputToModel(in ApprovalObjectInput, stepID uint, order int) *model.ApprovalObject {
+func (s *workflowService) approvalObjectInputToModel(in ApprovalObjectInput, stepID uint, orgID uuid.UUID, order int) *model.ApprovalObject {
 	if in.Type != "role" && in.Type != "user" {
 		return nil
 	}
 	obj := &model.ApprovalObject{
+		OrganizationID:  orgID,
 		WorkflowStepID:  stepID,
 		Order:           order,
 		Type:            in.Type,
@@ -196,8 +203,13 @@ func (s *workflowService) UpdateStep(stepID uint, input UpdateStepInput) (*model
 	}
 	if input.ApprovalObjects != nil {
 		_ = s.workflowRepo.DeleteApprovalObjectsByStepID(stepID)
+		workflow, _ := s.workflowRepo.FindByID(step.WorkflowID)
+		orgID := uuid.Nil
+		if workflow != nil {
+			orgID = workflow.OrganizationID
+		}
 		for i, ao := range input.ApprovalObjects {
-			obj := s.approvalObjectInputToModel(ao, stepID, i+1)
+			obj := s.approvalObjectInputToModel(ao, stepID, orgID, i+1)
 			if obj != nil {
 				_ = s.workflowRepo.CreateApprovalObject(obj)
 			}

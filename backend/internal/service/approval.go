@@ -45,6 +45,10 @@ func (s *approvalService) GetApprovals(issueID uuid.UUID) ([]model.IssueApproval
 // InitializeForIssue はWorkflowのステップに基づいてIssue承認レコードを生成する
 // 各ステップに1件の pending を作成（承認オブジェクトありのステップ用）
 func (s *approvalService) InitializeForIssue(issueID uuid.UUID, workflowID uint) error {
+	issue, err := s.issueRepo.FindByID(issueID)
+	if err != nil {
+		return fmt.Errorf("issue not found: %w", err)
+	}
 	workflow, err := s.workflowRepo.FindByID(workflowID)
 	if err != nil {
 		return fmt.Errorf("workflow not found: %w", err)
@@ -52,6 +56,7 @@ func (s *approvalService) InitializeForIssue(issueID uuid.UUID, workflowID uint)
 	for _, step := range workflow.Steps {
 		approval := &model.IssueApproval{
 			ID:             uuid.New(),
+			OrganizationID: issue.OrganizationID,
 			IssueID:        issueID,
 			WorkflowStepID: step.ID,
 			Status:         "pending",
@@ -276,9 +281,14 @@ func (s *approvalService) ApproveStep(issueID uuid.UUID, stepID uint, approverID
 		}
 	}
 	// 新規承認レコード作成
+	issue, err := s.issueRepo.FindByID(issueID)
+	if err != nil {
+		return nil, fmt.Errorf("issue not found: %w", err)
+	}
 	now := time.Now()
 	approval := &model.IssueApproval{
 		ID:             uuid.New(),
+		OrganizationID: issue.OrganizationID,
 		IssueID:        issueID,
 		WorkflowStepID: stepID,
 		ApproverID:     &approverID,

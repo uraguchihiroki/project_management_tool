@@ -17,10 +17,11 @@ type CommentService interface {
 
 type commentService struct {
 	commentRepo repository.CommentRepository
+	issueRepo   repository.IssueRepository
 }
 
-func NewCommentService(commentRepo repository.CommentRepository) CommentService {
-	return &commentService{commentRepo: commentRepo}
+func NewCommentService(commentRepo repository.CommentRepository, issueRepo repository.IssueRepository) CommentService {
+	return &commentService{commentRepo: commentRepo, issueRepo: issueRepo}
 }
 
 func (s *commentService) List(issueID uuid.UUID) ([]model.Comment, error) {
@@ -28,13 +29,18 @@ func (s *commentService) List(issueID uuid.UUID) ([]model.Comment, error) {
 }
 
 func (s *commentService) Create(issueID, authorID uuid.UUID, body string) (*model.Comment, error) {
+	issue, err := s.issueRepo.FindByID(issueID)
+	if err != nil {
+		return nil, err
+	}
 	comment := &model.Comment{
-		ID:        uuid.New(),
-		IssueID:   issueID,
-		AuthorID:  authorID,
-		Body:      body,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:             uuid.New(),
+		OrganizationID: issue.OrganizationID,
+		IssueID:        issueID,
+		AuthorID:       authorID,
+		Body:           body,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}
 	if err := s.commentRepo.Create(comment); err != nil {
 		return nil, err

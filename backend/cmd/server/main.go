@@ -31,7 +31,6 @@ func main() {
 		&model.SuperAdmin{},
 		&model.Role{},
 		&model.User{},
-		&model.OrganizationUser{},
 		&model.Department{},
 		&model.OrganizationUserDepartment{},
 		&model.Project{},
@@ -69,10 +68,10 @@ func main() {
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
-	commentSvc := service.NewCommentService(commentRepo)
+	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo, statusRepo)
-	templateSvc := service.NewTemplateService(templateRepo)
+	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
 	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
 	statusSvc := service.NewStatusService(statusRepo)
 

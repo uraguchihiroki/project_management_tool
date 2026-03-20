@@ -13,7 +13,7 @@ type CreateProjectInput struct {
 	Name           string
 	Description    *string
 	OwnerID        uuid.UUID
-	OrganizationID *uuid.UUID
+	OrganizationID uuid.UUID
 	StartDate      *time.Time
 	EndDate        *time.Time
 }
@@ -56,7 +56,8 @@ func (s *projectService) Get(id uuid.UUID) (*model.Project, error) {
 }
 
 func (s *projectService) Create(input CreateProjectInput) (*model.Project, error) {
-	maxOrder, err := s.projectRepo.GetMaxOrder(input.OrganizationID)
+	orgID := &input.OrganizationID
+	maxOrder, err := s.projectRepo.GetMaxOrder(orgID)
 	if err != nil {
 		return nil, err
 	}

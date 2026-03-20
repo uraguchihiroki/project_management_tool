@@ -13,7 +13,7 @@ type OrganizationService interface {
 	Get(id uuid.UUID) (*model.Organization, error)
 	Create(name, adminEmail, adminName string) (*model.Organization, error)
 	GetUserOrganizations(userID uuid.UUID) ([]model.Organization, error)
-	AddUser(orgID, userID uuid.UUID, isOrgAdmin bool) error
+	AddUser(orgID uuid.UUID, existingUserID uuid.UUID, isOrgAdmin bool) (*model.User, error)
 }
 
 type organizationService struct {
@@ -46,30 +46,25 @@ func (s *organizationService) Create(name, adminEmail, adminName string) (*model
 	}
 	var ownerID *uuid.UUID
 	if adminEmail != "" {
-		user, err := s.userRepo.FindByEmail(adminEmail)
-		if err != nil {
-			user = &model.User{
-				ID:        uuid.New(),
-				Name:      adminName,
-				Email:     adminEmail,
-				IsAdmin:   true,
-				CreatedAt: time.Now(),
-			}
-			if adminName == "" {
-				user.Name = adminEmail
-			}
-			if err := s.userRepo.Create(user); err != nil {
-				return org, err
-			}
-		} else {
-			_ = s.userRepo.UpdateAdmin(user.ID, true)
+		// 同一メールでも組織が違えば別ユーザー。新組織用に新規ユーザーを作成
+		userID := uuid.New()
+		user := &model.User{
+			ID:             userID,
+			OrganizationID: org.ID,
+			Name:           adminName,
+			Email:          adminEmail,
+			IsAdmin:        true,
+			IsOrgAdmin:     true,
+			JoinedAt:       time.Now(),
+			CreatedAt:      time.Now(),
+		}
+		if adminName == "" {
+			user.Name = adminEmail
+		}
+		if err := s.userRepo.Create(user); err != nil {
+			return org, err
 		}
 		ownerID = &user.ID
-		_ = s.orgRepo.AddUser(&model.OrganizationUser{
-			OrganizationID: org.ID,
-			UserID:         user.ID,
-			IsOrgAdmin:     true,
-		})
 	}
 	// 組織作成時に初期データ（ステータス・役職・サンプルプロジェクト）を投入
 	if err := s.orgSeedSvc.SeedNewOrganization(org.ID, ownerID); err != nil {
@@ -82,11 +77,28 @@ func (s *organizationService) GetUserOrganizations(userID uuid.UUID) ([]model.Or
 	return s.orgRepo.FindByUserID(userID)
 }
 
-func (s *organizationService) AddUser(orgID, userID uuid.UUID, isOrgAdmin bool) error {
-	orgUser := &model.OrganizationUser{
-		OrganizationID: orgID,
-		UserID:         userID,
-		IsOrgAdmin:     isOrgAdmin,
+func (s *organizationService) AddUser(orgID uuid.UUID, existingUserID uuid.UUID, isOrgAdmin bool) (*model.User, error) {
+	existing, err := s.userRepo.FindByID(existingUserID)
+	if err != nil {
+		return nil, err
 	}
-	return s.orgRepo.AddUser(orgUser)
+	// 冪等: 既に同じemailのユーザーが組織にいればそれを返す
+	if u, err := s.userRepo.FindByEmailAndOrg(orgID, existing.Email); err == nil && u != nil {
+		return u, nil
+	}
+	// 同一人物を別組織に追加 = 新規ユーザーを作成（同じ name, email、異なる organization_id）
+	newUserID := uuid.New()
+	user := &model.User{
+		ID:             newUserID,
+		OrganizationID: orgID,
+		Name:           existing.Name,
+		Email:          existing.Email,
+		IsOrgAdmin:     isOrgAdmin,
+		JoinedAt:       time.Now(),
+		CreatedAt:      time.Now(),
+	}
+	if err := s.userRepo.Create(user); err != nil {
+		return nil, err
+	}
+	return user, nil
 }

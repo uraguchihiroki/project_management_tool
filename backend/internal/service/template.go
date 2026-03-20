@@ -20,10 +20,11 @@ type TemplateService interface {
 
 type templateService struct {
 	templateRepo repository.TemplateRepository
+	projectRepo  repository.ProjectRepository
 }
 
-func NewTemplateService(templateRepo repository.TemplateRepository) TemplateService {
-	return &templateService{templateRepo: templateRepo}
+func NewTemplateService(templateRepo repository.TemplateRepository, projectRepo repository.ProjectRepository) TemplateService {
+	return &templateService{templateRepo: templateRepo, projectRepo: projectRepo}
 }
 
 func (s *templateService) ListAll() ([]model.IssueTemplate, error) {
@@ -39,6 +40,10 @@ func (s *templateService) GetTemplate(id uint) (*model.IssueTemplate, error) {
 }
 
 func (s *templateService) CreateTemplate(projectID uuid.UUID, name, description, body, defaultPriority string, workflowID *uint) (*model.IssueTemplate, error) {
+	project, err := s.projectRepo.FindByID(projectID)
+	if err != nil {
+		return nil, err
+	}
 	if defaultPriority == "" {
 		defaultPriority = "medium"
 	}
@@ -47,6 +52,7 @@ func (s *templateService) CreateTemplate(projectID uuid.UUID, name, description,
 		return nil, err
 	}
 	template := &model.IssueTemplate{
+		OrganizationID:  project.OrganizationID,
 		ProjectID:       projectID,
 		Name:            name,
 		Description:     description,

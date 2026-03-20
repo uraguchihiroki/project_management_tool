@@ -75,8 +75,9 @@ func (h *OrganizationHandler) AddUser(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user_id")
 	}
-	if err := h.orgService.AddUser(orgID, userID, req.IsOrgAdmin); err != nil {
+	user, err := h.orgService.AddUser(orgID, userID, req.IsOrgAdmin)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-	return c.JSON(http.StatusCreated, map[string]interface{}{"message": "user added to organization"})
+	return c.JSON(http.StatusCreated, map[string]interface{}{"data": user, "message": "user added to organization"})
 }

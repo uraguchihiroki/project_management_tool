@@ -35,7 +35,7 @@ http://localhost:8080/api/v1
 | Method | Path | 説明 |
 |--------|------|------|
 | GET | /workflows | ワークフロー一覧取得 |
-| POST | /workflows | ワークフロー作成 |
+| POST | /workflows | ワークフロー作成（organization_id 必須） |
 | GET | /workflows/:id | ワークフロー詳細取得 |
 | PUT | /workflows/:id | ワークフロー更新 |
 | DELETE | /workflows/:id | ワークフロー削除 |
@@ -69,8 +69,8 @@ http://localhost:8080/api/v1
 |--------|------|------|
 | GET | /organizations | 組織一覧取得 |
 | POST | /organizations | 組織作成 |
-| GET | /users/:id/organizations | ユーザーの所属組織一覧 |
-| POST | /organizations/:orgId/users | 組織にユーザーを追加 |
+| GET | /users/:id/organizations | ユーザーの所属組織（1ユーザー＝1組織のため1件） |
+| POST | /organizations/:orgId/users | 組織にユーザーを追加（既存ユーザーの name/email で新規ユーザーを作成） |
 
 ### Super Admin
 
@@ -85,9 +85,9 @@ http://localhost:8080/api/v1
 | Method | Path | 説明 |
 |--------|------|------|
 | GET | /admin/users | ユーザー一覧取得（役職・組織付き、org_id クエリでフィルタ可） |
-| POST | /admin/users | 組織にユーザーを作成 |
+| POST | /admin/users | 組織にユーザーを作成（org_id 必須） |
 | PUT | /admin/users/:id | ユーザー更新 |
-| DELETE | /admin/users/:id | 組織からユーザーを削除 |
+| DELETE | /admin/users/:id | ユーザー削除（1ユーザー＝1組織のため、org_id で所属確認後に削除） |
 
 ### Projects（プロジェクト）
 
@@ -185,7 +185,19 @@ POST /api/v1/projects
   "name": "サンプルプロジェクト",
   "description": "説明",
   "owner_id": "user-uuid",
-  "organization_id": "org-uuid"
+  "organization_id": "org-uuid"  // 必須
+}
+```
+
+### ワークフロー作成
+
+```json
+POST /api/v1/workflows
+
+{
+  "organization_id": "org-uuid",  // 必須
+  "name": "承認フロー",
+  "description": "説明"
 }
 ```
 

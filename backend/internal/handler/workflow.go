@@ -29,17 +29,25 @@ func (h *WorkflowHandler) List(c echo.Context) error {
 // POST /api/v1/workflows
 func (h *WorkflowHandler) Create(c echo.Context) error {
 	type Request struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
+		OrganizationID string `json:"organization_id"`
+		Name           string `json:"name"`
+		Description    string `json:"description"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+	if req.OrganizationID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "organization_id is required")
+	}
 	if req.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
-	workflow, err := h.workflowService.CreateWorkflow(req.Name, req.Description)
+	orgID, err := uuid.Parse(req.OrganizationID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
+	}
+	workflow, err := h.workflowService.CreateWorkflow(orgID, req.Name, req.Description)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}

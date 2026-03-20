@@ -11,10 +11,12 @@ type UserRepository interface {
 	FindAllWithRoles() ([]model.User, error)
 	FindByID(id uuid.UUID) (*model.User, error)
 	FindByEmail(email string) (*model.User, error)
+	FindByEmailAndOrg(orgID uuid.UUID, email string) (*model.User, error)
 	FindByOrg(orgID uuid.UUID) ([]model.User, error)
 	Create(user *model.User) error
 	Update(user *model.User) error
 	UpdateAdmin(id uuid.UUID, isAdmin bool) error
+	Delete(id uuid.UUID) error
 	Count() (int64, error)
 }
 
@@ -50,14 +52,25 @@ func (r *userRepository) FindByEmail(email string) (*model.User, error) {
 	return &user, nil
 }
 
+func (r *userRepository) FindByEmailAndOrg(orgID uuid.UUID, email string) (*model.User, error) {
+	var user model.User
+	err := r.db.Where("organization_id = ? AND email = ?", orgID, email).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func (r *userRepository) FindByOrg(orgID uuid.UUID) ([]model.User, error) {
 	var users []model.User
-	err := r.db.
-		Joins("JOIN organization_users ON organization_users.user_id = users.id").
-		Where("organization_users.organization_id = ?", orgID).
+	err := r.db.Where("organization_id = ?", orgID).
 		Preload("Roles", "organization_id = ?", orgID).
 		Find(&users).Error
 	return users, err
+}
+
+func (r *userRepository) Delete(id uuid.UUID) error {
+	return r.db.Delete(&model.User{}, "id = ?", id).Error
 }
 
 func (r *userRepository) FindAllWithRoles() ([]model.User, error) {

@@ -211,7 +211,7 @@ func (s *orgSeedService) upsertSampleProject(orgID uuid.UUID, ownerID uuid.UUID)
 		Key:            projectKey,
 		Name:           "サンプルプロジェクト",
 		OwnerID:        ownerID,
-		OrganizationID: orgIDPtr,
+		OrganizationID: orgID,
 		Order:          maxOrder + 1,
 		CreatedAt:      time.Now(),
 	}

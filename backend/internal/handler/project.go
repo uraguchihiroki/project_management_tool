@@ -75,13 +75,12 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid owner_id")
 	}
-	var orgID *uuid.UUID
-	if req.OrganizationID != "" {
-		parsed, err := uuid.Parse(req.OrganizationID)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
-		}
-		orgID = &parsed
+	if req.OrganizationID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "organization_id is required")
+	}
+	parsed, err := uuid.Parse(req.OrganizationID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
 	}
 	var startDate, endDate *time.Time
 	if req.StartDate != "" {
@@ -99,7 +98,7 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 		Name:           req.Name,
 		Description:    req.Description,
 		OwnerID:        ownerID,
-		OrganizationID: orgID,
+		OrganizationID: parsed,
 		StartDate:      startDate,
 		EndDate:        endDate,
 	})

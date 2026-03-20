@@ -83,7 +83,6 @@ func main() {
 		&model.SuperAdmin{},
 		&model.Role{},
 		&model.User{},
-		&model.OrganizationUser{},
 		&model.Department{},
 		&model.OrganizationUserDepartment{},
 		&model.Project{},

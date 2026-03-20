@@ -1,7 +1,6 @@
 package service
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -71,10 +70,7 @@ func (s *issueService) Create(projectID uuid.UUID, input CreateIssueInput) (*mod
 	if err != nil {
 		return nil, err
 	}
-	if project.OrganizationID == nil {
-		return nil, fmt.Errorf("project must have organization_id to create issues")
-	}
-	orgID := *project.OrganizationID
+	orgID := project.OrganizationID
 	// 採番
 	nextNum, err := s.issueRepo.NextNumber(projectID)
 	if err != nil {

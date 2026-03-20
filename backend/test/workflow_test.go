@@ -11,8 +11,9 @@ import (
 func createTestWorkflow(t *testing.T, ts *testServer, name string) string {
 	t.Helper()
 	status, resp := ts.req(t, "POST", "/api/v1/workflows", map[string]interface{}{
-		"name":        name,
-		"description": "テスト用ワークフロー",
+		"organization_id": testOrgID,
+		"name":           name,
+		"description":    "テスト用ワークフロー",
 	})
 	assertStatus(t, status, http.StatusCreated, fmt.Sprintf("createWorkflow(%s)", name))
 	return fmt.Sprintf("%.0f", mustGetFloat(t, resp, "data", "id"))
@@ -25,8 +26,9 @@ func TestWorkflow_Create(t *testing.T) {
 
 	t.Run("ワークフローを作成できる", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/workflows", map[string]interface{}{
-			"name":        "通常承認フロー",
-			"description": "一般的な承認フロー",
+			"organization_id": testOrgID,
+			"name":           "通常承認フロー",
+			"description":    "一般的な承認フロー",
 		})
 		assertStatus(t, status, http.StatusCreated, "create workflow")
 		assertField(t, mustGetString(t, resp, "data", "name"), "通常承認フロー", "name")

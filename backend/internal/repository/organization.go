@@ -1,8 +1,6 @@
 package repository
 
 import (
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"gorm.io/gorm"
@@ -14,8 +12,6 @@ type OrganizationRepository interface {
 	Create(org *model.Organization) error
 	FindByUserID(userID uuid.UUID) ([]model.Organization, error)
 	FindFirstOrgAdminID(orgID uuid.UUID) (*uuid.UUID, error)
-	AddUser(orgUser *model.OrganizationUser) error
-	RemoveUser(orgID, userID uuid.UUID) error
 }
 
 type organizationRepository struct {
@@ -46,38 +42,23 @@ func (r *organizationRepository) Create(org *model.Organization) error {
 }
 
 func (r *organizationRepository) FindByUserID(userID uuid.UUID) ([]model.Organization, error) {
-	var orgUsers []model.OrganizationUser
-	err := r.db.
-		Preload("Organization").
-		Where("user_id = ?", userID).
-		Find(&orgUsers).Error
+	var user model.User
+	err := r.db.Preload("Organization").First(&user, "id = ?", userID).Error
 	if err != nil {
 		return nil, err
 	}
-	orgs := make([]model.Organization, 0, len(orgUsers))
-	for _, ou := range orgUsers {
-		orgs = append(orgs, ou.Organization)
+	if user.Organization.ID == (uuid.UUID{}) {
+		return []model.Organization{}, nil
 	}
-	return orgs, nil
+	return []model.Organization{user.Organization}, nil
 }
 
 func (r *organizationRepository) FindFirstOrgAdminID(orgID uuid.UUID) (*uuid.UUID, error) {
-	var ou model.OrganizationUser
+	var user model.User
 	err := r.db.Where("organization_id = ? AND is_org_admin = ?", orgID, true).
-		First(&ou).Error
+		First(&user).Error
 	if err != nil {
 		return nil, err
 	}
-	return &ou.UserID, nil
-}
-
-func (r *organizationRepository) AddUser(orgUser *model.OrganizationUser) error {
-	orgUser.JoinedAt = time.Now()
-	return r.db.Where("organization_id = ? AND user_id = ?", orgUser.OrganizationID, orgUser.UserID).
-		FirstOrCreate(orgUser).Error
-}
-
-func (r *organizationRepository) RemoveUser(orgID, userID uuid.UUID) error {
-	return r.db.Where("organization_id = ? AND user_id = ?", orgID, userID).
-		Delete(&model.OrganizationUser{}).Error
+	return &user.ID, nil
 }
