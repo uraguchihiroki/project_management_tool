@@ -124,12 +124,58 @@ export async function setupAuth(page: import('@playwright/test').Page, email = '
     body: JSON.stringify({ user_id: user.id, is_org_admin: true }),
   }).catch(() => {})
 
+  // JWT 必須の API と整合させる（currentUser のみ注入だと 401 になる）
+  const loginRes = await fetch(`${API}/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  const loginJson = (await loginRes.json()) as {
+    data?: { token?: string; user?: Record<string, unknown> }
+  }
+  if (!loginRes.ok) {
+    throw new Error(
+      `setupAuth: POST /admin/login failed ${loginRes.status} ${JSON.stringify(loginJson)}`,
+    )
+  }
+  let token = loginJson.data?.token
+  let userForSession = loginJson.data?.user
+  if (!token || !userForSession) {
+    throw new Error('setupAuth: admin/login に token または user がありません')
+  }
+
+  // 同一メールで複数行ある場合、JWT の組織を目的の org に揃える
+  const switchRes = await fetch(`${API}/admin/switch-organization`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ organization_id: org.id }),
+  })
+  const switchJson = (await switchRes.json()) as {
+    data?: { token?: string; user?: Record<string, unknown> }
+  }
+  if (!switchRes.ok) {
+    throw new Error(
+      `setupAuth: POST /admin/switch-organization failed ${switchRes.status} ${JSON.stringify(switchJson)}`,
+    )
+  }
+  token = switchJson.data?.token ?? token
+  userForSession = switchJson.data?.user ?? userForSession
+
   await page.addInitScript(
-    ({ userData, orgData }: { userData: { id: string; name: string; email: string }; orgData: { id: string; name: string } }) => {
+    ({
+      authToken,
+      userData,
+      orgData,
+    }: {
+      authToken: string
+      userData: Record<string, unknown>
+      orgData: { id: string; name: string }
+    }) => {
+      sessionStorage.setItem('authToken', authToken)
       sessionStorage.setItem('currentUser', JSON.stringify({ ...userData, is_admin: true }))
       sessionStorage.setItem('currentOrg', JSON.stringify(orgData))
     },
-    { userData: user, orgData: org }
+    { authToken: token, userData: userForSession, orgData: org },
   )
   return { user, org }
 }

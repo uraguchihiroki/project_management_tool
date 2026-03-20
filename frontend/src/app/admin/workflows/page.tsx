@@ -144,9 +144,14 @@ export default function WorkflowsPage() {
       {/* 追加/編集フォーム */}
       {(showForm || editingId !== null) && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">
+          <h2 className={`text-sm font-semibold text-gray-700 ${editingId === null ? 'mb-1' : 'mb-4'}`}>
             {editingId !== null ? 'ワークフローを編集' : '新しいワークフロー'}
           </h2>
+          {editingId === null && (
+            <p className="text-xs text-gray-400 mb-4">
+              名前を入力して「追加」を押すと保存されます（青い「ワークフローを追加」はフォームを開くだけです）。
+            </p>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">ワークフロー名 *</label>
@@ -176,7 +181,13 @@ export default function WorkflowsPage() {
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 <Check className="w-4 h-4" />
-                {editingId !== null ? '更新' : '追加'}
+                {editingId !== null
+                  ? updateMutation.isPending
+                    ? '更新中…'
+                    : '更新'
+                  : createMutation.isPending
+                    ? '送信中…'
+                    : '追加'}
               </button>
               <button
                 type="button"

@@ -2,8 +2,17 @@ import axios from 'axios'
 import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate, IssueApproval, Organization, SuperAdmin, Workflow, WorkflowStep, ApprovalObject } from '@/types'
 import { clearAuthSession, getAuthToken } from '@/lib/authToken'
 
+/** 空文字の NEXT_PUBLIC_API_URL で相対パスになりバックエンドに届かないのを防ぐ */
+function getApiBaseURL(): string {
+  const raw = process.env.NEXT_PUBLIC_API_URL
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    return raw.replace(/\/+$/, '')
+  }
+  return 'http://localhost:8080/api/v1'
+}
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
+  baseURL: getApiBaseURL(),
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
 })

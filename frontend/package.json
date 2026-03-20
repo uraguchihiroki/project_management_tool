@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:e2e": "playwright test",
+    "test:e2e:server": "PLAYWRIGHT_WS_ENDPOINT=${PLAYWRIGHT_WS_ENDPOINT:-ws://$(ip route | awk '/^default/ {print $3; exit}' || grep -m 1 nameserver /etc/resolv.conf | awk '{print $2}'):9222/} playwright test",
     "test:e2e:login": "playwright test e2e/login.spec.ts",
     "test:e2e:ui": "playwright test --ui"
   },

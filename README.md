@@ -371,14 +371,17 @@ go test ./test/... -v
 - テスト DB: インメモリ SQLite（PostgreSQL 不要）
 - テスト件数: 150+
 
-### E2E（Playwright・ログインの最小スモーク）
+### E2E（Playwright）
 
-ログイン画面が壊れていないことの検知用。バックエンド・フロント・DB（seed 済みで組織あり）が必要。
+バックエンド・フロント・DB（seed 済みで組織あり）が必要。
 
 ```bash
 cd frontend
 npx playwright install-deps chromium   # 初回のみ（WSL/Linux で libnspr4 等が無い場合）
-npm run test:e2e:login
+npm run test:e2e:login                 # ログイン画面の最小スモーク
+# 全 E2E: npm run test:e2e
 ```
+
+**Windows で `playwright run-server` を立て、WSL からブラウザだけリモート接続**する構成は [.sdd/testing.md](.sdd/testing.md) の「Playwright Server」を参照（`bash scripts/playwright-server-e2e.sh --list` など）。
 
 詳細は [.sdd/testing.md](.sdd/testing.md) を参照。
