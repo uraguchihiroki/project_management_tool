@@ -265,6 +265,12 @@ func (ts *testServer) req(t *testing.T, method, path string, body interface{}) (
 	return ts.reqWithToken(t, ts.token, method, path, body)
 }
 
+// reqNoAuth は Authorization ヘッダなし（公開エンドポイントやログイン用）
+func (ts *testServer) reqNoAuth(t *testing.T, method, path string, body interface{}) (int, map[string]interface{}) {
+	t.Helper()
+	return ts.reqWithToken(t, "", method, path, body)
+}
+
 func (ts *testServer) reqWithToken(t *testing.T, token, method, path string, body interface{}) (int, map[string]interface{}) {
 	t.Helper()
 

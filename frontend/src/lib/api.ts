@@ -24,6 +24,15 @@ export const getUsers = () =>
 export const createUser = (data: { name: string; email: string }) =>
   api.post<ApiResponse<User>>('/users', data).then((r) => r.data.data)
 
+/** メールのみログイン（JWT 発行）。未認証で呼ぶ。 */
+export const adminLogin = (email: string) =>
+  api
+    .post<ApiResponse<{ user: User; token: string }>>('/admin/login', { email })
+    .then((r) => r.data.data)
+
+export const setUserAdmin = (userId: string, isAdmin: boolean) =>
+  api.put<ApiResponse<unknown>>(`/users/${userId}/admin`, { is_admin: isAdmin })
+
 // Admin users (org-scoped)
 export const getAdminUsers = (orgId: string) =>
   api.get<ListResponse<User>>('/admin/users', { params: { org_id: orgId } }).then((r) => r.data.data)

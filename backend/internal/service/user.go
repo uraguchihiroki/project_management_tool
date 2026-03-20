@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -57,10 +58,16 @@ func (s *userService) FindByEmail(email string) (*model.User, error) {
 func (s *userService) Create(name, email string) (*model.User, error) {
 	// デフォルト組織（最初の組織）にユーザーを作成
 	orgs, err := s.orgRepo.FindAll()
-	if err != nil || len(orgs) == 0 {
+	if err != nil {
 		return nil, err
 	}
+	if len(orgs) == 0 {
+		return nil, errors.New("組織が存在しません。backend/seed.sql を投入するか、スーパー管理者で組織を作成してください")
+	}
 	orgID := orgs[0].ID
+	if orgID == uuid.Nil {
+		return nil, fmt.Errorf("invalid organization id on first organization row")
+	}
 	// 最初のユーザーを自動的に管理者にする
 	count, err := s.userRepo.Count()
 	if err != nil {

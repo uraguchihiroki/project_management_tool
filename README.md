@@ -337,6 +337,8 @@ bash scripts/setup-wsl.sh   # または bash scripts/start.sh
 
 ## テスト実行
 
+### バックエンド（API ブラックボックス）
+
 ```bash
 cd backend
 go test ./test/... -v
@@ -344,3 +346,15 @@ go test ./test/... -v
 
 - テスト DB: インメモリ SQLite（PostgreSQL 不要）
 - テスト件数: 150+
+
+### E2E（Playwright・ログインの最小スモーク）
+
+ログイン画面が壊れていないことの検知用。バックエンド・フロント・DB（seed 済みで組織あり）が必要。
+
+```bash
+cd frontend
+npx playwright install-deps chromium   # 初回のみ（WSL/Linux で libnspr4 等が無い場合）
+npm run test:e2e:login
+```
+
+詳細は [.sdd/testing.md](.sdd/testing.md) を参照。

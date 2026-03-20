@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { useRouter } from 'next/navigation'
 import type { User, Organization } from '@/types'
 import { setAuthToken } from '@/lib/authToken'
+import { adminLogin, createUser, getUserOrganizations, setUserAdmin } from '@/lib/api'
 
 const SESSION_KEY = 'currentUser'
 const ORG_KEY = 'currentOrg'
@@ -63,11 +64,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ログイン後に組織を取得し、1件なら自動選択・複数なら選択画面へ・0件ならエラー
   const handleOrgSelection = useCallback(async (userId: string): Promise<{ dest: string; error?: string }> => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
-      const res = await fetch(`${base}/users/${userId}/organizations`)
-      if (!res.ok) return { dest: '/projects' }
-      const json = await res.json()
-      const orgs: Organization[] = json.data ?? []
+      // JWT 必須 API のため axios（Authorization 付与）を使う。生の fetch だとトークンが付かず 401 になる。
+      const orgs: Organization[] = await getUserOrganizations(userId)
       if (orgs.length === 1) {
         sessionStorage.setItem(ORG_KEY, JSON.stringify(orgs[0]))
         setCurrentOrg(orgs[0])
@@ -78,23 +76,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return { dest: '/login', error: '所属組織がありません。管理者に連絡してください。' }
     } catch {
-      return { dest: '/projects' }
+      return {
+        dest: '/login',
+        error: '所属組織の取得に失敗しました。バックエンドが起動しているか確認してください。',
+      }
     }
   }, [])
 
   const login = useCallback(async (email: string, asAdmin?: boolean): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
-      const res = await fetch(`${base}/admin/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      })
-      if (!res.ok) throw new Error('APIエラー')
-      const json = await res.json()
-      const payload = json.data ?? {}
-      const found = payload.user as User | undefined
-      const token = payload.token as string | undefined
+      const payload = await adminLogin(email)
+      const found = payload.user
+      const token = payload.token
       if (!found || !token) return { ok: false, error: 'メールアドレスが見つかりません' }
       const user = { ...found, is_admin: asAdmin ?? found.is_admin }
       setAuthToken(token)
@@ -104,8 +97,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) return { ok: false, error }
       router.push(dest)
       return { ok: true }
-    } catch {
-      return { ok: false, error: 'ログインに失敗しました' }
+    } catch (e: unknown) {
+      const msg =
+        typeof e === 'object' && e !== null && 'response' in e
+          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined
+      if (msg) return { ok: false, error: String(msg) }
+      return { ok: false, error: 'ログインに失敗しました（メールが未登録、またはAPIに接続できません）' }
     }
   }, [handleOrgSelection, router])
 
@@ -120,31 +118,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = useCallback(async (name: string, email: string, asAdmin?: boolean): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
-      const res = await fetch(`${base}/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email }),
-      })
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
-        return { ok: false, error: json.message ?? 'ユーザー登録に失敗しました' }
+      await createUser({ name, email })
+      const payload = await adminLogin(email)
+      if (!payload.token || !payload.user) {
+        return { ok: false, error: '登録後のログインに失敗しました' }
       }
-      const json = await res.json()
-      const created: User = json.data
+      setAuthToken(payload.token)
       if (asAdmin !== undefined) {
-        await fetch(`${base}/users/${created.id}/admin`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ is_admin: asAdmin }),
-        })
+        await setUserAdmin(payload.user.id, asAdmin)
       }
-      // 新規登録後はJWT発行を伴うログインフローへ委譲
-      return await login(email, asAdmin)
-    } catch {
-      return { ok: false, error: '登録に失敗しました' }
+      const user = { ...payload.user, is_admin: asAdmin ?? payload.user.is_admin }
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
+      setCurrentUser(user)
+      const { dest, error } = await handleOrgSelection(payload.user.id)
+      if (error) return { ok: false, error }
+      router.push(dest)
+      return { ok: true }
+    } catch (e: unknown) {
+      const msg =
+        typeof e === 'object' && e !== null && 'response' in e
+          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined
+      return { ok: false, error: msg ? String(msg) : '登録に失敗しました' }
     }
-  }, [login])
+  }, [handleOrgSelection, router])
 
   return (
     <AuthContext.Provider value={{ currentUser, currentOrg, login, logout, register, selectOrg }}>

@@ -6,6 +6,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
+  // 既定 test-results が権限で書けない環境向け（.gitignore 済み）
+  outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || 'test-results-local',
   reporter: 'html',
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
