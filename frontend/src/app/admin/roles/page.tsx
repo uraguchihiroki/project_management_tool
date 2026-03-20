@@ -7,6 +7,7 @@ import type { Role } from '@/types'
 import { SortableDndProvider, SortableTbody, DragHandle } from '@/components/SortableList'
 
 import { useAuth } from '@/context/AuthContext'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -19,10 +20,12 @@ async function fetchRoles(orgId?: string): Promise<Role[]> {
 
 export default function RolesPage() {
   const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
   const queryClient = useQueryClient()
   const { data: roles = [], isLoading } = useQuery({
     queryKey: ['roles', currentOrg?.id],
     queryFn: () => fetchRoles(currentOrg?.id),
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const [showForm, setShowForm] = useState(false)

@@ -1,13 +1,16 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/uraguchihiroki/project_management_tool/internal/auth"
+	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
+	"gorm.io/gorm"
 )
 
 type UserHandler struct {
@@ -107,6 +110,57 @@ func (h *UserHandler) AdminLogin(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"data": map[string]interface{}{
 			"user":  user,
+			"token": token,
+		},
+	})
+}
+
+// POST /api/v1/admin/switch-organization
+// 同一メールで複数組織に所属する場合、JWT の組織スコープを切り替える。
+func (h *UserHandler) SwitchOrganization(c echo.Context) error {
+	claims, ok := authmw.GetClaims(c)
+	if !ok || claims == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+	}
+	if claims.IsSuperAdmin {
+		return echo.NewHTTPError(http.StatusBadRequest, "super admin cannot use this endpoint")
+	}
+	type Request struct {
+		OrganizationID string `json:"organization_id"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if req.OrganizationID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "organization_id is required")
+	}
+	targetOrgID, err := uuid.Parse(req.OrganizationID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+	}
+	currentUser, err := h.userService.Get(userID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "user not found")
+	}
+	userInOrg, err := h.userService.FindByEmailAndOrg(targetOrgID, currentUser.Email)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusForbidden, "not a member of this organization")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	token, err := auth.GenerateUserToken(userInOrg.ID, targetOrgID, userInOrg.IsAdmin)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to issue token")
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"data": map[string]interface{}{
+			"user":  userInOrg,
 			"token": token,
 		},
 	})

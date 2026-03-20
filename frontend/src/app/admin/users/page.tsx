@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Shield, ShieldOff, X, Check, Plus, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from '@/lib/api'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 import type { Role, User, Department } from '@/types'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
@@ -30,21 +31,22 @@ async function fetchUserDepartments(orgId: string, userId: string): Promise<Depa
 
 export default function AdminUsersPage() {
   const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
   const queryClient = useQueryClient()
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['admin-users', currentOrg?.id],
     queryFn: () => getAdminUsers(currentOrg!.id),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
   const { data: allRoles = [] } = useQuery({
     queryKey: ['roles', currentOrg?.id],
     queryFn: () => fetchRoles(currentOrg?.id),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
   const { data: allDepartments = [] } = useQuery({
     queryKey: ['departments', currentOrg?.id],
     queryFn: () => fetchDepartments(currentOrg!.id),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const [showCreateForm, setShowCreateForm] = useState(false)

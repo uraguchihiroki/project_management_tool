@@ -60,12 +60,22 @@ func (h *WorkflowHandler) Create(c echo.Context) error {
 	if req.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
-	orgID, err := uuid.Parse(req.OrganizationID)
-	if !isSuperAdmin && (orgScope == nil || orgID != *orgScope) {
-		return echo.NewHTTPError(http.StatusForbidden, "forbidden for this organization")
-	}
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
+	var orgID uuid.UUID
+	if isSuperAdmin {
+		if req.OrganizationID == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "organization_id is required")
+		}
+		parsed, err := uuid.Parse(req.OrganizationID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
+		}
+		orgID = parsed
+	} else {
+		if orgScope == nil {
+			return echo.NewHTTPError(http.StatusForbidden, "organization scope is missing")
+		}
+		// JWT の組織スコープで作成（クライアントの currentOrg とズレても 403 にしない）
+		orgID = *orgScope
 	}
 	workflow, err := h.workflowService.CreateWorkflow(orgID, req.Name, req.Description)
 	if err != nil {

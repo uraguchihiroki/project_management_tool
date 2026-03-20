@@ -7,6 +7,7 @@ import { getTemplates, getProjects, createTemplate, updateTemplate, deleteTempla
 import type { IssueTemplate, Project, Workflow } from '@/types'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
 import { SortableDndProvider, SortableList, DragHandle } from '@/components/SortableList'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -26,10 +27,23 @@ const emptyForm = {
 }
 
 export default function TemplatesPage() {
+  const authFetch = useAuthFetchEnabled()
   const queryClient = useQueryClient()
-  const { data: templates = [], isLoading } = useQuery({ queryKey: ['templates'], queryFn: getTemplates })
-  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: () => getProjects() })
-  const { data: workflows = [] } = useQuery({ queryKey: ['workflows'], queryFn: fetchWorkflows })
+  const { data: templates = [], isLoading } = useQuery({
+    queryKey: ['templates'],
+    queryFn: getTemplates,
+    enabled: authFetch,
+  })
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ['projects'],
+    queryFn: () => getProjects(),
+    enabled: authFetch,
+  })
+  const { data: workflows = [] } = useQuery({
+    queryKey: ['workflows'],
+    queryFn: fetchWorkflows,
+    enabled: authFetch,
+  })
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)

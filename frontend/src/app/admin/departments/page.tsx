@@ -7,6 +7,7 @@ import type { Department } from '@/types'
 import { SortableDndProvider, SortableTbody, DragHandle } from '@/components/SortableList'
 
 import { useAuth } from '@/context/AuthContext'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -20,11 +21,12 @@ async function fetchDepartments(orgId: string): Promise<Department[]> {
 
 export default function DepartmentsPage() {
   const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
   const queryClient = useQueryClient()
   const { data: departments = [], isLoading } = useQuery({
     queryKey: ['departments', currentOrg?.id],
     queryFn: () => fetchDepartments(currentOrg?.id ?? ''),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const [showForm, setShowForm] = useState(false)

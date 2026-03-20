@@ -178,6 +178,7 @@ func newTestServer(t *testing.T) *testServer {
 	public.POST("/users", userH.Create)
 	public.POST("/admin/login", userH.AdminLogin)
 	public.POST("/super-admin/login", superAdminH.Login)
+	api.POST("/admin/switch-organization", userH.SwitchOrganization)
 	api.GET("/users/:id", userH.Get)
 	api.PUT("/users/:id/admin", userH.SetAdmin)
 	api.GET("/users/:id/roles", roleH.GetUserRoles)

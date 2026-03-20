@@ -10,10 +10,12 @@ import { SortableDndProvider, SortableList, DragHandle } from '@/components/Sort
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 import { useRequireAdmin, useAuth } from '@/context/AuthContext'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 export default function AdminProjectsPage() {
   const currentUser = useRequireAdmin()
   const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
@@ -27,6 +29,7 @@ export default function AdminProjectsPage() {
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects', currentOrg?.id],
     queryFn: () => getProjects(currentOrg?.id),
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const createMutation = useMutation({

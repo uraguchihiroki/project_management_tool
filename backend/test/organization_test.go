@@ -72,15 +72,22 @@ func TestOrganization_UserMembership(t *testing.T) {
 		}
 	})
 
-	t.Run("ユーザーの所属組織一覧を取得できる（1ユーザー＝1組織）", func(t *testing.T) {
+	t.Run("ユーザーの所属組織一覧を取得できる（同一メールの全組織）", func(t *testing.T) {
 		status, resp := ts.req(t, "GET", "/api/v1/users/"+userInOrg1ID+"/organizations", nil)
 		assertStatus(t, status, http.StatusOK, "get user orgs")
 		orgs := mustGetArray(t, resp, "data")
-		if len(orgs) != 1 {
-			t.Fatalf("expected 1 org (1 user = 1 org), got %d", len(orgs))
+		// 初期組織 + 所属会社1 + 所属会社2（同一メールで複数ユーザー行）
+		if len(orgs) != 3 {
+			t.Fatalf("expected 3 orgs for same email across orgs, got %d", len(orgs))
 		}
-		firstOrg := orgs[0].(map[string]interface{})
-		assertField(t, firstOrg["id"].(string), org1ID, "org id")
+		seen := map[string]bool{}
+		for _, o := range orgs {
+			id := o.(map[string]interface{})["id"].(string)
+			seen[id] = true
+		}
+		if !seen[org1ID] || !seen[org2ID] {
+			t.Fatalf("expected org1 and org2 in list, seen=%v", seen)
+		}
 	})
 
 	t.Run("重複追加は冪等に処理される", func(t *testing.T) {

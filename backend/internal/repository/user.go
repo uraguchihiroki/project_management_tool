@@ -11,6 +11,7 @@ type UserRepository interface {
 	FindAllWithRoles() ([]model.User, error)
 	FindByID(id uuid.UUID) (*model.User, error)
 	FindByEmail(email string) (*model.User, error)
+	FindAllByEmail(email string) ([]model.User, error)
 	FindByEmailAndOrg(orgID uuid.UUID, email string) (*model.User, error)
 	FindByOrg(orgID uuid.UUID) ([]model.User, error)
 	Create(user *model.User) error
@@ -50,6 +51,12 @@ func (r *userRepository) FindByEmail(email string) (*model.User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *userRepository) FindAllByEmail(email string) ([]model.User, error) {
+	var users []model.User
+	err := r.db.Where("email = ?", email).Preload("Organization").Find(&users).Error
+	return users, err
 }
 
 func (r *userRepository) FindByEmailAndOrg(orgID uuid.UUID, email string) (*model.User, error) {

@@ -11,10 +11,12 @@ import { formatDistanceToNow } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { useRequireAuth } from '@/context/AuthContext'
 import Header from '@/components/Header'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const currentUser = useRequireAuth()
+  const authFetch = useAuthFetchEnabled()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<IssueTemplate | null>(null)
@@ -29,20 +31,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const { data: project, isLoading: projectLoading } = useQuery({
     queryKey: ['project', id],
     queryFn: () => getProject(id),
+    enabled: authFetch && !!id,
   })
   const { data: issues = [], isLoading: issuesLoading } = useQuery({
     queryKey: ['issues', id],
     queryFn: () => getIssues(id),
+    enabled: authFetch && !!id,
   })
 
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
     queryFn: getUsers,
+    enabled: authFetch,
   })
 
   const { data: templates = [] } = useQuery({
     queryKey: ['project-templates', id],
     queryFn: () => getProjectTemplates(id),
+    enabled: authFetch && !!id,
   })
 
   const createMutation = useMutation({

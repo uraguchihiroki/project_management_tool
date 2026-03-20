@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
 )
 
@@ -64,26 +65,28 @@ func (h *OrganizationHandler) Create(c echo.Context) error {
 
 // GET /api/v1/users/:id/organizations
 func (h *OrganizationHandler) ListByUser(c echo.Context) error {
-	orgID, isSuperAdmin, authErr := requireClaims(c)
+	_, isSuperAdmin, authErr := requireClaims(c)
 	if authErr != nil {
 		return authErr
+	}
+	claims, ok := authmw.GetClaims(c)
+	if !ok || claims == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
 	}
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
 	}
+	claimsUserID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+	}
+	if !isSuperAdmin && userID != claimsUserID {
+		return echo.NewHTTPError(http.StatusForbidden, "forbidden")
+	}
 	orgs, err := h.orgService.GetUserOrganizations(userID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-	if !isSuperAdmin && orgID != nil {
-		filtered := make([]interface{}, 0, len(orgs))
-		for _, org := range orgs {
-			if org.ID == *orgID {
-				filtered = append(filtered, org)
-			}
-		}
-		return c.JSON(http.StatusOK, map[string]interface{}{"data": filtered})
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": orgs})
 }

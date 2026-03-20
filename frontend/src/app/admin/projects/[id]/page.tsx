@@ -7,15 +7,18 @@ import { getProject, updateProject } from '@/lib/api'
 import { ChevronLeft } from 'lucide-react'
 import type { Project } from '@/types'
 import { useRequireAdmin } from '@/context/AuthContext'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 export default function AdminProjectEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const currentUser = useRequireAdmin()
+  const authFetch = useAuthFetchEnabled()
   const queryClient = useQueryClient()
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
     queryFn: () => getProject(id),
+    enabled: authFetch && !!id,
   })
 
   const updateMutation = useMutation({

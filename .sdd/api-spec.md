@@ -8,7 +8,7 @@ http://localhost:8080/api/v1
 
 ## 認証・マルチテナント制御
 
-- `POST /users`、`POST /admin/login`、`POST /super-admin/login` を除く API は `Authorization: Bearer <JWT>` が必要。
+- `POST /users`、`POST /admin/login`、`POST /super-admin/login` を除く API は `Authorization: Bearer <JWT>` が必要（`POST /admin/switch-organization` は要 JWT）。
 - スーパーアドミン以外は、JWT の `organization_id` に一致するデータのみ返却する。
 - 他組織の `org_id` / `project_id` / `issue_id` 等を指定した場合は、`403` または `404` を返す。
 
@@ -21,6 +21,7 @@ http://localhost:8080/api/v1
 | Method | Path | 説明 |
 |--------|------|------|
 | POST | /admin/login | 組織ユーザーログイン（JWT発行） |
+| POST | /admin/switch-organization | 同一メールで別組織に切り替え（body: `organization_id`、該当組織のユーザー行に紐づく JWT を再発行） |
 | GET | /users | ユーザー一覧取得 |
 | POST | /users | ユーザー作成 |
 | GET | /users/:id | ユーザー詳細取得 |
@@ -42,7 +43,7 @@ http://localhost:8080/api/v1
 | Method | Path | 説明 |
 |--------|------|------|
 | GET | /workflows | ワークフロー一覧取得（ユーザーステップが1つ以上あるもののみ） |
-| POST | /workflows | ワークフロー作成（organization_id 必須） |
+| POST | /workflows | ワークフロー作成。スーパーアドミンは body に `organization_id` 必須。それ以外は JWT の組織スコープで作成（body の organization_id は無視可） |
 | GET | /workflows/:id | ワークフロー詳細取得 |
 | PUT | /workflows/:id | ワークフロー更新 |
 | DELETE | /workflows/:id | ワークフロー削除 |

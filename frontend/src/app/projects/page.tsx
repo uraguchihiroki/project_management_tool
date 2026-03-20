@@ -7,14 +7,17 @@ import { FolderKanban, ChevronRight } from 'lucide-react'
 import type { Project } from '@/types'
 import { useRequireAuth, useAuth } from '@/context/AuthContext'
 import Header from '@/components/Header'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 export default function ProjectsPage() {
   const currentUser = useRequireAuth()
   const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects', currentOrg?.id],
     queryFn: () => getProjects(currentOrg?.id),
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   if (!currentUser) return null

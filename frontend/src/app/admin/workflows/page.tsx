@@ -2,22 +2,30 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import axios from 'axios'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Check, ChevronRight, GitBranch } from 'lucide-react'
 import type { Workflow } from '@/types'
 import { SortableDndProvider, SortableList, DragHandle } from '@/components/SortableList'
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
-
-async function fetchWorkflows(): Promise<Workflow[]> {
-  const res = await fetch(`${API}/workflows`)
-  const json = await res.json()
-  return json.data ?? []
-}
+import { useAuth } from '@/context/AuthContext'
+import {
+  getWorkflows,
+  createWorkflow,
+  updateWorkflowMeta,
+  deleteWorkflowApi,
+  reorderWorkflowsApi,
+} from '@/lib/api'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 export default function WorkflowsPage() {
   const queryClient = useQueryClient()
-  const { data: workflows = [], isLoading } = useQuery({ queryKey: ['workflows'], queryFn: fetchWorkflows })
+  const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
+  const { data: workflows = [], isLoading } = useQuery({
+    queryKey: ['workflows', currentOrg?.id],
+    queryFn: () => getWorkflows(),
+    enabled: authFetch && !!currentOrg?.id,
+  })
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -26,33 +34,39 @@ export default function WorkflowsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof form) => {
-      const res = await fetch(`${API}/workflows`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!res.ok) {
-        const json = await res.json()
-        throw new Error(json.message ?? '作成に失敗しました')
+      if (!currentOrg?.id) {
+        throw new Error('組織が選択されていません。プロジェクト一覧で組織を選び直してください。')
       }
+      return createWorkflow({
+        organization_id: currentOrg.id,
+        name: data.name.trim(),
+        description: data.description ?? '',
+      })
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflows'] })
+    onSuccess: async (created) => {
+      const key = ['workflows', currentOrg?.id] as const
+      // 一覧が即座に更新されるようキャッシュに追加（invalidate だけだと再取得が遅い／取りこぼす環境がある）
+      queryClient.setQueryData<Workflow[]>(key, (old) => {
+        const list = old ?? []
+        if (list.some((w) => w.id === created.id)) return list
+        return [...list, created]
+      })
+      await queryClient.invalidateQueries({ queryKey: key })
       setShowForm(false)
       setForm({ name: '', description: '' })
       setError('')
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: unknown) => {
+      const msg = axios.isAxiosError(e)
+        ? (e.response?.data as { message?: string } | undefined)?.message
+        : undefined
+      setError(typeof msg === 'string' ? msg : e instanceof Error ? e.message : '作成に失敗しました')
+    },
   })
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: { name: string; description: string } }) => {
-      const res = await fetch(`${API}/workflows/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!res.ok) throw new Error('更新に失敗しました')
+      await updateWorkflowMeta(id, data)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
@@ -65,7 +79,7 @@ export default function WorkflowsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      await fetch(`${API}/workflows/${id}`, { method: 'DELETE' })
+      await deleteWorkflowApi(id)
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
   })
@@ -73,12 +87,7 @@ export default function WorkflowsPage() {
   const [reorderPending, setReorderPending] = useState(false)
   const reorderMutation = useMutation({
     mutationFn: async (ids: number[]) => {
-      const res = await fetch(`${API}/workflows/reorder`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      })
-      if (!res.ok) throw new Error('並び替えに失敗しました')
+      await reorderWorkflowsApi(ids)
     },
     onMutate: () => setReorderPending(true),
     onSettled: () => setReorderPending(false),
@@ -104,6 +113,11 @@ export default function WorkflowsPage() {
 
   return (
     <div className="max-w-3xl">
+      {!currentOrg?.id && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          現在の組織が選択されていません。プロジェクト一覧に戻り、右上の組織から選択してください。
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">ワークフロー管理</h1>
@@ -111,12 +125,15 @@ export default function WorkflowsPage() {
         </div>
         {!showForm && editingId === null && (
           <button
+            type="button"
+            disabled={!currentOrg?.id}
+            title={!currentOrg?.id ? '組織を選択してください' : undefined}
             onClick={() => {
               setShowForm(true)
               setForm({ name: '', description: '' })
               setError('')
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
             ワークフローを追加

@@ -8,9 +8,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Shield, Building2, Plus, LogOut, Loader2, Calendar } from 'lucide-react'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 export default function SuperAdminPage() {
   const currentSuperAdmin = useRequireSuperAdmin()
+  const authFetch = useAuthFetchEnabled()
   const { logout } = useSuperAdmin()
   const queryClient = useQueryClient()
   const router = useRouter()
@@ -23,7 +25,7 @@ export default function SuperAdminPage() {
   const { data: orgs = [], isLoading } = useQuery({
     queryKey: ['super-admin', 'organizations'],
     queryFn: superAdminGetOrganizations,
-    enabled: !!currentSuperAdmin,
+    enabled: authFetch && !!currentSuperAdmin,
   })
 
   const createMutation = useMutation({

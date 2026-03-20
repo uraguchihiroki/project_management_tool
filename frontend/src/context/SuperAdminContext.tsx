@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { SuperAdmin } from '@/types'
-import { setAuthToken } from '@/lib/authToken'
+import { clearAuthSession, setAuthToken } from '@/lib/authToken'
 
 const SA_SESSION_KEY = 'currentSuperAdmin'
 
@@ -53,8 +53,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   }, [])
 
   const logout = useCallback(() => {
-    setAuthToken(null)
-    sessionStorage.removeItem(SA_SESSION_KEY)
+    clearAuthSession()
     setCurrentSuperAdmin(null)
     router.push('/super-admin/login')
   }, [router])

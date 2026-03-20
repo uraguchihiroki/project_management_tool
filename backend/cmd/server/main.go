@@ -122,6 +122,7 @@ func main() {
 	public.POST("/super-admin/login", superAdminHandler.Login)
 	api.GET("/users", userHandler.List)
 	api.GET("/users/:id", userHandler.Get)
+	api.POST("/admin/switch-organization", userHandler.SwitchOrganization)
 	api.PUT("/users/:id/admin", userHandler.SetAdmin)
 	api.GET("/users/:id/roles", roleHandler.GetUserRoles)
 	api.PUT("/users/:id/roles", roleHandler.AssignRoles)

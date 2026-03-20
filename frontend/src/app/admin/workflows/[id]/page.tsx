@@ -9,6 +9,7 @@ import { Plus, Trash2, X, ChevronLeft, Pencil, GitBranch, Check } from 'lucide-r
 import type { Workflow, Status } from '@/types'
 import { SortableDndProvider, SortableList, DragHandle } from '@/components/SortableList'
 import { useAuth } from '@/context/AuthContext'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -48,16 +49,18 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const router = useRouter()
   const queryClient = useQueryClient()
   const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
 
   const { data: workflow, isLoading } = useQuery({
     queryKey: ['workflow', id],
     queryFn: () => fetchWorkflow(id),
+    enabled: authFetch && !!id,
   })
 
   const { data: statuses = [] } = useQuery({
     queryKey: ['org-statuses', currentOrg?.id],
     queryFn: () => fetchOrgStatuses(currentOrg!.id),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const [showAddForm, setShowAddForm] = useState(false)

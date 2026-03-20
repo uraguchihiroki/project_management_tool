@@ -19,6 +19,26 @@ func createTestWorkflow(t *testing.T, ts *testServer, name string) string {
 	return fmt.Sprintf("%.0f", mustGetFloat(t, resp, "data", "id"))
 }
 
+// ブラウザと同じ経路: POST /admin/login で得た JWT（組織ユーザー）で POST /workflows する。
+// スーパー管理者トークンではなく、一般ログインのトークンで検証する。
+func TestWorkflow_Create_AsOrgUserJWT(t *testing.T) {
+	ts := newTestServer(t)
+	email := "wf-as-org-user@example.com"
+	createTestUser(t, ts, "WF検証ユーザー", email)
+
+	_, loginResp := ts.reqNoAuth(t, "POST", "/api/v1/admin/login", map[string]string{"email": email})
+	token := mustGetString(t, loginResp, "data", "token")
+
+	status, resp := ts.reqWithToken(t, token, "POST", "/api/v1/workflows", map[string]interface{}{
+		"organization_id": testOrgID,
+		"name":              "ログインユーザーが追加するフロー",
+		"description":       "ブラウザと同じJWT経路の検証",
+	})
+	assertStatus(t, status, http.StatusCreated, "POST /workflows with org-user JWT (not super-admin)")
+	assertField(t, mustGetString(t, resp, "data", "name"), "ログインユーザーが追加するフロー", "name")
+	assertNotEmpty(t, fmt.Sprintf("%.0f", mustGetFloat(t, resp, "data", "id")), "workflow id")
+}
+
 func TestWorkflow_Create(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")

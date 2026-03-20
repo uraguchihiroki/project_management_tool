@@ -82,7 +82,27 @@ func (s *organizationService) Create(name, adminEmail, adminName string) (*model
 }
 
 func (s *organizationService) GetUserOrganizations(userID uuid.UUID) ([]model.Organization, error) {
-	return s.orgRepo.FindByUserID(userID)
+	u, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.userRepo.FindAllByEmail(u.Email)
+	if err != nil {
+		return nil, err
+	}
+	orgs := make([]model.Organization, 0, len(rows))
+	seen := make(map[uuid.UUID]struct{})
+	for _, usr := range rows {
+		if usr.Organization.ID == uuid.Nil {
+			continue
+		}
+		if _, ok := seen[usr.Organization.ID]; ok {
+			continue
+		}
+		seen[usr.Organization.ID] = struct{}{}
+		orgs = append(orgs, usr.Organization)
+	}
+	return orgs, nil
 }
 
 func (s *organizationService) AddUser(orgID uuid.UUID, existingUserID uuid.UUID, isOrgAdmin bool) (*model.User, error) {

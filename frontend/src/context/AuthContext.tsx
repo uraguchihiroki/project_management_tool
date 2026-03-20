@@ -3,8 +3,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { User, Organization } from '@/types'
-import { setAuthToken } from '@/lib/authToken'
-import { adminLogin, createUser, getUserOrganizations, setUserAdmin } from '@/lib/api'
+import { clearAuthSession, setAuthToken } from '@/lib/authToken'
+import { adminLogin, createUser, getUserOrganizations, setUserAdmin, switchOrganization } from '@/lib/api'
 
 const SESSION_KEY = 'currentUser'
 const ORG_KEY = 'currentOrg'
@@ -15,7 +15,7 @@ interface AuthContextType {
   login: (email: string, asAdmin?: boolean) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
   register: (name: string, email: string, asAdmin?: boolean) => Promise<{ ok: boolean; error?: string }>
-  selectOrg: (org: Organization) => void
+  selectOrg: (org: Organization) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -56,32 +56,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const selectOrg = useCallback((org: Organization) => {
-    sessionStorage.setItem(ORG_KEY, JSON.stringify(org))
-    setCurrentOrg(org)
+  const selectOrg = useCallback(async (org: Organization) => {
+    try {
+      const payload = await switchOrganization(org.id)
+      setAuthToken(payload.token)
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload.user))
+      sessionStorage.setItem(ORG_KEY, JSON.stringify(org))
+      setCurrentUser(payload.user)
+      setCurrentOrg(org)
+    } catch {
+      sessionStorage.setItem(ORG_KEY, JSON.stringify(org))
+      setCurrentOrg(org)
+    }
   }, [])
 
   // ログイン後に組織を取得し、1件なら自動選択・複数なら選択画面へ・0件ならエラー
-  const handleOrgSelection = useCallback(async (userId: string): Promise<{ dest: string; error?: string }> => {
-    try {
-      // JWT 必須 API のため axios（Authorization 付与）を使う。生の fetch だとトークンが付かず 401 になる。
-      const orgs: Organization[] = await getUserOrganizations(userId)
-      if (orgs.length === 1) {
-        sessionStorage.setItem(ORG_KEY, JSON.stringify(orgs[0]))
-        setCurrentOrg(orgs[0])
-        return { dest: '/projects' }
+  const handleOrgSelection = useCallback(
+    async (userId: string): Promise<{ dest: string; error?: string; syncedUser?: User }> => {
+      try {
+        // JWT 必須 API のため axios（Authorization 付与）を使う。生の fetch だとトークンが付かず 401 になる。
+        const orgs: Organization[] = await getUserOrganizations(userId)
+        if (orgs.length === 1) {
+          sessionStorage.setItem(ORG_KEY, JSON.stringify(orgs[0]))
+          setCurrentOrg(orgs[0])
+          try {
+            const payload = await switchOrganization(orgs[0].id)
+            setAuthToken(payload.token)
+            return { dest: '/projects', syncedUser: payload.user }
+          } catch {
+            return { dest: '/projects' }
+          }
+        }
+        if (orgs.length > 1) {
+          return { dest: '/select-org' }
+        }
+        return { dest: '/login', error: '所属組織がありません。管理者に連絡してください。' }
+      } catch {
+        return {
+          dest: '/login',
+          error: '所属組織の取得に失敗しました。バックエンドが起動しているか確認してください。',
+        }
       }
-      if (orgs.length > 1) {
-        return { dest: '/select-org' }
-      }
-      return { dest: '/login', error: '所属組織がありません。管理者に連絡してください。' }
-    } catch {
-      return {
-        dest: '/login',
-        error: '所属組織の取得に失敗しました。バックエンドが起動しているか確認してください。',
-      }
-    }
-  }, [])
+    },
+    []
+  )
 
   const login = useCallback(async (email: string, asAdmin?: boolean): Promise<{ ok: boolean; error?: string }> => {
     try {
@@ -93,13 +111,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // JWT のみ先にセット（getUserOrganizations に必要）。currentUser は組織が決まってから。
       // 先に setCurrentUser すると /login の useEffect が /projects へ飛ばし、Turbopack が先に /projects をコンパイルして競合する。
       setAuthToken(token)
-      const { dest, error } = await handleOrgSelection(found.id)
+      const { dest, error, syncedUser } = await handleOrgSelection(found.id)
       if (error) {
         setAuthToken(null)
         return { ok: false, error }
       }
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
-      setCurrentUser(user)
+      const userForSession = syncedUser
+        ? { ...syncedUser, is_admin: asAdmin ?? syncedUser.is_admin }
+        : user
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(userForSession))
+      setCurrentUser(userForSession)
       router.push(dest)
       return { ok: true }
     } catch (e: unknown) {
@@ -113,9 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [handleOrgSelection, router])
 
   const logout = useCallback(() => {
-    setAuthToken(null)
-    sessionStorage.removeItem(SESSION_KEY)
-    sessionStorage.removeItem(ORG_KEY)
+    clearAuthSession()
     setCurrentUser(null)
     setCurrentOrg(null)
     router.push('/login')
@@ -133,13 +152,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await setUserAdmin(payload.user.id, asAdmin)
       }
       const user = { ...payload.user, is_admin: asAdmin ?? payload.user.is_admin }
-      const { dest, error } = await handleOrgSelection(payload.user.id)
+      const { dest, error, syncedUser } = await handleOrgSelection(payload.user.id)
       if (error) {
         setAuthToken(null)
         return { ok: false, error }
       }
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
-      setCurrentUser(user)
+      const userForSession = syncedUser ? { ...syncedUser, is_admin: asAdmin ?? syncedUser.is_admin } : user
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(userForSession))
+      setCurrentUser(userForSession)
       router.push(dest)
       return { ok: true }
     } catch (e: unknown) {

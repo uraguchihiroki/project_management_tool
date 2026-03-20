@@ -14,6 +14,7 @@ import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { useRequireAuth } from '@/context/AuthContext'
 import Header from '@/components/Header'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 const APPROVAL_STATUS_LABELS: Record<string, string> = {
   pending: '未承認',
@@ -30,6 +31,7 @@ const ApprovalStatusIcon = ({ status }: { status: string }) => {
 export default function IssuePage({ params }: { params: Promise<{ id: string; number: string }> }) {
   const { id, number } = use(params)
   const currentUser = useRequireAuth()
+  const authFetch = useAuthFetchEnabled()
   const queryClient = useQueryClient()
   const [comment, setComment] = useState('')
   const [editingStatus, setEditingStatus] = useState(false)
@@ -38,17 +40,19 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
   const { data: project } = useQuery({
     queryKey: ['project', id],
     queryFn: () => getProject(id),
+    enabled: authFetch && !!id,
   })
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ['issue', id, number],
     queryFn: () => getIssue(id, Number(number)),
+    enabled: authFetch && !!id && !!number,
   })
 
   const { data: approvals = [] } = useQuery({
     queryKey: ['approvals', issue?.id],
     queryFn: () => getApprovals(issue!.id),
-    enabled: !!issue?.id,
+    enabled: authFetch && !!issue?.id,
   })
 
   const commentMutation = useMutation({

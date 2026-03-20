@@ -9,6 +9,7 @@ import { ChevronLeft, Check, Plus, Trash2 } from 'lucide-react'
 import type { WorkflowStep, Status, Role, User, ApprovalObject } from '@/types'
 import { getWorkflowStep, updateWorkflowStep } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
@@ -52,29 +53,30 @@ export default function StepEditPage({
   const router = useRouter()
   const queryClient = useQueryClient()
   const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
 
   const { data: step, isLoading } = useQuery({
     queryKey: ['workflow-step', id, stepId],
     queryFn: () => getWorkflowStep(id, stepId),
-    enabled: !!id && !!stepId,
+    enabled: authFetch && !!id && !!stepId,
   })
 
   const { data: statuses = [] } = useQuery({
     queryKey: ['org-statuses', currentOrg?.id],
     queryFn: () => fetchOrgStatuses(currentOrg!.id),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const { data: roles = [] } = useQuery({
     queryKey: ['roles', currentOrg?.id],
     queryFn: () => fetchRoles(currentOrg?.id),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const { data: users = [] } = useQuery({
     queryKey: ['admin-users', currentOrg?.id],
     queryFn: () => fetchUsers(currentOrg!.id),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const [form, setForm] = useState({
