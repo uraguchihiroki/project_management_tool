@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
+	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
@@ -54,6 +55,12 @@ func (s *roleService) CreateRole(name string, level int, description string, org
 	if err := s.roleRepo.Create(role); err != nil {
 		return nil, err
 	}
+	key := keygen.Slug(name)
+	if key == "" {
+		key = keygen.PrefixedID("role", role.ID)
+	}
+	role.Key = key
+	_ = s.roleRepo.Update(role)
 	return role, nil
 }
 

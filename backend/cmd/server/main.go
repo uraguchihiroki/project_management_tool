@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/handler"
+	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
@@ -25,13 +26,15 @@ func main() {
 		log.Fatalf("failed to connect database: %v", err)
 	}
 
+	// user_roles 中間テーブルに key カラムを持たせるためカスタム JoinTable を設定
+	db.SetupJoinTable(&model.User{}, "Roles", &model.UserRole{})
+
 	// AutoMigrate
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
 		&model.Role{},
 		&model.User{},
-		&model.OrganizationUser{},
 		&model.Department{},
 		&model.OrganizationUserDepartment{},
 		&model.Project{},
@@ -64,25 +67,26 @@ func main() {
 	// Services
 	userSvc := service.NewUserService(userRepo, orgRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
-	orgSvc := service.NewOrganizationService(orgRepo, userRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo)
+	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)
-	commentSvc := service.NewCommentService(commentRepo)
+	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo, statusRepo)
-	templateSvc := service.NewTemplateService(templateRepo)
+	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
 	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
 	statusSvc := service.NewStatusService(statusRepo)
 
 	// Handlers
 	userHandler := handler.NewUserHandler(userSvc)
 	projectHandler := handler.NewProjectHandler(projectSvc)
-	issueHandler := handler.NewIssueHandler(issueSvc, approvalSvc)
+	issueHandler := handler.NewIssueHandler(issueSvc, approvalSvc, projectSvc)
 	commentHandler := handler.NewCommentHandler(commentSvc)
 	roleHandler := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowHandler := handler.NewWorkflowHandler(workflowSvc)
-	templateHandler := handler.NewTemplateHandler(templateSvc)
+	templateHandler := handler.NewTemplateHandler(templateSvc, projectSvc)
 	approvalHandler := handler.NewApprovalHandler(approvalSvc)
 	orgHandler := handler.NewOrganizationHandler(orgSvc)
 	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
@@ -94,21 +98,32 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://localhost:3000"},
+		// localhost と 127.0.0.1 はブラウザ上で別オリジンになる（Playwright の baseURL 等）
+		AllowOrigins: []string{"http://localhost:3000", "http://127.0.0.1:3000", "http://frontend:3000"},
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{"Content-Type", "Authorization"},
 	}))
 
+	// Health check (for Docker / E2E; wget --spider uses HEAD)
+	e.Match([]string{"GET", "HEAD"}, "/api/v1/health", func(c echo.Context) error { return c.NoContent(200) })
+
 	// ステップ更新: 最優先で登録（/workflows/:id との競合を完全回避）
-	e.PUT("/api/v1/workflow-steps/:stepId", workflowHandler.UpdateStep)
+	e.PUT("/api/v1/workflow-steps/:stepId", workflowHandler.UpdateStep, authmw.RequireJWT)
 
 	// Routes
 	api := e.Group("/api/v1")
+	api.Use(authmw.RequireJWT)
+
+	public := e.Group("/api/v1")
+	public.Use(authmw.OptionalJWT)
 
 	// Users
+	public.POST("/users", userHandler.Create)
+	public.POST("/admin/login", userHandler.AdminLogin)
+	public.POST("/super-admin/login", superAdminHandler.Login)
 	api.GET("/users", userHandler.List)
-	api.POST("/users", userHandler.Create)
 	api.GET("/users/:id", userHandler.Get)
+	api.POST("/admin/switch-organization", userHandler.SwitchOrganization)
 	api.PUT("/users/:id/admin", userHandler.SetAdmin)
 	api.GET("/users/:id/roles", roleHandler.GetUserRoles)
 	api.PUT("/users/:id/roles", roleHandler.AssignRoles)
@@ -165,7 +180,6 @@ func main() {
 	api.PUT("/users/:id/departments", departmentHandler.SetUserDepartments)
 
 	// Super Admin
-	api.POST("/super-admin/login", superAdminHandler.Login)
 	api.GET("/super-admin/organizations", superAdminHandler.ListOrganizations)
 	api.POST("/super-admin/organizations", superAdminHandler.CreateOrganization)
 

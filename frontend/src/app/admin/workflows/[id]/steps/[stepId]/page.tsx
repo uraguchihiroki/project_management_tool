@@ -9,16 +9,15 @@ import { ChevronLeft, Check, Plus, Trash2 } from 'lucide-react'
 import type { WorkflowStep, Status, Role, User, ApprovalObject } from '@/types'
 import { getWorkflowStep, updateWorkflowStep } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
 async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
-  const res = await fetch(`${API}/organizations/${orgId}/statuses?type=issue`)
+  const res = await fetch(`${API}/organizations/${orgId}/statuses?type=issue&exclude_system=1`)
   const json = await res.json()
   const data: Status[] = json.data ?? []
-  return data.filter((s) =>
-    !s.project_id && (s.organization_id || s.status_key === 'sts_start' || s.status_key === 'sts_goal')
-  )
+  return data.filter((s) => !s.project_id && s.organization_id)
 }
 
 async function fetchRoles(orgId?: string): Promise<Role[]> {
@@ -54,34 +53,34 @@ export default function StepEditPage({
   const router = useRouter()
   const queryClient = useQueryClient()
   const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
 
   const { data: step, isLoading } = useQuery({
     queryKey: ['workflow-step', id, stepId],
     queryFn: () => getWorkflowStep(id, stepId),
-    enabled: !!id && !!stepId,
+    enabled: authFetch && !!id && !!stepId,
   })
 
   const { data: statuses = [] } = useQuery({
     queryKey: ['org-statuses', currentOrg?.id],
     queryFn: () => fetchOrgStatuses(currentOrg!.id),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const { data: roles = [] } = useQuery({
     queryKey: ['roles', currentOrg?.id],
     queryFn: () => fetchRoles(currentOrg?.id),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const { data: users = [] } = useQuery({
     queryKey: ['admin-users', currentOrg?.id],
     queryFn: () => fetchUsers(currentOrg!.id),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const [form, setForm] = useState({
     status_id: '',
-    next_status_id: '',
     description: '',
     threshold: 10,
   })
@@ -92,7 +91,6 @@ export default function StepEditPage({
   const updateFormFromStep = useCallback((s: WorkflowStep) => {
     setForm({
       status_id: s.status_id ?? '',
-      next_status_id: s.next_status_id ?? '',
       description: s.description ?? '',
       threshold: s.threshold ?? 10,
     })
@@ -121,14 +119,13 @@ export default function StepEditPage({
       if (formData.threshold < 1) throw new Error('閾値は1以上で指定してください')
       const payload = {
         status_id: formData.status_id,
-        next_status_id: formData.next_status_id || undefined,
         description: formData.description,
         threshold: formData.threshold,
         approval_objects: approvalObjectsData
           .filter((ao) => (ao.type === 'role' && ao.role_id) || (ao.type === 'user' && ao.user_id))
           .map((ao) => ({
             type: ao.type,
-            role_id: ao.role_id != null && ao.role_id !== '' ? Number(ao.role_id) : undefined,
+            role_id: ao.role_id != null ? Number(ao.role_id) : undefined,
             role_operator: ao.role_operator ?? 'gte',
             user_id: ao.user_id || undefined,
             points: Math.max(1, Number(ao.points) || 1),
@@ -150,7 +147,7 @@ export default function StepEditPage({
     },
   })
 
-  const isGoal = !form.next_status_id
+  const isGoal = !step?.next_status_id
 
   if (isLoading || !step) {
     return (
@@ -205,20 +202,6 @@ export default function StepEditPage({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">承認後ステータス</label>
-              <select
-                value={form.next_status_id}
-                onChange={(e) => setForm((prev) => ({ ...prev, next_status_id: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">（なし・ゴール）</option>
-                {statuses.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">ステップの説明</label>
               <textarea
                 value={form.description}
@@ -253,7 +236,7 @@ export default function StepEditPage({
                       onClick={() =>
                         setApprovalObjects((prev) => [...prev, emptyApprovalObject()])
                       }
-                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                      className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       追加

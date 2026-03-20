@@ -51,39 +51,59 @@ func TestOrganization_UserMembership(t *testing.T) {
 	org1ID := mustGetString(t, org1Resp, "data", "id")
 	org2ID := mustGetString(t, org2Resp, "data", "id")
 
+	var userInOrg1ID string
 	t.Run("ユーザーを組織に追加できる", func(t *testing.T) {
-		status, _ := ts.req(t, "POST", "/api/v1/organizations/"+org1ID+"/users", map[string]interface{}{
+		status, addResp := ts.req(t, "POST", "/api/v1/organizations/"+org1ID+"/users", map[string]interface{}{
 			"user_id": userID,
 		})
 		assertStatus(t, status, http.StatusCreated, "add user to org1")
+		userInOrg1ID = mustGetString(t, addResp, "data", "id")
 	})
 
-	t.Run("ユーザーを複数組織に所属させられる", func(t *testing.T) {
-		status, _ := ts.req(t, "POST", "/api/v1/organizations/"+org2ID+"/users", map[string]interface{}{
+	t.Run("ユーザーを複数組織に所属させられる（別組織に追加＝新規ユーザー作成）", func(t *testing.T) {
+		status, addResp := ts.req(t, "POST", "/api/v1/organizations/"+org2ID+"/users", map[string]interface{}{
 			"user_id": userID,
 		})
 		assertStatus(t, status, http.StatusCreated, "add user to org2")
-	})
-
-	t.Run("ユーザーの所属組織一覧を取得できる", func(t *testing.T) {
-		status, resp := ts.req(t, "GET", "/api/v1/users/"+userID+"/organizations", nil)
-		assertStatus(t, status, http.StatusOK, "get user orgs")
-		orgs := mustGetArray(t, resp, "data")
-		if len(orgs) != 2 {
-			t.Fatalf("expected 2 orgs, got %d", len(orgs))
+		userInOrg2ID := mustGetString(t, addResp, "data", "id")
+		// 1ユーザー＝1組織なので、org2用のユーザーは別ID
+		if userInOrg2ID == userInOrg1ID {
+			t.Error("expected different user id for different org")
 		}
 	})
 
-	t.Run("重複追加はエラーにならず冪等に処理される", func(t *testing.T) {
-		status, _ := ts.req(t, "POST", "/api/v1/organizations/"+org1ID+"/users", map[string]interface{}{
+	t.Run("ユーザーの所属組織一覧を取得できる（同一メールの全組織）", func(t *testing.T) {
+		status, resp := ts.req(t, "GET", "/api/v1/users/"+userInOrg1ID+"/organizations", nil)
+		assertStatus(t, status, http.StatusOK, "get user orgs")
+		orgs := mustGetArray(t, resp, "data")
+		// 初期組織 + 所属会社1 + 所属会社2（同一メールで複数ユーザー行）
+		if len(orgs) != 3 {
+			t.Fatalf("expected 3 orgs for same email across orgs, got %d", len(orgs))
+		}
+		seen := map[string]bool{}
+		for _, o := range orgs {
+			id := o.(map[string]interface{})["id"].(string)
+			seen[id] = true
+		}
+		if !seen[org1ID] || !seen[org2ID] {
+			t.Fatalf("expected org1 and org2 in list, seen=%v", seen)
+		}
+	})
+
+	t.Run("重複追加は冪等に処理される", func(t *testing.T) {
+		status, resp := ts.req(t, "POST", "/api/v1/organizations/"+org1ID+"/users", map[string]interface{}{
 			"user_id": userID,
 		})
 		assertStatus(t, status, http.StatusCreated, "add user to org1 again")
-		// 所属数は変わらない
-		_, resp := ts.req(t, "GET", "/api/v1/users/"+userID+"/organizations", nil)
-		orgs := mustGetArray(t, resp, "data")
-		if len(orgs) != 2 {
-			t.Errorf("expected 2 orgs (no duplicate), got %d", len(orgs))
+		firstID := mustGetString(t, resp, "data", "id")
+		// 同じユーザーを再度追加すると既存ユーザーを返す（冪等）
+		status2, resp2 := ts.req(t, "POST", "/api/v1/organizations/"+org1ID+"/users", map[string]interface{}{
+			"user_id": userID,
+		})
+		assertStatus(t, status2, http.StatusCreated, "add same user to org1 again")
+		returnedID := mustGetString(t, resp2, "data", "id")
+		if returnedID != firstID {
+			t.Errorf("expected same user id (idempotent), got %s vs %s", returnedID, firstID)
 		}
 	})
 }
@@ -136,8 +156,8 @@ func TestSuperAdmin_Login(t *testing.T) {
 	})
 
 	// スーパーアドミンを直接DBに挿入
-	ts.db.Exec("INSERT INTO super_admins (id, name, email, created_at) VALUES (?, ?, ?, datetime('now'))",
-		"00000000-0000-0000-0000-000000000099", "SA管理者", "sa@example.com")
+	ts.db.Exec("INSERT INTO super_admins (id, key, name, email, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+		"00000000-0000-0000-0000-000000000099", "sa@example.com", "SA管理者", "sa@example.com")
 
 	t.Run("登録済みメールでログインできる", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/super-admin/login", map[string]interface{}{
@@ -219,16 +239,17 @@ func TestAdminUsers_OrgScoped(t *testing.T) {
 	})
 
 	t.Run("管理者が組織からユーザーを除外できる", func(t *testing.T) {
-		newUserID := createTestUser(t, ts, "除外対象", "remove@example.com")
-		ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/users", map[string]interface{}{
-			"user_id": newUserID,
+		// CreateForOrg で組織にユーザーを作成
+		_, createResp := ts.req(t, "POST", "/api/v1/admin/users", map[string]interface{}{
+			"org_id": testOrgID,
+			"name":   "除外対象",
+			"email":  "remove@example.com",
 		})
-		status, _ := ts.req(t, "DELETE", "/api/v1/admin/users/"+newUserID+"?org_id="+testOrgID, nil)
+		userToRemoveID := mustGetString(t, createResp, "data", "id")
+		status, _ := ts.req(t, "DELETE", "/api/v1/admin/users/"+userToRemoveID+"?org_id="+testOrgID, nil)
 		assertStatus(t, status, http.StatusNoContent, "remove from org")
-		_, orgResp := ts.req(t, "GET", "/api/v1/users/"+newUserID+"/organizations", nil)
-		orgs := mustGetArray(t, orgResp, "data")
-		if len(orgs) != 0 {
-			t.Errorf("expected 0 orgs after remove, got %d", len(orgs))
-		}
+		// ユーザー削除後は取得で404
+		status2, _ := ts.req(t, "GET", "/api/v1/users/"+userToRemoveID, nil)
+		assertStatus(t, status2, http.StatusNotFound, "get deleted user")
 	})
 }

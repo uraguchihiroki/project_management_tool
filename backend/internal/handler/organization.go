@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
 )
 
@@ -18,6 +19,17 @@ func NewOrganizationHandler(orgService service.OrganizationService) *Organizatio
 
 // GET /api/v1/organizations
 func (h *OrganizationHandler) List(c echo.Context) error {
+	orgID, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
+	if !isSuperAdmin && orgID != nil {
+		org, err := h.orgService.Get(*orgID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusNotFound, "organization not found")
+		}
+		return c.JSON(http.StatusOK, map[string]interface{}{"data": []interface{}{org}})
+	}
 	orgs, err := h.orgService.List()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -27,6 +39,13 @@ func (h *OrganizationHandler) List(c echo.Context) error {
 
 // POST /api/v1/organizations
 func (h *OrganizationHandler) Create(c echo.Context) error {
+	_, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
+	if !isSuperAdmin {
+		return echo.NewHTTPError(http.StatusForbidden, "only super admin can create organizations")
+	}
 	type Request struct {
 		Name string `json:"name"`
 	}
@@ -46,9 +65,24 @@ func (h *OrganizationHandler) Create(c echo.Context) error {
 
 // GET /api/v1/users/:id/organizations
 func (h *OrganizationHandler) ListByUser(c echo.Context) error {
+	_, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
+	claims, ok := authmw.GetClaims(c)
+	if !ok || claims == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+	}
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
+	}
+	claimsUserID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+	}
+	if !isSuperAdmin && userID != claimsUserID {
+		return echo.NewHTTPError(http.StatusForbidden, "forbidden")
 	}
 	orgs, err := h.orgService.GetUserOrganizations(userID)
 	if err != nil {
@@ -59,9 +93,9 @@ func (h *OrganizationHandler) ListByUser(c echo.Context) error {
 
 // POST /api/v1/organizations/:orgId/users
 func (h *OrganizationHandler) AddUser(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	type Request struct {
 		UserID     string `json:"user_id"`
@@ -75,8 +109,9 @@ func (h *OrganizationHandler) AddUser(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user_id")
 	}
-	if err := h.orgService.AddUser(orgID, userID, req.IsOrgAdmin); err != nil {
+	user, err := h.orgService.AddUser(orgID, userID, req.IsOrgAdmin)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-	return c.JSON(http.StatusCreated, map[string]interface{}{"message": "user added to organization"})
+	return c.JSON(http.StatusCreated, map[string]interface{}{"data": user, "message": "user added to organization"})
 }

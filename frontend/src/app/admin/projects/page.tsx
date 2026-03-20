@@ -6,14 +6,16 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Plus, FolderKanban, ChevronRight } from 'lucide-react'
 import type { Project } from '@/types'
-import { SortableList, DragHandle } from '@/components/SortableList'
+import { SortableDndProvider, SortableList, DragHandle } from '@/components/SortableList'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 import { useRequireAdmin, useAuth } from '@/context/AuthContext'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 export default function AdminProjectsPage() {
   const currentUser = useRequireAdmin()
   const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
@@ -27,6 +29,7 @@ export default function AdminProjectsPage() {
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects', currentOrg?.id],
     queryFn: () => getProjects(currentOrg?.id),
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const createMutation = useMutation({
@@ -103,39 +106,46 @@ export default function AdminProjectsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <SortableList
+          <SortableDndProvider
             items={projects}
             itemId={(p) => p.id}
             onReorder={(ids) => reorderMutation.mutate(ids)}
             disabled={reorderPending}
-            renderItem={(project, { handleProps, setNodeRef, style }) => (
-              <div ref={setNodeRef} style={style}>
-                <Link
-                  href={`/admin/projects/${project.id}`}
-                  className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:shadow-md transition-all group flex items-center justify-between block"
-                >
-                <div className="flex items-start gap-2 flex-1 min-w-0">
-                  <DragHandle handleProps={handleProps} className="flex-shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                      {project.key}
-                    </span>
-                    <h3 className="mt-2 text-base font-semibold text-gray-900 group-hover:text-blue-600">
-                      {project.name}
-                    </h3>
-                    {project.description && (
-                      <p className="mt-1 text-sm text-gray-500 line-clamp-1">{project.description}</p>
-                    )}
-                    <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
-                      <span>オーナー: {project.owner?.name}</span>
+          >
+            <SortableList
+              items={projects}
+              itemId={(p) => p.id}
+              onReorder={(ids) => reorderMutation.mutate(ids)}
+              disabled={reorderPending}
+              renderItem={(project, { handleProps, setNodeRef, style }) => (
+                <div ref={setNodeRef} style={style}>
+                  <Link
+                    href={`/admin/projects/${project.id}`}
+                    className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:shadow-md transition-all group flex items-center justify-between block"
+                  >
+                    <div className="flex items-start gap-2 flex-1 min-w-0">
+                      <DragHandle handleProps={handleProps} className="flex-shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                          {project.key}
+                        </span>
+                        <h3 className="mt-2 text-base font-semibold text-gray-900 group-hover:text-blue-600">
+                          {project.name}
+                        </h3>
+                        {project.description && (
+                          <p className="mt-1 text-sm text-gray-500 line-clamp-1">{project.description}</p>
+                        )}
+                        <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+                          <span>オーナー: {project.owner?.name}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 flex-shrink-0 ml-4" />
+                  </Link>
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 flex-shrink-0 ml-4" />
-                </Link>
-              </div>
-            )}
-          />
+              )}
+            />
+          </SortableDndProvider>
         </div>
       )}
 

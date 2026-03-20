@@ -54,6 +54,33 @@
 
 ---
 
+## 組織seed（CLI）
+
+既存組織にステータス・役職・部署・サンプルプロジェクト等を投入する:
+
+```bash
+# 全組織に投入
+./scripts/seed-org.sh --all
+
+# 指定組織に投入
+./scripts/seed-org.sh <org-id> [owner-id]
+```
+
+または:
+
+```bash
+cd backend
+go run ./cmd/cli org seed --all
+go run ./cmd/cli org seed --org-id=<uuid> [--owner-id=<uuid>]
+```
+
+- **--all**: 全組織にseed投入。各組織の管理者をオーナーとしてサンプルプロジェクトを作成
+- **org-id**: 組織のUUID
+- **owner-id**: 省略時は組織の管理者を使用。管理者がいない組織はサンプルプロジェクト・Issueは作成しない
+- **冪等**: 既存レコードは更新、なければ作成。何度でも実行可能
+
+---
+
 ## ドキュメント更新のタイミング
 
 | 変更内容 | 更新するドキュメント |

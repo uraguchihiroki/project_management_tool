@@ -48,20 +48,18 @@ func setupApprovalFixture(t *testing.T, ts *testServer) (projectID, statusID, ow
 	})
 
 	wfID = createTestWorkflow(t, ts, "テスト承認フロー")
-	// Step 1: 課長が承認 → 進行中へ
+	// Step 1: 課長が承認（初回追加で sts_start + user + sts_goal が自動作成）
 	ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"status_id":     statusIDs[0],
-		"next_status_id": statusIDs[1],
-		"threshold":     10,
+		"status_id": statusIDs[0],
+		"threshold": 10,
 		"approval_objects": []map[string]interface{}{
 			{"type": "role", "role_id": kachoID, "role_operator": "gte", "points": 10},
 		},
 	})
-	// Step 2: 部長が承認 → 完了へ
+	// Step 2: 部長が承認
 	ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"status_id":     statusIDs[1],
-		"next_status_id": statusIDs[2],
-		"threshold":     10,
+		"status_id": statusIDs[1],
+		"threshold": 10,
 		"approval_objects": []map[string]interface{}{
 			{"type": "role", "role_id": buchoID, "role_operator": "gte", "points": 10},
 		},

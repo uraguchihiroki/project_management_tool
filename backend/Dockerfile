@@ -6,7 +6,7 @@ COPY . .
 RUN go build -o server ./cmd/server
 
 FROM alpine:latest
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates wget
 WORKDIR /root/
 COPY --from=builder /app/server .
 EXPOSE 8080

@@ -1,0 +1,79 @@
+# E2E テスト用: db + backend + frontend を起動し、E2E を実行
+# Usage: docker compose -f docker-compose.e2e.yml up --abort-on-container-exit
+# または: docker compose -f docker-compose.e2e.yml run --rm e2e
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pmt_user
+      POSTGRES_PASSWORD: pmt_password
+      POSTGRES_DB: pmt_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pmt_user -d pmt_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://pmt_user:pmt_password@db:5432/pmt_db?sslmode=disable
+      PORT: 8080
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/api/v1/health || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  seed:
+    image: postgres:16-alpine
+    volumes:
+      - ./backend/seed.sql:/seed.sql
+    environment:
+      PGPASSWORD: pmt_password
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: psql -h db -U pmt_user -d pmt_db -f /seed.sql
+    restart: "no"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      HOSTNAME: "0.0.0.0"
+      NEXT_PUBLIC_API_URL: http://backend:8080/api/v1
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000 || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 90s
+
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.58.2-noble
+    working_dir: /app/frontend
+    volumes:
+      - .:/app
+    environment:
+      PLAYWRIGHT_BASE_URL: http://frontend:3000
+      PLAYWRIGHT_API_URL: http://backend:8080/api/v1
+    depends_on:
+      frontend:
+        condition: service_healthy
+    command: >
+      bash -c "
+        npm ci 2>/dev/null || npm install &&
+        npx playwright test
+      "

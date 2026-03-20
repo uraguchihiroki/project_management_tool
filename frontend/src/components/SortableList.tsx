@@ -25,12 +25,31 @@ export interface SortableItemRenderProps {
   style: React.CSSProperties
 }
 
+export interface SortableDndProviderProps<T> {
+  items: T[]
+  itemId: (item: T) => string
+  onReorder: (ids: string[]) => void | Promise<void>
+  disabled?: boolean
+  children: React.ReactNode
+}
+
 export interface SortableListProps<T> {
   items: T[]
   itemId: (item: T) => string
   onReorder: (ids: string[]) => void | Promise<void>
   renderItem: (item: T, props: SortableItemRenderProps) => React.ReactNode
   disabled?: boolean
+  // Drag-and-drop の DndContext は呼び出し元（SortableDndProvider）で提供する。
+  // ここでは SortableContext / useSortable だけを行う（tbody の DOM 事故を防ぐ）。
+  withDndContext?: boolean
+}
+
+export interface SortableTbodyProps<T> {
+  items: T[]
+  itemId: (item: T) => string
+  renderItem: (item: T, props: SortableItemRenderProps) => React.ReactNode
+  disabled?: boolean
+  tbodyClassName?: string
 }
 
 function SortableItem<T>({
@@ -65,13 +84,13 @@ function SortableItem<T>({
   return <>{renderItem(item, { handleProps, setNodeRef, style })}</>
 }
 
-export function SortableList<T>({
+export function SortableDndProvider<T>({
   items,
   itemId,
   onReorder,
-  renderItem,
   disabled = false,
-}: SortableListProps<T>) {
+  children,
+}: SortableDndProviderProps<T>) {
   const ids = items.map((i) => itemId(i))
 
   const sensors = useSensors(
@@ -86,6 +105,7 @@ export function SortableList<T>({
   )
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (disabled) return
     const { active, over } = event
     if (!over || active.id === over.id) return
 
@@ -99,18 +119,56 @@ export function SortableList<T>({
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={ids} strategy={verticalListSortingStrategy} disabled={disabled}>
-        {items.map((item) => (
-          <SortableItem
-            key={itemId(item)}
-            item={item}
-            itemId={itemId}
-            renderItem={renderItem}
-            disabled={disabled}
-          />
-        ))}
-      </SortableContext>
+      {children}
     </DndContext>
+  )
+}
+
+export function SortableList<T>({
+  items,
+  itemId,
+  onReorder,
+  renderItem,
+  disabled = false,
+}: SortableListProps<T>) {
+  const ids = items.map((i) => itemId(i))
+
+  const sortable = (
+    <SortableContext items={ids} strategy={verticalListSortingStrategy} disabled={disabled}>
+      {items.map((item) => (
+        <SortableItem
+          key={itemId(item)}
+          item={item}
+          itemId={itemId}
+          renderItem={renderItem}
+          disabled={disabled}
+        />
+      ))}
+    </SortableContext>
+  )
+  // onReorder は SortableDndProvider 側で利用されるため、ここでは使わない。
+  void onReorder
+  return sortable
+}
+
+// テーブル（tbody）用途: <tbody> の直下に不正要素が入らないよう、tbody自体を返す。
+export function SortableTbody<T>({
+  items,
+  itemId,
+  renderItem,
+  disabled = false,
+  tbodyClassName,
+}: SortableTbodyProps<T>) {
+  const ids = items.map((i) => itemId(i))
+
+  return (
+    <SortableContext items={ids} strategy={verticalListSortingStrategy} disabled={disabled}>
+      <tbody data-sortable-tbody="true" className={tbodyClassName}>
+        {items.map((item) => (
+          <SortableItem key={itemId(item)} item={item} itemId={itemId} renderItem={renderItem} disabled={disabled} />
+        ))}
+      </tbody>
+    </SortableContext>
   )
 }
 

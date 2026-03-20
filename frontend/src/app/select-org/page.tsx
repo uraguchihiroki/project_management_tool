@@ -19,18 +19,18 @@ export default function SelectOrgPage() {
       return
     }
     getUserOrganizations(currentUser.id)
-      .then((data) => {
+      .then(async (data) => {
         setOrgs(data)
         if (data.length === 1) {
-          selectOrg(data[0])
+          await selectOrg(data[0])
           router.push('/projects')
         }
       })
       .finally(() => setLoading(false))
   }, [currentUser, router, selectOrg])
 
-  const handleSelect = (org: Organization) => {
-    selectOrg(org)
+  const handleSelect = async (org: Organization) => {
+    await selectOrg(org)
     router.push('/projects')
   }
 

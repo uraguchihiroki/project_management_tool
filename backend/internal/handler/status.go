@@ -18,9 +18,9 @@ func NewStatusHandler(statusService service.StatusService) *StatusHandler {
 
 // POST /api/v1/organizations/:orgId/statuses
 func (h *StatusHandler) Create(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	type Request struct {
 		Name        string `json:"name"`
@@ -44,9 +44,22 @@ func (h *StatusHandler) Create(c echo.Context) error {
 
 // PUT /api/v1/statuses/:id
 func (h *StatusHandler) Update(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid status id")
+	}
+	current, err := h.statusService.Get(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "status not found")
+	}
+	if !isSuperAdmin {
+		if current.OrganizationID == nil || orgScope == nil || *current.OrganizationID != *orgScope {
+			return echo.NewHTTPError(http.StatusNotFound, "status not found")
+		}
 	}
 	type Request struct {
 		Name  string `json:"name"`
@@ -66,9 +79,22 @@ func (h *StatusHandler) Update(c echo.Context) error {
 
 // DELETE /api/v1/statuses/:id
 func (h *StatusHandler) Delete(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid status id")
+	}
+	current, err := h.statusService.Get(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "status not found")
+	}
+	if !isSuperAdmin {
+		if current.OrganizationID == nil || orgScope == nil || *current.OrganizationID != *orgScope {
+			return echo.NewHTTPError(http.StatusNotFound, "status not found")
+		}
 	}
 	if err := h.statusService.Delete(id); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())

@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"gorm.io/gorm"
@@ -8,6 +10,7 @@ import (
 
 type DepartmentRepository interface {
 	FindByOrganizationID(orgID uuid.UUID) ([]model.Department, error)
+	FindByOrgAndName(orgID uuid.UUID, name string) (*model.Department, error)
 	FindByID(id uuid.UUID) (*model.Department, error)
 	Create(d *model.Department) error
 	Update(d *model.Department) error
@@ -32,6 +35,15 @@ func (r *departmentRepository) FindByOrganizationID(orgID uuid.UUID) ([]model.De
 	var depts []model.Department
 	err := r.db.Where("organization_id = ?", orgID).Order("\"order\" ASC, name ASC").Find(&depts).Error
 	return depts, err
+}
+
+func (r *departmentRepository) FindByOrgAndName(orgID uuid.UUID, name string) (*model.Department, error) {
+	var d model.Department
+	err := r.db.Where("organization_id = ? AND name = ?", orgID, name).First(&d).Error
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
 }
 
 func (r *departmentRepository) FindByID(id uuid.UUID) (*model.Department, error) {
@@ -82,10 +94,12 @@ func (r *departmentRepository) Delete(id uuid.UUID) error {
 }
 
 func (r *departmentRepository) AddUserToDepartment(orgID, userID, departmentID uuid.UUID) error {
+	key := fmt.Sprintf("%s-%s-%s", orgID.String(), userID.String(), departmentID.String())
 	oud := &model.OrganizationUserDepartment{
 		OrganizationID: orgID,
 		UserID:         userID,
 		DepartmentID:   departmentID,
+		Key:            key,
 	}
 	return r.db.Where("organization_id = ? AND user_id = ? AND department_id = ?", orgID, userID, departmentID).
 		FirstOrCreate(oud).Error

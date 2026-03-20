@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
+	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
@@ -71,10 +72,7 @@ func (s *issueService) Create(projectID uuid.UUID, input CreateIssueInput) (*mod
 	if err != nil {
 		return nil, err
 	}
-	if project.OrganizationID == nil {
-		return nil, fmt.Errorf("project must have organization_id to create issues")
-	}
-	orgID := *project.OrganizationID
+	orgID := project.OrganizationID
 	// 採番
 	nextNum, err := s.issueRepo.NextNumber(projectID)
 	if err != nil {
@@ -87,8 +85,11 @@ func (s *issueService) Create(projectID uuid.UUID, input CreateIssueInput) (*mod
 		priority = "medium"
 	}
 
+	issueID := uuid.New()
+	key := fmt.Sprintf("%s-%d", project.Key, nextNum)
 	issue := &model.Issue{
-		ID:             uuid.New(),
+		ID:             issueID,
+		Key:            key,
 		Number:         nextNum,
 		Title:          input.Title,
 		Description:    input.Description,
@@ -121,8 +122,10 @@ func (s *issueService) CreateForOrg(orgID uuid.UUID, input CreateIssueInput) (*m
 		priority = "medium"
 	}
 
+	issueID := uuid.New()
 	issue := &model.Issue{
-		ID:             uuid.New(),
+		ID:             issueID,
+		Key:            keygen.UUIDKey(issueID),
 		Number:         nextNum,
 		Title:          input.Title,
 		Description:    input.Description,

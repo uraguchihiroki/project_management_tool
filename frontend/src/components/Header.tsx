@@ -39,8 +39,8 @@ export default function Header({ backHref, title, actions }: HeaderProps) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const handleOrgSelect = (org: Organization) => {
-    selectOrg(org)
+  const handleOrgSelect = async (org: Organization) => {
+    await selectOrg(org)
     setDropdownOpen(false)
     window.location.reload()
   }

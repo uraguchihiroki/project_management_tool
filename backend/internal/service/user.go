@@ -1,18 +1,25 @@
 package service
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"gorm.io/gorm"
 )
+
+var ErrDuplicateEmailInOrg = errors.New("email already exists in organization")
 
 type UserService interface {
 	List() ([]model.User, error)
 	ListWithRoles() ([]model.User, error)
 	ListByOrg(orgID uuid.UUID) ([]model.User, error)
 	Get(id uuid.UUID) (*model.User, error)
+	FindByEmail(email string) (*model.User, error)
+	FindByEmailAndOrg(orgID uuid.UUID, email string) (*model.User, error)
 	Create(name, email string) (*model.User, error)
 	CreateForOrg(orgID uuid.UUID, name, email string) (*model.User, error)
 	Update(id uuid.UUID, name string) error
@@ -45,18 +52,42 @@ func (s *userService) Get(id uuid.UUID) (*model.User, error) {
 	return s.userRepo.FindByID(id)
 }
 
+func (s *userService) FindByEmail(email string) (*model.User, error) {
+	return s.userRepo.FindByEmail(email)
+}
+
+func (s *userService) FindByEmailAndOrg(orgID uuid.UUID, email string) (*model.User, error) {
+	return s.userRepo.FindByEmailAndOrg(orgID, email)
+}
+
 func (s *userService) Create(name, email string) (*model.User, error) {
+	// デフォルト組織（最初の組織）にユーザーを作成
+	orgs, err := s.orgRepo.FindAll()
+	if err != nil {
+		return nil, err
+	}
+	if len(orgs) == 0 {
+		return nil, errors.New("組織が存在しません。backend/seed.sql を投入するか、スーパー管理者で組織を作成してください")
+	}
+	orgID := orgs[0].ID
+	if orgID == uuid.Nil {
+		return nil, fmt.Errorf("invalid organization id on first organization row")
+	}
 	// 最初のユーザーを自動的に管理者にする
 	count, err := s.userRepo.Count()
 	if err != nil {
 		return nil, err
 	}
+	userID := uuid.New()
 	user := &model.User{
-		ID:        uuid.New(),
-		Name:      name,
-		Email:     email,
-		IsAdmin:   count == 0,
-		CreatedAt: time.Now(),
+		ID:             userID,
+		Key:            email,
+		OrganizationID: orgID,
+		Name:           name,
+		Email:          email,
+		IsAdmin:        count == 0,
+		JoinedAt:       time.Now(),
+		CreatedAt:      time.Now(),
 	}
 	if err := s.userRepo.Create(user); err != nil {
 		return nil, err
@@ -65,23 +96,21 @@ func (s *userService) Create(name, email string) (*model.User, error) {
 }
 
 func (s *userService) CreateForOrg(orgID uuid.UUID, name, email string) (*model.User, error) {
-	user, err := s.userRepo.FindByEmail(email)
-	if err != nil {
-		user = &model.User{
-			ID:        uuid.New(),
-			Name:      name,
-			Email:     email,
-			CreatedAt: time.Now(),
-		}
-		if err := s.userRepo.Create(user); err != nil {
-			return nil, err
-		}
+	// 組織内で同一メールが既にいればエラー（1ユーザー＝1組織、組織内でemailユニーク）
+	if existing, err := s.userRepo.FindByEmailAndOrg(orgID, email); err == nil && existing != nil {
+		return nil, ErrDuplicateEmailInOrg
 	}
-	if err := s.orgRepo.AddUser(&model.OrganizationUser{
+	newUserID := uuid.New()
+	user := &model.User{
+		ID:             newUserID,
+		Key:            email,
 		OrganizationID: orgID,
-		UserID:         user.ID,
-		IsOrgAdmin:     false,
-	}); err != nil {
+		Name:           name,
+		Email:          email,
+		JoinedAt:       time.Now(),
+		CreatedAt:      time.Now(),
+	}
+	if err := s.userRepo.Create(user); err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -101,5 +130,12 @@ func (s *userService) SetAdmin(id uuid.UUID, isAdmin bool) error {
 }
 
 func (s *userService) RemoveFromOrg(orgID, userID uuid.UUID) error {
-	return s.orgRepo.RemoveUser(orgID, userID)
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return err
+	}
+	if user.OrganizationID != orgID {
+		return gorm.ErrRecordNotFound
+	}
+	return s.userRepo.Delete(userID)
 }

@@ -13,7 +13,7 @@ type CreateProjectInput struct {
 	Name           string
 	Description    *string
 	OwnerID        uuid.UUID
-	OrganizationID *uuid.UUID
+	OrganizationID uuid.UUID
 	StartDate      *time.Time
 	EndDate        *time.Time
 }
@@ -32,7 +32,7 @@ type ProjectService interface {
 	Update(id uuid.UUID, input UpdateProjectInput) (*model.Project, error)
 	Delete(id uuid.UUID) error
 	Reorder(orgID *uuid.UUID, ids []uuid.UUID) error
-	ListStatusesByOrg(orgID uuid.UUID, statusType string) ([]model.Status, error)
+	ListStatusesByOrg(orgID uuid.UUID, statusType string, excludeSystem bool) ([]model.Status, error)
 }
 
 type projectService struct {
@@ -56,7 +56,8 @@ func (s *projectService) Get(id uuid.UUID) (*model.Project, error) {
 }
 
 func (s *projectService) Create(input CreateProjectInput) (*model.Project, error) {
-	maxOrder, err := s.projectRepo.GetMaxOrder(input.OrganizationID)
+	orgID := &input.OrganizationID
+	maxOrder, err := s.projectRepo.GetMaxOrder(orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +89,10 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 		{"完了", "#10B981", 4},
 	}
 	for _, ds := range defaultStatuses {
+		statusID := uuid.New()
 		status := &model.Status{
-			ID:        uuid.New(),
+			ID:        statusID,
+			Key:       "sts-" + statusID.String(),
 			ProjectID: &project.ID,
 			Name:      ds.Name,
 			Color:     ds.Color,
@@ -136,6 +139,9 @@ func (s *projectService) Reorder(orgID *uuid.UUID, ids []uuid.UUID) error {
 	return s.projectRepo.Reorder(orgID, ids)
 }
 
-func (s *projectService) ListStatusesByOrg(orgID uuid.UUID, statusType string) ([]model.Status, error) {
+func (s *projectService) ListStatusesByOrg(orgID uuid.UUID, statusType string, excludeSystem bool) ([]model.Status, error) {
+	if excludeSystem {
+		return s.statusRepo.FindByOrganizationIDAndTypeExcludeSystem(orgID, statusType)
+	}
 	return s.statusRepo.FindByOrganizationIDAndType(orgID, statusType)
 }

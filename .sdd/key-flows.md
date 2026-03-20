@@ -2,10 +2,16 @@
 
 ## 認証フロー
 
+### 認証・認可ポリシー（全体）
+
+- 認証は JWT を使用する。
+- JWT はフロントエンドでメモリ（State/Context）を主軸に保持し、リロード耐性とログアウト対策として `sessionStorage` を併用する（マルチセッション維持）。
+- バックエンドは JWT の `organization_id` を用いて、スーパーアドミン以外のレスポンスを所属組織スコープに制限する。
+
 ### 一般ユーザー / 組織管理者
 
 - **ログイン URL**: `/login`
-- **方式**: メールアドレスのみ（パスワードなし）
+- **方式**: メールアドレスのみ（パスワードなし）+ JWT
 - **流れ**:
   1. メールアドレスを入力してログイン
   2. 既存ユーザーならそのまま、未登録なら `POST /users` でユーザー作成後にログイン
@@ -16,7 +22,7 @@
 ### スーパー管理者
 
 - **ログイン URL**: `/super-admin/login`
-- **方式**: メールアドレスのみ（`POST /super-admin/login`）
+- **方式**: メールアドレスのみ（`POST /super-admin/login`）+ JWT
 - **流れ**:
   1. メールアドレスを入力
   2. `super_admins` テーブルに存在すればログイン成功
@@ -58,14 +64,14 @@ flowchart TD
 ### 組織の作成
 
 1. スーパー管理者が `POST /super-admin/organizations` で組織を作成
-2. 組織作成時に、指定メールアドレスのユーザーが組織管理者として `organization_users` に追加される（seed.sql のロジック、またはサービス側で実装）
+2. 組織作成時に、指定メールアドレスのユーザーが組織管理者として作成される（users.organization_id, is_org_admin）
 
 ### 組織管理者によるユーザー管理
 
 - `GET /admin/users?org_id=xxx` で組織内ユーザー一覧
-- `POST /admin/users` で組織にユーザーを追加（既存ユーザーを紐付け、または新規作成）
+- `POST /admin/users` で組織にユーザーを作成（1ユーザー＝1組織）
 - `PUT /admin/users/:id` でユーザー更新
-- `DELETE /admin/users/:id` で組織からユーザーを削除
+- `DELETE /admin/users/:id` でユーザーを削除（1ユーザー＝1組織のため、org_id で確認後に削除）
 
 ---
 

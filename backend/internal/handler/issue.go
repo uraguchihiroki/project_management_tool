@@ -13,14 +13,25 @@ import (
 type IssueHandler struct {
 	issueService    service.IssueService
 	approvalService service.ApprovalService
+	projectService  service.ProjectService
 }
 
-func NewIssueHandler(issueService service.IssueService, approvalService service.ApprovalService) *IssueHandler {
-	return &IssueHandler{issueService: issueService, approvalService: approvalService}
+func NewIssueHandler(issueService service.IssueService, approvalService service.ApprovalService, projectService service.ProjectService) *IssueHandler {
+	return &IssueHandler{issueService: issueService, approvalService: approvalService, projectService: projectService}
 }
 
 func (h *IssueHandler) List(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	projectID, err := uuid.Parse(c.Param("projectId"))
+	if !isSuperAdmin {
+		project, err := h.projectService.Get(projectID)
+		if err != nil || orgScope == nil || project.OrganizationID != *orgScope {
+			return echo.NewHTTPError(http.StatusNotFound, "project not found")
+		}
+	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
 	}
@@ -32,6 +43,10 @@ func (h *IssueHandler) List(c echo.Context) error {
 }
 
 func (h *IssueHandler) Get(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	projectID, err := uuid.Parse(c.Param("projectId"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
@@ -44,11 +59,24 @@ func (h *IssueHandler) Get(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
 	}
+	if !isSuperAdmin && (orgScope == nil || issue.OrganizationID != *orgScope) {
+		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
+	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": issue})
 }
 
 func (h *IssueHandler) Create(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	projectID, err := uuid.Parse(c.Param("projectId"))
+	if !isSuperAdmin {
+		project, err := h.projectService.Get(projectID)
+		if err != nil || orgScope == nil || project.OrganizationID != *orgScope {
+			return echo.NewHTTPError(http.StatusNotFound, "project not found")
+		}
+	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
 	}
@@ -103,9 +131,19 @@ func (h *IssueHandler) Create(c echo.Context) error {
 }
 
 func (h *IssueHandler) Update(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	projectID, err := uuid.Parse(c.Param("projectId"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
+	}
+	if !isSuperAdmin {
+		project, err := h.projectService.Get(projectID)
+		if err != nil || orgScope == nil || project.OrganizationID != *orgScope {
+			return echo.NewHTTPError(http.StatusNotFound, "project not found")
+		}
 	}
 	number, err := strconv.Atoi(c.Param("number"))
 	if err != nil {
@@ -147,9 +185,19 @@ func (h *IssueHandler) Update(c echo.Context) error {
 }
 
 func (h *IssueHandler) Delete(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
 	projectID, err := uuid.Parse(c.Param("projectId"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
+	}
+	if !isSuperAdmin {
+		project, err := h.projectService.Get(projectID)
+		if err != nil || orgScope == nil || project.OrganizationID != *orgScope {
+			return echo.NewHTTPError(http.StatusNotFound, "project not found")
+		}
 	}
 	number, err := strconv.Atoi(c.Param("number"))
 	if err != nil {
@@ -163,9 +211,9 @@ func (h *IssueHandler) Delete(c echo.Context) error {
 
 // GET /api/v1/organizations/:orgId/issues
 func (h *IssueHandler) ListByOrg(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	issues, err := h.issueService.ListByOrg(orgID)
 	if err != nil {
@@ -176,9 +224,9 @@ func (h *IssueHandler) ListByOrg(c echo.Context) error {
 
 // POST /api/v1/organizations/:orgId/issues
 func (h *IssueHandler) CreateForOrg(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	type Request struct {
 		Title       string  `json:"title" validate:"required"`
@@ -231,9 +279,9 @@ func (h *IssueHandler) CreateForOrg(c echo.Context) error {
 
 // GET /api/v1/organizations/:orgId/issues/:number
 func (h *IssueHandler) GetByOrgAndNumber(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	number, err := strconv.Atoi(c.Param("number"))
 	if err != nil {
@@ -248,9 +296,9 @@ func (h *IssueHandler) GetByOrgAndNumber(c echo.Context) error {
 
 // PUT /api/v1/organizations/:orgId/issues/:number
 func (h *IssueHandler) UpdateByOrgAndNumber(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	number, err := strconv.Atoi(c.Param("number"))
 	if err != nil {
@@ -293,9 +341,9 @@ func (h *IssueHandler) UpdateByOrgAndNumber(c echo.Context) error {
 
 // DELETE /api/v1/organizations/:orgId/issues/:number
 func (h *IssueHandler) DeleteByOrgAndNumber(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	number, err := strconv.Atoi(c.Param("number"))
 	if err != nil {

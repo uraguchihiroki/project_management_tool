@@ -4,6 +4,12 @@
 
 ---
 
+## 最重要事項
+
+→ [AGENTS.md](../AGENTS.md#最重要事項人ai-ともに必ず認識すること) を参照（正本）
+
+---
+
 ## ドキュメント一覧
 
 | ドキュメント | 内容 |
@@ -16,6 +22,7 @@
 | [db-schema.md](db-schema.md) | データベース設計・テーブル定義 |
 | [api-spec.md](api-spec.md) | REST API 仕様・エンドポイント一覧 |
 | [key-flows.md](key-flows.md) | 認証・マルチテナント・承認の主要フロー |
+| [visual-flow/](visual-flow/) | 画面設計・遷移（Visual Flow 方式） |
 | [testing.md](testing.md) | テスト方針・実行方法・カバー範囲 |
 | [dev-guide.md](dev-guide.md) | 新機能追加の手順・規約・ドキュメント更新のタイミング |
 
@@ -30,7 +37,8 @@
 5. **データ構造を確認する** → [db-schema.md](db-schema.md)
 6. **API の仕様を確認する** → [api-spec.md](api-spec.md)
 7. **業務フローを理解する** → [key-flows.md](key-flows.md)
-8. **開発・変更を行う** → [dev-guide.md](dev-guide.md)、[testing.md](testing.md)
+8. **画面設計・遷移を確認する** → [visual-flow/transition-flow.md](visual-flow/transition-flow.md)、[visual-flow/conventions.md](visual-flow/conventions.md)
+9. **開発・変更を行う** → [dev-guide.md](dev-guide.md)、[testing.md](testing.md)
 
 ---
 
@@ -41,3 +49,4 @@
 - **テーブル・モデルを変更したとき** → [db-schema.md](db-schema.md) を更新
 - **アーキテクチャ・構成が変わったとき** → [architecture.md](architecture.md) を更新
 - **新規フローが追加されたとき** → [key-flows.md](key-flows.md) を更新
+- **画面追加・変更時** → [visual-flow/](visual-flow/) を更新（[transition-flow.md](visual-flow/transition-flow.md)、該当 v_xxx.md）

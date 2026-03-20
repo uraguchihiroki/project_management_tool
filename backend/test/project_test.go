@@ -73,9 +73,10 @@ func TestProject_Create(t *testing.T) {
 
 	t.Run("正常系: プロジェクト作成", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/projects", map[string]string{
-			"key":      "PROJ",
-			"name":     "テストプロジェクト",
-			"owner_id": ownerID,
+			"key":             "PROJ",
+			"name":            "テストプロジェクト",
+			"owner_id":        ownerID,
+			"organization_id": testOrgID,
 		})
 		assertStatus(t, status, http.StatusCreated, "POST /projects")
 		assertNotEmpty(t, mustGetString(t, resp, "data", "id"), "id")
@@ -85,7 +86,7 @@ func TestProject_Create(t *testing.T) {
 
 	t.Run("正常系: 作成時にデフォルトステータスが自動生成される", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/projects", map[string]string{
-			"key": "AUTO", "name": "ステータス確認", "owner_id": ownerID,
+			"key": "AUTO", "name": "ステータス確認", "owner_id": ownerID, "organization_id": testOrgID,
 		})
 		assertStatus(t, status, http.StatusCreated, "POST /projects (statuses)")
 		data := resp["data"].(map[string]interface{})
@@ -97,10 +98,10 @@ func TestProject_Create(t *testing.T) {
 
 	t.Run("異常系: 同じキーのプロジェクトは重複不可", func(t *testing.T) {
 		ts.req(t, "POST", "/api/v1/projects", map[string]string{
-			"key": "DUP", "name": "最初", "owner_id": ownerID,
+			"key": "DUP", "name": "最初", "owner_id": ownerID, "organization_id": testOrgID,
 		})
 		status, _ := ts.req(t, "POST", "/api/v1/projects", map[string]string{
-			"key": "DUP", "name": "重複", "owner_id": ownerID,
+			"key": "DUP", "name": "重複", "owner_id": ownerID, "organization_id": testOrgID,
 		})
 		if status == http.StatusCreated {
 			t.Error("重複キーのプロジェクトが作成できてしまった")

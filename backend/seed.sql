@@ -14,8 +14,9 @@ ALTER TABLE organizations ADD COLUMN IF NOT EXISTS admin_email VARCHAR(255);
 
 -- 3. Insert "F.R.S." organization with fixed UUID
 --    Name stored as Unicode escape to avoid encoding issues
-INSERT INTO organizations (id, name, admin_email, created_at)
+INSERT INTO organizations (id, key, name, admin_email, created_at)
 VALUES (
+    '00000000-0000-0000-0000-000000000001',
     '00000000-0000-0000-0000-000000000001',
     E'\uff26\uff0e\uff32\uff0e\uff33\uff0e',
     '',
@@ -51,48 +52,43 @@ ALTER TABLE roles
     ADD CONSTRAINT fk_roles_organization
     FOREIGN KEY (organization_id) REFERENCES organizations(id);
 
-ALTER TABLE organization_users
-    DROP CONSTRAINT IF EXISTS fk_org_users_organization;
-ALTER TABLE organization_users
-    ADD CONSTRAINT fk_org_users_organization
-    FOREIGN KEY (organization_id) REFERENCES organizations(id);
-
-ALTER TABLE organization_users
-    DROP CONSTRAINT IF EXISTS fk_org_users_user;
-ALTER TABLE organization_users
-    ADD CONSTRAINT fk_org_users_user
-    FOREIGN KEY (user_id) REFERENCES users(id);
-
--- 9. Add all existing users to F.R.S. organization
-INSERT INTO organization_users (organization_id, user_id, is_org_admin, joined_at)
-SELECT '00000000-0000-0000-0000-000000000001', id, is_admin, NOW()
-FROM users
-ON CONFLICT (organization_id, user_id) DO NOTHING;
+-- 9. users.organization_id 移行（organization_users 廃止対応）
+ALTER TABLE users ADD COLUMN IF NOT EXISTS organization_id UUID;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_org_admin BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_at TIMESTAMP;
+-- organization_users からバックフィル（存在する場合）
+UPDATE users u SET
+  organization_id = ou.organization_id,
+  is_org_admin = ou.is_org_admin,
+  joined_at = ou.joined_at
+FROM organization_users ou
+WHERE ou.user_id = u.id AND u.organization_id IS NULL;
+-- 未設定ユーザーは FRS に
+UPDATE users SET
+  organization_id = '00000000-0000-0000-0000-000000000001',
+  is_org_admin = COALESCE(is_admin, false),
+  joined_at = COALESCE(joined_at, NOW())
+WHERE organization_id IS NULL;
+ALTER TABLE users ALTER COLUMN organization_id SET NOT NULL;
+DROP INDEX IF EXISTS idx_user_org_email;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_org_email ON users(organization_id, email);
 
 -- 10. Set admin_email for FRS from first org admin user
 UPDATE organizations o
 SET admin_email = (
     SELECT u.email FROM users u
-    JOIN organization_users ou ON ou.user_id = u.id
-    WHERE ou.organization_id = o.id AND ou.is_org_admin = true
+    WHERE u.organization_id = o.id AND u.is_org_admin = true
     LIMIT 1
 )
 WHERE o.id = '00000000-0000-0000-0000-000000000001'
   AND (o.admin_email IS NULL OR o.admin_email = '');
 
--- 11. Workflow: project_id → organization_id migration (Phase 3)
---    Add organization_id if column does not exist (GORM AutoMigrate may have added it)
+-- 11. Workflow: organization_id 追加（組織所属）
 ALTER TABLE workflows ADD COLUMN IF NOT EXISTS organization_id UUID;
--- Backfill from project's organization
-UPDATE workflows w
-SET organization_id = p.organization_id
-FROM projects p
-WHERE w.project_id = p.id AND w.organization_id IS NULL;
--- Set to FRS for any orphaned workflows
+-- 未設定は FRS に
 UPDATE workflows SET organization_id = '00000000-0000-0000-0000-000000000001'
 WHERE organization_id IS NULL;
 ALTER TABLE workflows ALTER COLUMN organization_id SET NOT NULL;
--- Drop project_id (ignore if already dropped)
 ALTER TABLE workflows DROP COLUMN IF EXISTS project_id;
 
 -- 12. Issue & Status: Phase 4 migration
@@ -150,8 +146,7 @@ ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS exclude_assignee BOOLEAN DEF
 -- 13c. projects.status カラム削除（ステータステーブル参照に移行したため未使用）
 ALTER TABLE projects DROP COLUMN IF EXISTS status;
 
--- 13d. workflows.organization_id 削除（ワークフローは組織に属さない）
-ALTER TABLE workflows DROP COLUMN IF EXISTS organization_id;
+-- 13d. workflows.organization_id は組織所属のため保持（削除しない）
 
 -- 14. Display order columns for drag-and-drop reordering
 ALTER TABLE roles ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 1;
@@ -209,10 +204,38 @@ UPDATE statuses SET organization_id = NULL WHERE status_key IN ('sts_start','sts
 -- workflow_steps: next_status_id 追加
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS next_status_id UUID REFERENCES statuses(id);
 
--- 14f. 論理削除: 全テーブルに deleted_at 追加
+-- 14f. comments, workflow_steps, approval_objects, issue_templates, issue_approvals に organization_id 追加
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS organization_id UUID;
+UPDATE comments c SET organization_id = i.organization_id FROM issues i WHERE c.issue_id = i.id AND c.organization_id IS NULL;
+UPDATE comments SET organization_id = '00000000-0000-0000-0000-000000000001' WHERE organization_id IS NULL;
+ALTER TABLE comments ALTER COLUMN organization_id SET NOT NULL;
+
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS organization_id UUID;
+UPDATE workflow_steps ws SET organization_id = w.organization_id FROM workflows w WHERE ws.workflow_id = w.id AND ws.organization_id IS NULL;
+UPDATE workflow_steps SET organization_id = '00000000-0000-0000-0000-000000000001' WHERE organization_id IS NULL;
+ALTER TABLE workflow_steps ALTER COLUMN organization_id SET NOT NULL;
+
+ALTER TABLE approval_objects ADD COLUMN IF NOT EXISTS organization_id UUID;
+UPDATE approval_objects ao SET organization_id = ws.organization_id FROM workflow_steps ws WHERE ao.workflow_step_id = ws.id AND ao.organization_id IS NULL;
+UPDATE approval_objects SET organization_id = '00000000-0000-0000-0000-000000000001' WHERE organization_id IS NULL;
+ALTER TABLE approval_objects ALTER COLUMN organization_id SET NOT NULL;
+
+ALTER TABLE issue_templates ADD COLUMN IF NOT EXISTS organization_id UUID;
+UPDATE issue_templates it SET organization_id = p.organization_id FROM projects p WHERE it.project_id = p.id AND it.organization_id IS NULL;
+UPDATE issue_templates SET organization_id = '00000000-0000-0000-0000-000000000001' WHERE organization_id IS NULL;
+ALTER TABLE issue_templates ALTER COLUMN organization_id SET NOT NULL;
+
+ALTER TABLE issue_approvals ADD COLUMN IF NOT EXISTS organization_id UUID;
+UPDATE issue_approvals ia SET organization_id = i.organization_id FROM issues i WHERE ia.issue_id = i.id AND ia.organization_id IS NULL;
+UPDATE issue_approvals SET organization_id = '00000000-0000-0000-0000-000000000001' WHERE organization_id IS NULL;
+ALTER TABLE issue_approvals ALTER COLUMN organization_id SET NOT NULL;
+
+-- 14f2. organization_users 廃止（users に organization_id を移行済み）
+DROP TABLE IF EXISTS organization_users CASCADE;
+
+-- 14f3. 論理削除: 全テーブルに deleted_at 追加
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
-ALTER TABLE organization_users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE departments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE organization_user_departments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
@@ -228,7 +251,6 @@ ALTER TABLE issue_templates ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE issue_approvals ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 CREATE INDEX IF NOT EXISTS idx_organizations_deleted_at ON organizations(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_organization_users_deleted_at ON organization_users(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_departments_deleted_at ON departments(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_organization_user_departments_deleted_at ON organization_user_departments(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_roles_deleted_at ON roles(deleted_at);
@@ -242,16 +264,76 @@ CREATE INDEX IF NOT EXISTS idx_approval_objects_deleted_at ON approval_objects(d
 CREATE INDEX IF NOT EXISTS idx_issue_templates_deleted_at ON issue_templates(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_issue_approvals_deleted_at ON issue_approvals(deleted_at);
 
+-- 14h. 全テーブルに key カラム追加（VARCHAR(255), NOT NULL）
+-- projects は既に key あり（組織内識別キー）のためスキップ
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE organizations SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE organizations ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE super_admins SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE super_admins ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE users SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE users ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE roles ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE roles SET key = 'role-' || id::text WHERE key IS NULL OR key = '';
+ALTER TABLE roles ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE departments SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE departments ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE organization_user_departments ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE organization_user_departments SET key = organization_id::text || '-' || user_id::text || '-' || department_id::text WHERE key IS NULL OR key = '';
+ALTER TABLE organization_user_departments ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE statuses ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE statuses SET key = COALESCE(NULLIF(TRIM(status_key), ''), 'sts-' || id::text) WHERE key IS NULL OR key = '';
+UPDATE statuses SET key = id::text WHERE key IS NULL OR key = '';  -- fallback for any remaining
+ALTER TABLE statuses ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE issues SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE issues ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE comments SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE comments ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE workflows ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE workflows SET key = 'wf-' || id::text WHERE key IS NULL OR key = '';
+ALTER TABLE workflows ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE workflow_steps SET key = 'ws-' || id::text WHERE key IS NULL OR key = '';
+ALTER TABLE workflow_steps ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE approval_objects ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE approval_objects SET key = 'ao-' || id::text WHERE key IS NULL OR key = '';
+ALTER TABLE approval_objects ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE issue_templates ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE issue_templates SET key = 'tmpl-' || id::text WHERE key IS NULL OR key = '';
+ALTER TABLE issue_templates ALTER COLUMN key SET NOT NULL;
+
+ALTER TABLE issue_approvals ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE issue_approvals SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE issue_approvals ALTER COLUMN key SET NOT NULL;
+
+-- user_roles（GORM many2many 中間テーブル）
+ALTER TABLE user_roles ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE user_roles SET key = user_id::text || '-' || role_id::text WHERE key IS NULL OR key = '';
+ALTER TABLE user_roles ALTER COLUMN key SET NOT NULL;
+
 -- 15. Create initial super admin account
 --    Email: superadmin@frs.example.com  (change as needed)
-INSERT INTO super_admins (id, name, email, created_at)
-VALUES (
-    gen_random_uuid(),
-    E'\u30b7\u30b9\u30c6\u30e0\u7ba1\u7406\u8005',
-    'superadmin@frs.example.com',
-    NOW()
-)
-ON CONFLICT (email) DO NOTHING;
+INSERT INTO super_admins (id, key, name, email, created_at)
+SELECT gen_random_uuid(), 'superadmin@frs.example.com', E'\u30b7\u30b9\u30c6\u30e0\u7ba1\u7406\u8005', 'superadmin@frs.example.com', NOW()
+WHERE NOT EXISTS (SELECT 1 FROM super_admins WHERE email = 'superadmin@frs.example.com');
+UPDATE super_admins SET key = COALESCE(NULLIF(key, ''), id::text) WHERE key IS NULL OR key = '';
 
 -- 16. Display order backfill complete
 SELECT 'Seed completed successfully.' AS result;

@@ -51,13 +51,17 @@ func (r *templateRepository) Create(template *model.IssueTemplate) error {
 }
 
 func (r *templateRepository) Update(template *model.IssueTemplate) error {
-	return r.db.Model(&model.IssueTemplate{}).Where("id = ?", template.ID).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"name":             template.Name,
 		"description":      template.Description,
 		"body":             template.Body,
 		"default_priority": template.DefaultPriority,
 		"workflow_id":      template.WorkflowID,
-	}).Error
+	}
+	if template.Key != "" {
+		updates["key"] = template.Key
+	}
+	return r.db.Model(&model.IssueTemplate{}).Where("id = ?", template.ID).Updates(updates).Error
 }
 
 func (r *templateRepository) Delete(id uint) error {

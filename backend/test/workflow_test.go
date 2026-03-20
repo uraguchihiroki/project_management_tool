@@ -11,11 +11,32 @@ import (
 func createTestWorkflow(t *testing.T, ts *testServer, name string) string {
 	t.Helper()
 	status, resp := ts.req(t, "POST", "/api/v1/workflows", map[string]interface{}{
-		"name":        name,
-		"description": "テスト用ワークフロー",
+		"organization_id": testOrgID,
+		"name":           name,
+		"description":    "テスト用ワークフロー",
 	})
 	assertStatus(t, status, http.StatusCreated, fmt.Sprintf("createWorkflow(%s)", name))
 	return fmt.Sprintf("%.0f", mustGetFloat(t, resp, "data", "id"))
+}
+
+// ブラウザと同じ経路: POST /admin/login で得た JWT（組織ユーザー）で POST /workflows する。
+// スーパー管理者トークンではなく、一般ログインのトークンで検証する。
+func TestWorkflow_Create_AsOrgUserJWT(t *testing.T) {
+	ts := newTestServer(t)
+	email := "wf-as-org-user@example.com"
+	createTestUser(t, ts, "WF検証ユーザー", email)
+
+	_, loginResp := ts.reqNoAuth(t, "POST", "/api/v1/admin/login", map[string]string{"email": email})
+	token := mustGetString(t, loginResp, "data", "token")
+
+	status, resp := ts.reqWithToken(t, token, "POST", "/api/v1/workflows", map[string]interface{}{
+		"organization_id": testOrgID,
+		"name":              "ログインユーザーが追加するフロー",
+		"description":       "ブラウザと同じJWT経路の検証",
+	})
+	assertStatus(t, status, http.StatusCreated, "POST /workflows with org-user JWT (not super-admin)")
+	assertField(t, mustGetString(t, resp, "data", "name"), "ログインユーザーが追加するフロー", "name")
+	assertNotEmpty(t, fmt.Sprintf("%.0f", mustGetFloat(t, resp, "data", "id")), "workflow id")
 }
 
 func TestWorkflow_Create(t *testing.T) {
@@ -25,8 +46,9 @@ func TestWorkflow_Create(t *testing.T) {
 
 	t.Run("ワークフローを作成できる", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/workflows", map[string]interface{}{
-			"name":        "通常承認フロー",
-			"description": "一般的な承認フロー",
+			"organization_id": testOrgID,
+			"name":           "通常承認フロー",
+			"description":    "一般的な承認フロー",
 		})
 		assertStatus(t, status, http.StatusCreated, "create workflow")
 		assertField(t, mustGetString(t, resp, "data", "name"), "通常承認フロー", "name")
@@ -122,9 +144,8 @@ func TestWorkflowStep_AddAndList(t *testing.T) {
 
 	t.Run("ステップを追加できる", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-			"status_id":     statusIDs[0],
-			"next_status_id": statusIDs[1],
-			"threshold":     10,
+			"status_id": statusIDs[0],
+			"threshold": 10,
 		})
 		assertStatus(t, status, http.StatusCreated, "add step")
 		assertField(t, mustGetString(t, resp, "data", "status_id"), statusIDs[0], "status_id")
@@ -133,15 +154,15 @@ func TestWorkflowStep_AddAndList(t *testing.T) {
 
 	t.Run("複数ステップを追加できる", func(t *testing.T) {
 		ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-			"status_id":     statusIDs[1],
-			"next_status_id": statusIDs[2],
-			"threshold":     10,
+			"status_id": statusIDs[1],
+			"threshold": 10,
 		})
 
 		_, wfResp := ts.req(t, "GET", "/api/v1/workflows/"+wfID, nil)
 		steps := wfResp["data"].(map[string]interface{})["steps"].([]interface{})
-		if len(steps) != 2 {
-			t.Fatalf("expected 2 steps, got %d", len(steps))
+		// sts_start + user1 + user2 + sts_goal = 4 steps
+		if len(steps) != 4 {
+			t.Fatalf("expected 4 steps, got %d", len(steps))
 		}
 	})
 }
@@ -154,9 +175,8 @@ func TestWorkflowStep_Update(t *testing.T) {
 	statusIDs := getStatusIDs(t, ts, projectID)
 
 	_, stepResp := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"status_id":     statusIDs[0],
-		"next_status_id": statusIDs[1],
-		"threshold":     10,
+		"status_id": statusIDs[0],
+		"threshold": 10,
 	})
 	stepID := fmt.Sprintf("%.0f", mustGetFloat(t, stepResp, "data", "id"))
 
@@ -181,10 +201,10 @@ func TestWorkflowStep_Reorder(t *testing.T) {
 	statusIDs := getStatusIDs(t, ts, projectID)
 
 	_, s1 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"status_id": statusIDs[0], "next_status_id": statusIDs[1], "threshold": 10,
+		"status_id": statusIDs[0], "threshold": 10,
 	})
 	_, s2 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/steps", map[string]interface{}{
-		"status_id": statusIDs[1], "next_status_id": statusIDs[2], "threshold": 10,
+		"status_id": statusIDs[1], "threshold": 10,
 	})
 	stepID1 := uint(mustGetFloat(t, s1, "data", "id"))
 	stepID2 := uint(mustGetFloat(t, s2, "data", "id"))
@@ -196,8 +216,9 @@ func TestWorkflowStep_Reorder(t *testing.T) {
 
 	_, wfResp := ts.req(t, "GET", "/api/v1/workflows/"+wfID, nil)
 	steps := wfResp["data"].(map[string]interface{})["steps"].([]interface{})
-	if len(steps) != 2 {
-		t.Fatalf("expected 2 steps, got %d", len(steps))
+	// sts_start + user1 + user2 + sts_goal = 4 steps
+	if len(steps) != 4 {
+		t.Fatalf("expected 4 steps, got %d", len(steps))
 	}
 	// 並び替え後も2ステップ存在することを確認
 	s0 := steps[0].(map[string]interface{})
@@ -224,12 +245,13 @@ func TestWorkflowStep_Delete(t *testing.T) {
 		assertStatus(t, status, http.StatusNoContent, "delete step")
 	})
 
-	t.Run("削除後はワークフロー詳細にステップが含まれない", func(t *testing.T) {
+	t.Run("削除後はワークフロー詳細にユーザーステップが含まれない", func(t *testing.T) {
 		_, wfResp := ts.req(t, "GET", "/api/v1/workflows/"+wfID, nil)
 		data := wfResp["data"].(map[string]interface{})
 		steps, _ := data["steps"].([]interface{})
-		if len(steps) != 0 {
-			t.Errorf("expected 0 steps after delete, got %d", len(steps))
+		// ユーザーステップを削除すると sts_start + sts_goal のみ残る（2ステップ）
+		if len(steps) != 2 {
+			t.Errorf("expected 2 steps (sts_start+sts_goal) after user step delete, got %d", len(steps))
 		}
 	})
 }
@@ -237,9 +259,20 @@ func TestWorkflowStep_Delete(t *testing.T) {
 func TestWorkflow_Reorder(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
+	statusIDs := getStatusIDs(t, ts, projectID)
+	if len(statusIDs) < 1 {
+		t.Fatal("project needs at least 1 status")
+	}
+
 	wfID1 := createTestWorkflow(t, ts, "フロー1")
 	wfID2 := createTestWorkflow(t, ts, "フロー2")
+	ts.req(t, "POST", "/api/v1/workflows/"+wfID1+"/steps", map[string]interface{}{
+		"status_id": statusIDs[0], "threshold": 10,
+	})
+	ts.req(t, "POST", "/api/v1/workflows/"+wfID2+"/steps", map[string]interface{}{
+		"status_id": statusIDs[0], "threshold": 10,
+	})
 
 	id1, _ := strconv.ParseUint(wfID1, 10, 64)
 	id2, _ := strconv.ParseUint(wfID2, 10, 64)

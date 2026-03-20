@@ -18,9 +18,9 @@ func NewDepartmentHandler(deptService service.DepartmentService) *DepartmentHand
 
 // GET /api/v1/organizations/:orgId/departments
 func (h *DepartmentHandler) List(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	depts, err := h.deptService.ListByOrganization(orgID)
 	if err != nil {
@@ -31,9 +31,9 @@ func (h *DepartmentHandler) List(c echo.Context) error {
 
 // POST /api/v1/organizations/:orgId/departments
 func (h *DepartmentHandler) Create(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	type Request struct {
 		Name string `json:"name"`
@@ -57,9 +57,9 @@ func (h *DepartmentHandler) Create(c echo.Context) error {
 
 // PUT /api/v1/organizations/:orgId/departments/:id
 func (h *DepartmentHandler) Update(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -94,9 +94,9 @@ func (h *DepartmentHandler) Update(c echo.Context) error {
 
 // PUT /api/v1/organizations/:orgId/departments/reorder
 func (h *DepartmentHandler) Reorder(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	type Request struct {
 		IDs []string `json:"ids"`
@@ -121,9 +121,9 @@ func (h *DepartmentHandler) Reorder(c echo.Context) error {
 
 // DELETE /api/v1/organizations/:orgId/departments/:id
 func (h *DepartmentHandler) Delete(c echo.Context) error {
-	orgID, err := uuid.Parse(c.Param("orgId"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org id")
+	orgID, _, authErr := requireOrgParam(c, "orgId")
+	if authErr != nil {
+		return authErr
 	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -148,13 +148,9 @@ func (h *DepartmentHandler) GetUserDepartments(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
 	}
-	orgIDStr := c.QueryParam("org_id")
-	if orgIDStr == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "org_id is required")
-	}
-	orgID, err := uuid.Parse(orgIDStr)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+	orgID, _, authErr := requireOrgQuery(c, "org_id")
+	if authErr != nil {
+		return authErr
 	}
 	depts, err := h.deptService.GetUserDepartments(orgID, userID)
 	if err != nil {
@@ -169,13 +165,9 @@ func (h *DepartmentHandler) SetUserDepartments(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
 	}
-	orgIDStr := c.QueryParam("org_id")
-	if orgIDStr == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "org_id is required")
-	}
-	orgID, err := uuid.Parse(orgIDStr)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+	orgID, _, authErr := requireOrgQuery(c, "org_id")
+	if authErr != nil {
+		return authErr
 	}
 	type Request struct {
 		DepartmentIDs []string `json:"department_ids"`

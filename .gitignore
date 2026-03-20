@@ -61,9 +61,11 @@ Desktop.ini
 
 frontend/playwright-report/
 frontend/test-results/
+frontend/test-results-local/
 
 # ==================
 # Logs
 # ==================
 *.log
 logs/
+/package-lock.json

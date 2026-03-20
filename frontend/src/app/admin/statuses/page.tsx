@@ -5,25 +5,25 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Check } from 'lucide-react'
 import type { Status } from '@/types'
 import { useAuth } from '@/context/AuthContext'
+import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
 async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
-  const res = await fetch(`${API}/organizations/${orgId}/statuses`)
+  const res = await fetch(`${API}/organizations/${orgId}/statuses?exclude_system=1`)
   const json = await res.json()
   const data: Status[] = json.data ?? []
-  return data.filter((s) =>
-    !s.project_id && (s.organization_id || s.status_key === 'sts_start' || s.status_key === 'sts_goal')
-  )
+  return data.filter((s) => !s.project_id && s.organization_id)
 }
 
 export default function StatusesPage() {
   const { currentOrg } = useAuth()
+  const authFetch = useAuthFetchEnabled()
   const queryClient = useQueryClient()
   const { data: statuses = [], isLoading } = useQuery({
     queryKey: ['org-statuses-admin', currentOrg?.id],
     queryFn: () => fetchOrgStatuses(currentOrg?.id ?? ''),
-    enabled: !!currentOrg?.id,
+    enabled: authFetch && !!currentOrg?.id,
   })
 
   const [showForm, setShowForm] = useState(false)

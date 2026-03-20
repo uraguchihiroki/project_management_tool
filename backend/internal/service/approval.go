@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
+	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
@@ -45,13 +46,24 @@ func (s *approvalService) GetApprovals(issueID uuid.UUID) ([]model.IssueApproval
 // InitializeForIssue はWorkflowのステップに基づいてIssue承認レコードを生成する
 // 各ステップに1件の pending を作成（承認オブジェクトありのステップ用）
 func (s *approvalService) InitializeForIssue(issueID uuid.UUID, workflowID uint) error {
+	issue, err := s.issueRepo.FindByID(issueID)
+	if err != nil {
+		return fmt.Errorf("issue not found: %w", err)
+	}
 	workflow, err := s.workflowRepo.FindByID(workflowID)
 	if err != nil {
 		return fmt.Errorf("workflow not found: %w", err)
 	}
 	for _, step := range workflow.Steps {
+		// sts_start, sts_goal は承認レコードを作成しない（常に通過）
+		if step.Status != nil && (step.Status.StatusKey == "sts_start" || step.Status.StatusKey == "sts_goal") {
+			continue
+		}
+		approvalID := uuid.New()
 		approval := &model.IssueApproval{
-			ID:             uuid.New(),
+			ID:             approvalID,
+			Key:            keygen.UUIDKey(approvalID),
+			OrganizationID: issue.OrganizationID,
 			IssueID:        issueID,
 			WorkflowStepID: step.ID,
 			Status:         "pending",
@@ -94,6 +106,10 @@ func (s *approvalService) act(approvalID uuid.UUID, approverID uuid.UUID, commen
 	for i := range workflow.Steps {
 		otherStep := &workflow.Steps[i]
 		if otherStep.NextStatusID == nil || *otherStep.NextStatusID != step.StatusID {
+			continue
+		}
+		// sts_start, sts_goal は常に通過済みとみなす
+		if otherStep.Status != nil && (otherStep.Status.StatusKey == "sts_start" || otherStep.Status.StatusKey == "sts_goal") {
 			continue
 		}
 		if !s.isStepComplete(approval.IssueID, otherStep) {
@@ -276,9 +292,16 @@ func (s *approvalService) ApproveStep(issueID uuid.UUID, stepID uint, approverID
 		}
 	}
 	// 新規承認レコード作成
+	issue, err := s.issueRepo.FindByID(issueID)
+	if err != nil {
+		return nil, fmt.Errorf("issue not found: %w", err)
+	}
 	now := time.Now()
+	approvalID := uuid.New()
 	approval := &model.IssueApproval{
-		ID:             uuid.New(),
+		ID:             approvalID,
+		Key:            keygen.UUIDKey(approvalID),
+		OrganizationID: issue.OrganizationID,
 		IssueID:        issueID,
 		WorkflowStepID: stepID,
 		ApproverID:     &approverID,

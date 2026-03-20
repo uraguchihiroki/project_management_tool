@@ -6,16 +6,26 @@ import { useAuth } from '@/context/AuthContext'
 import { FolderKanban } from 'lucide-react'
 
 export default function LoginPage() {
-  const { currentUser, login } = useAuth()
+  const { login } = useAuth()
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [asAdmin, setAsAdmin] = useState(false)
 
+  // マウント時のみ: すでにユーザー＋組織が揃っているときだけ（ブックマークで /login に来た場合）
+  // currentUser を監視しない（ログイン処理中に先に /projects へ飛ぶのを防ぐ）
   useEffect(() => {
-    if (currentUser) router.push('/projects')
-  }, [currentUser, router])
+    try {
+      const u = sessionStorage.getItem('currentUser')
+      const o = sessionStorage.getItem('currentOrg')
+      if (u && o) {
+        router.replace('/projects')
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -26,11 +36,10 @@ export default function LoginPage() {
 
     setLoading(false)
 
-    if (result.ok) {
-      router.push('/projects')
-    } else {
+    if (!result.ok) {
       setError(result.error ?? 'エラーが発生しました')
     }
+    // 成功時の遷移は AuthContext.login 内の router.push が行う（/projects または /select-org）
   }
 
   return (
@@ -70,7 +79,9 @@ export default function LoginPage() {
             </label>
 
             {error && (
-              <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+              <p data-testid="login-error" className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">
+                {error}
+              </p>
             )}
 
             <button

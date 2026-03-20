@@ -1,11 +1,59 @@
 import axios from 'axios'
 import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate, IssueApproval, Organization, SuperAdmin, Workflow, WorkflowStep, ApprovalObject } from '@/types'
+import { clearAuthSession, getAuthToken } from '@/lib/authToken'
+
+/** 空文字の NEXT_PUBLIC_API_URL で相対パスになりバックエンドに届かないのを防ぐ */
+function getApiBaseURL(): string {
+  const raw = process.env.NEXT_PUBLIC_API_URL
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    return raw.replace(/\/+$/, '')
+  }
+  return 'http://localhost:8080/api/v1'
+}
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
+  baseURL: getApiBaseURL(),
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
 })
+
+api.interceptors.request.use((config) => {
+  const token = getAuthToken()
+  if (token) {
+    config.headers = config.headers ?? {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (!axios.isAxiosError(err) || err.response?.status !== 401) {
+      return Promise.reject(err)
+    }
+    const reqUrl = err.config?.url ?? ''
+    if (
+      reqUrl.includes('/admin/login') ||
+      reqUrl.includes('/admin/switch-organization') ||
+      reqUrl.includes('/super-admin/login')
+    ) {
+      return Promise.reject(err)
+    }
+    if (typeof window !== 'undefined') {
+      clearAuthSession()
+      const path = window.location.pathname
+      if (path.startsWith('/super-admin')) {
+        if (!path.startsWith('/super-admin/login')) {
+          window.location.href = '/super-admin/login'
+        }
+      } else if (!path.startsWith('/login')) {
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(err)
+  }
+)
 
 // Users
 export const getUsers = () =>
@@ -13,6 +61,23 @@ export const getUsers = () =>
 
 export const createUser = (data: { name: string; email: string }) =>
   api.post<ApiResponse<User>>('/users', data).then((r) => r.data.data)
+
+/** メールのみログイン（JWT 発行）。未認証で呼ぶ。 */
+export const adminLogin = (email: string) =>
+  api
+    .post<ApiResponse<{ user: User; token: string }>>('/admin/login', { email })
+    .then((r) => r.data.data)
+
+/** JWT の組織スコープを切り替え（同一メールの別組織ユーザー行に紐づくトークンを再発行） */
+export const switchOrganization = (organizationId: string) =>
+  api
+    .post<ApiResponse<{ user: User; token: string }>>('/admin/switch-organization', {
+      organization_id: organizationId,
+    })
+    .then((r) => r.data.data)
+
+export const setUserAdmin = (userId: string, isAdmin: boolean) =>
+  api.put<ApiResponse<unknown>>(`/users/${userId}/admin`, { is_admin: isAdmin })
 
 // Admin users (org-scoped)
 export const getAdminUsers = (orgId: string) =>
@@ -150,6 +215,20 @@ export const rejectStep = (approvalId: string, approverId: string, comment: stri
 // Workflows & Steps
 export const getWorkflows = () =>
   api.get<ListResponse<Workflow>>('/workflows').then((r) => r.data.data)
+
+export const createWorkflow = (data: {
+  organization_id: string
+  name: string
+  description?: string
+}) => api.post<ApiResponse<Workflow>>('/workflows', data).then((r) => r.data.data)
+
+export const updateWorkflowMeta = (id: string | number, data: { name: string; description: string }) =>
+  api.put<ApiResponse<Workflow>>(`/workflows/${id}`, data).then((r) => r.data.data)
+
+export const deleteWorkflowApi = (id: string | number) => api.delete(`/workflows/${id}`)
+
+export const reorderWorkflowsApi = (ids: number[]) =>
+  api.put('/workflows/reorder', { ids }).then(() => undefined)
 
 export const getWorkflow = (id: string) =>
   api.get<ApiResponse<Workflow>>(`/workflows/${id}`).then((r) => r.data.data)
