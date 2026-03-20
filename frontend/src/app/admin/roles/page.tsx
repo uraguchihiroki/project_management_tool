@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Check } from 'lucide-react'
 import type { Role } from '@/types'
-import { SortableList, DragHandle } from '@/components/SortableList'
+import { SortableDndProvider, SortableTbody, DragHandle } from '@/components/SortableList'
 
 import { useAuth } from '@/context/AuthContext'
 
@@ -211,22 +211,27 @@ export default function RolesPage() {
             役職がまだありません。「役職を追加」から作成してください。
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="w-10 px-2 py-3"></th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">役職名</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-24">レベル</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">説明</th>
-                <th className="px-4 py-3 w-20"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              <SortableList
+          <SortableDndProvider
+            items={roles}
+            itemId={(r) => String(r.id)}
+            onReorder={(ids) => reorderMutation.mutate(ids.map(Number))}
+            disabled={reorderPending}
+          >
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="w-10 px-2 py-3"></th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">役職名</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-24">レベル</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">説明</th>
+                  <th className="px-4 py-3 w-20"></th>
+                </tr>
+              </thead>
+              <SortableTbody
                 items={roles}
                 itemId={(r) => String(r.id)}
-                onReorder={(ids) => reorderMutation.mutate(ids.map(Number))}
                 disabled={reorderPending}
+                tbodyClassName="divide-y divide-gray-100"
                 renderItem={(role, { handleProps, setNodeRef, style }) => (
                   <tr ref={setNodeRef} style={style} className="hover:bg-gray-50 transition-colors">
                     <td className="px-2 py-3">
@@ -266,8 +271,8 @@ export default function RolesPage() {
                   </tr>
                 )}
               />
-            </tbody>
-          </table>
+            </table>
+          </SortableDndProvider>
         )}
       </div>
     </div>

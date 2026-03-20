@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, X, ChevronLeft, Pencil, GitBranch } from 'lucide-react'
+import { Plus, Trash2, X, ChevronLeft, Pencil, GitBranch, Check } from 'lucide-react'
 import type { Workflow, Status } from '@/types'
-import { SortableList, DragHandle } from '@/components/SortableList'
+import { SortableDndProvider, SortableList, DragHandle } from '@/components/SortableList'
 import { useAuth } from '@/context/AuthContext'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
@@ -27,24 +28,24 @@ async function updateWorkflow(id: string, data: { name: string; description: str
 }
 
 async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
-  const res = await fetch(`${API}/organizations/${orgId}/statuses?type=issue`)
+  const res = await fetch(`${API}/organizations/${orgId}/statuses?type=issue&exclude_system=1`)
   const json = await res.json()
   const data: Status[] = json.data ?? []
-  // 組織用ステータス + システムステータス（sts_start, sts_goal）を表示。プロジェクト固有を除外
-  return data.filter((s) =>
-    !s.project_id && (s.organization_id || s.status_key === 'sts_start' || s.status_key === 'sts_goal')
-  )
+  return data.filter((s) => !s.project_id && s.organization_id)
 }
 
-const emptyStep: { status_id: string; next_status_id: string; description: string; threshold: number } = {
+const emptyStep: { status_id: string; description: string; threshold: number } = {
   status_id: '',
-  next_status_id: '',
   description: '',
   threshold: 10,
 }
 
+const isUserStep = (s: { status?: { status_key?: string } }) =>
+  s.status?.status_key !== 'sts_start' && s.status?.status_key !== 'sts_goal'
+
 export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const router = useRouter()
   const queryClient = useQueryClient()
   const { currentOrg } = useAuth()
 
@@ -82,7 +83,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       if (data.threshold < 1) throw new Error('閾値は1以上で指定してください')
       const body = {
         status_id: data.status_id,
-        next_status_id: data.next_status_id || undefined,
         description: data.description,
         threshold: data.threshold,
         approval_objects: [],
@@ -113,7 +113,20 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', id] }),
   })
 
+  const deleteWorkflowMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${API}/workflows/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('ワークフロー削除に失敗しました')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflows'] })
+      router.push('/admin/workflows')
+    },
+  })
+
   const [reorderPending, setReorderPending] = useState(false)
+  const [localStepOrder, setLocalStepOrder] = useState<number[]>([])
+  const [hasReorderChanges, setHasReorderChanges] = useState(false)
   const reorderStepsMutation = useMutation({
     mutationFn: async (ids: number[]) => {
       const res = await fetch(`${API}/workflows/${id}/steps/reorder`, {
@@ -125,10 +138,27 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     },
     onMutate: () => setReorderPending(true),
     onSettled: () => setReorderPending(false),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow', id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow', id] })
+      setHasReorderChanges(false)
+    },
   })
 
-  const steps = workflow?.steps ?? []
+  const allSteps = workflow?.steps ?? []
+  const userSteps = [...allSteps.filter(isUserStep)].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+
+  useEffect(() => {
+    if (userSteps.length > 0 && !hasReorderChanges) {
+      setLocalStepOrder(userSteps.map((s) => s.id))
+    }
+  }, [workflow?.id, userSteps.length, hasReorderChanges])
+
+  const orderedUserSteps =
+    localStepOrder.length === userSteps.length
+      ? localStepOrder
+          .map((id) => userSteps.find((s) => s.id === id))
+          .filter((s): s is NonNullable<typeof s> => s != null)
+      : userSteps
 
   useEffect(() => {
     if (workflow) {
@@ -149,7 +179,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       className="space-y-3"
     >
       <div className="grid grid-cols-12 gap-3">
-        <div className="col-span-3">
+        <div className="col-span-4">
           <label className="block text-xs font-medium text-gray-500 mb-1">ステータス *</label>
           <select
             value={stepForm.status_id}
@@ -157,19 +187,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">選択</option>
-            {statuses.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="col-span-3">
-          <label className="block text-xs font-medium text-gray-500 mb-1">承認後ステータス</label>
-          <select
-            value={stepForm.next_status_id}
-            onChange={(e) => setStepForm((prev) => ({ ...prev, next_status_id: e.target.value }))}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">（なし・ゴール）</option>
             {statuses.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
@@ -299,30 +316,64 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-4">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h2 className="text-sm font-semibold text-gray-700">承認ステップ</h2>
-          <span className="text-xs text-gray-400">{steps.length} ステップ</span>
+          <div className="flex items-center gap-3">
+            {userSteps.length > 1 && (
+              <>
+                <button
+                  onClick={() => reorderStepsMutation.mutate(localStepOrder)}
+                  disabled={!hasReorderChanges || reorderPending}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  保存
+                </button>
+                <button
+                  onClick={() => {
+                    setHasReorderChanges(false)
+                    setLocalStepOrder(userSteps.map((s) => s.id))
+                  }}
+                  disabled={!hasReorderChanges}
+                  className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg text-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  キャンセル
+                </button>
+              </>
+            )}
+            <span className="text-xs text-gray-400">{userSteps.length} ステップ</span>
+          </div>
         </div>
 
-        {steps.length === 0 ? (
+        {userSteps.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">
             ステップがまだありません。「ステップを追加」から作成してください。
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            <SortableList
-              items={steps}
+            <SortableDndProvider
+              items={orderedUserSteps}
               itemId={(s) => String(s.id)}
-              onReorder={(ids) => reorderStepsMutation.mutate(ids.map(Number))}
+              onReorder={(ids) => {
+                setLocalStepOrder(ids.map(Number))
+                setHasReorderChanges(true)
+              }}
               disabled={reorderPending}
-              renderItem={(s, { handleProps, setNodeRef, style }) => (
+            >
+              <SortableList
+                items={orderedUserSteps}
+                itemId={(s) => String(s.id)}
+                onReorder={(ids) => {
+                  setLocalStepOrder(ids.map(Number))
+                  setHasReorderChanges(true)
+                }}
+                disabled={reorderPending}
+                renderItem={(s, { handleProps, setNodeRef, style }) => (
                   <div ref={setNodeRef} style={style} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
                     <DragHandle handleProps={handleProps} />
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                      {steps.findIndex((x) => x.id === s.id) + 1}
+                      {orderedUserSteps.findIndex((x) => x.id === s.id) + 1}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 text-sm">
-                        {s.status?.status_key === 'sts_start' && '🏁 '}
-                        {s.status?.status_key === 'sts_goal' && '🎯 '}
                         {s.status?.name ?? s.status_id}
                       </p>
                       <p className="text-xs text-gray-400">
@@ -355,7 +406,11 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       </Link>
                       <button
                         onClick={() => {
-                          if (confirm(`「${s.status?.name ?? s.status_id}」を削除しますか？`)) {
+                          if (userSteps.length === 1) {
+                            if (confirm('このステップを削除するとワークフローも削除されます。ワークフローを削除しますか？')) {
+                              deleteWorkflowMutation.mutate()
+                            }
+                          } else if (confirm(`「${s.status?.name ?? s.status_id}」を削除しますか？`)) {
                             deleteStepMutation.mutate(s.id)
                           }
                         }}
@@ -366,8 +421,9 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       </button>
                     </div>
                   </div>
-              )}
-            />
+                )}
+              />
+            </SortableDndProvider>
           </div>
         )}
 
