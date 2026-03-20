@@ -90,11 +90,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = payload.token
       if (!found || !token) return { ok: false, error: 'メールアドレスが見つかりません' }
       const user = { ...found, is_admin: asAdmin ?? found.is_admin }
+      // JWT のみ先にセット（getUserOrganizations に必要）。currentUser は組織が決まってから。
+      // 先に setCurrentUser すると /login の useEffect が /projects へ飛ばし、Turbopack が先に /projects をコンパイルして競合する。
       setAuthToken(token)
+      const { dest, error } = await handleOrgSelection(found.id)
+      if (error) {
+        setAuthToken(null)
+        return { ok: false, error }
+      }
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
       setCurrentUser(user)
-      const { dest, error } = await handleOrgSelection(found.id)
-      if (error) return { ok: false, error }
       router.push(dest)
       return { ok: true }
     } catch (e: unknown) {
@@ -128,10 +133,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await setUserAdmin(payload.user.id, asAdmin)
       }
       const user = { ...payload.user, is_admin: asAdmin ?? payload.user.is_admin }
+      const { dest, error } = await handleOrgSelection(payload.user.id)
+      if (error) {
+        setAuthToken(null)
+        return { ok: false, error }
+      }
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
       setCurrentUser(user)
-      const { dest, error } = await handleOrgSelection(payload.user.id)
-      if (error) return { ok: false, error }
       router.push(dest)
       return { ok: true }
     } catch (e: unknown) {

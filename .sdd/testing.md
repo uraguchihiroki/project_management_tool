@@ -52,7 +52,7 @@ npm run test:e2e:login
 ```
 
 **安定してログイン E2E を通すには（推奨）**:
-- `NEXT_PUBLIC_API_URL` を API と一致させたうえで **`npm run build` → `npm run start`** でフロントを起動する。`next dev`（Turbopack）では開発ツールの「Rendering」表示中にクライアント遷移が完了しないことがあり、ログイン成功テストが `/login` のまま失敗しやすい。
+- `NEXT_PUBLIC_API_URL` を API と一致させたうえで **`npm run build` → `npm run start`** でフロントを起動する。E2E では本番相当が安定。`npm run dev:turbo`（Turbopack）単体では開発ツール表示やコンパイル競合でログイン E2E が不安定になりやすい（通常の `npm run dev` は Webpack）。
 
 ```bash
 # 例: API が localhost:8080 のとき

@@ -196,7 +196,7 @@ cd frontend
 # 初回のみ（依存パッケージのインストール）
 npm install
 
-# 開発サーバー起動
+# 開発サーバー起動（既定は Webpack。Turbopack は npm run dev:turbo）
 npm run dev
 ```
 
@@ -290,6 +290,30 @@ kill -9 12345
 # ロックファイルを削除
 rm -f frontend/.next/dev/lock
 ```
+
+#### `Compiling /projects ...` が数分以上終わらない（固まったように見える）
+
+**異常です。** Turbopack（`next dev` の既定）は WSL 等で **コンパイルが終わらない**ことがあります。
+
+1. **開発サーバーを Ctrl+C で止める**
+2. **キャッシュを消して Webpack で起動**（本リポジトリでは `npm run dev` が **Webpack 既定**）:
+   ```bash
+   cd frontend
+   npm run dev:clean
+   ```
+   または手動で:
+   ```bash
+   rm -rf .next
+   rm -f .next/dev/lock
+   npm run dev
+   ```
+3. どうしても速さが必要なときだけ **Turbopack**: `npm run dev:turbo`（固まったら上記で戻す）
+
+#### ログインできない／画面がずっと「Compiling」や「Rendering」のまま
+
+1. **`frontend/next.config.js` の `devIndicators: false`** で左下表示を消す（本リポジトリで設定済みの場合あり）
+2. バックエンドが **`NEXT_PUBLIC_API_URL` と同じ API**（通常 `http://localhost:8080/api/v1`）を向いているか確認する
+3. ログイン直後に `/projects` へ先に飛ぶ問題は **AuthContext / ログイン画面**側で順序修正済み（古いタブはハードリロード）
 
 #### スクリプト実行で `$'\r': command not found` が出る場合
 
