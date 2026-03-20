@@ -34,13 +34,14 @@ http://localhost:8080/api/v1
 
 | Method | Path | 説明 |
 |--------|------|------|
-| GET | /workflows | ワークフロー一覧取得 |
+| GET | /workflows | ワークフロー一覧取得（ユーザーステップが1つ以上あるもののみ） |
 | POST | /workflows | ワークフロー作成（organization_id 必須） |
 | GET | /workflows/:id | ワークフロー詳細取得 |
 | PUT | /workflows/:id | ワークフロー更新 |
 | DELETE | /workflows/:id | ワークフロー削除 |
-| POST | /workflows/:id/steps | ステップ追加 |
-| PUT | /workflows/:id/steps/:stepId | ステップ更新 |
+| POST | /workflows/:id/steps | ステップ追加（初回は sts_start + user + sts_goal を自動作成） |
+| PUT | /workflows/:id/steps/:stepId | ステップ更新（next_status_id は無視。承認後ステータスは ReorderSteps でのみ更新） |
+| PUT | /workflows/:id/steps/reorder | ステップ並び替え。ユーザーステップ ID の並び順のみ受け取り、承認後ステータスを確定 |
 | DELETE | /workflows/:id/steps/:stepId | ステップ削除 |
 | GET | /projects/:projectId/workflows | プロジェクトのワークフロー一覧 |
 
@@ -71,6 +72,7 @@ http://localhost:8080/api/v1
 | POST | /organizations | 組織作成 |
 | GET | /users/:id/organizations | ユーザーの所属組織（1ユーザー＝1組織のため1件） |
 | POST | /organizations/:orgId/users | 組織にユーザーを追加（既存ユーザーの name/email で新規ユーザーを作成） |
+| GET | /organizations/:orgId/statuses | 組織のステータス一覧。`?type=issue` で Issue 用にフィルタ。`?exclude_system=1` で sts_start/sts_goal を除外 |
 
 ### Super Admin
 
@@ -188,6 +190,18 @@ POST /api/v1/projects
   "organization_id": "org-uuid"  // 必須
 }
 ```
+
+### ステップ並び替え（承認後ステータス確定）
+
+```json
+PUT /api/v1/workflows/:id/steps/reorder
+
+{
+  "ids": [3, 1, 2]  // ユーザーステップ ID の並び順のみ。sts_start/sts_goal は含まない
+}
+```
+
+レスポンス: 204 No Content。並び順に応じて各ステップの `next_status_id` が自動更新される。
 
 ### ワークフロー作成
 

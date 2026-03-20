@@ -23,6 +23,6 @@
 
 ## 備考
 
-- `GET /workflows` でワークフロー一覧（組織に属さないグローバル）
+- `GET /workflows` でワークフロー一覧（ユーザーステップが1つ以上あるもののみ）
 - `POST /workflows`、`PUT /workflows/:id`、`DELETE /workflows/:id`
 - `PUT /workflows/reorder` で並び替え
