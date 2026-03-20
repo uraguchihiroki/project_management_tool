@@ -6,6 +6,12 @@
 http://localhost:8080/api/v1
 ```
 
+## 認証・マルチテナント制御
+
+- `POST /users`、`POST /admin/login`、`POST /super-admin/login` を除く API は `Authorization: Bearer <JWT>` が必要。
+- スーパーアドミン以外は、JWT の `organization_id` に一致するデータのみ返却する。
+- 他組織の `org_id` / `project_id` / `issue_id` 等を指定した場合は、`403` または `404` を返す。
+
 ---
 
 ## エンドポイント一覧
@@ -14,6 +20,7 @@ http://localhost:8080/api/v1
 
 | Method | Path | 説明 |
 |--------|------|------|
+| POST | /admin/login | 組織ユーザーログイン（JWT発行） |
 | GET | /users | ユーザー一覧取得 |
 | POST | /users | ユーザー作成 |
 | GET | /users/:id | ユーザー詳細取得 |
@@ -78,7 +85,7 @@ http://localhost:8080/api/v1
 
 | Method | Path | 説明 |
 |--------|------|------|
-| POST | /super-admin/login | スーパー管理者ログイン |
+| POST | /super-admin/login | スーパー管理者ログイン（JWT発行） |
 | GET | /super-admin/organizations | 組織一覧取得 |
 | POST | /super-admin/organizations | 組織作成 |
 
