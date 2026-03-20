@@ -38,13 +38,9 @@ func NewWorkflowRepository(db *gorm.DB) WorkflowRepository {
 
 func (r *workflowRepository) FindAll() ([]model.Workflow, error) {
 	var workflows []model.Workflow
-	err := r.db.
-		Joins("JOIN workflow_steps ON workflow_steps.workflow_id = workflows.id AND workflow_steps.deleted_at IS NULL").
-		Joins("JOIN statuses ON statuses.id = workflow_steps.status_id AND statuses.deleted_at IS NULL").
-		Where("COALESCE(statuses.status_key, '') NOT IN ('sts_start','sts_goal')").
-		Group("workflows.id").
-		Order("workflows.display_order ASC").
-		Find(&workflows).Error
+	// ステップ未追加のワークフローも一覧に含める（管理画面で作成直後に表示するため）。
+	// 以前の INNER JOIN ではステップ0件の行が JOIN から落ち、一覧に出なかった。
+	err := r.db.Order("workflows.display_order ASC").Find(&workflows).Error
 	return workflows, err
 }
 

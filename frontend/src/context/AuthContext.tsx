@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { User, Organization } from '@/types'
 import { clearAuthSession, setAuthToken } from '@/lib/authToken'
@@ -45,14 +45,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(getInitialOrg)
   const router = useRouter()
 
-  useEffect(() => {
+  // ペイント前に sessionStorage を同期（E2E の addInitScript や Hydration 直後の currentOrg 欠落を防ぐ）
+  useLayoutEffect(() => {
     try {
       const stored = sessionStorage.getItem(SESSION_KEY)
       if (stored) setCurrentUser(JSON.parse(stored))
       const storedOrg = sessionStorage.getItem(ORG_KEY)
       if (storedOrg) setCurrentOrg(JSON.parse(storedOrg))
+      const t = sessionStorage.getItem('authToken')
+      if (t) setAuthToken(t)
     } catch {
-      // SSR環境では無視
+      // ignore
     }
   }, [])
 

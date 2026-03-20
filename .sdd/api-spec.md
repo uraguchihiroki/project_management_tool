@@ -42,7 +42,7 @@ http://localhost:8080/api/v1
 
 | Method | Path | 説明 |
 |--------|------|------|
-| GET | /workflows | ワークフロー一覧取得（ユーザーステップが1つ以上あるもののみ） |
+| GET | /workflows | ワークフロー一覧取得（組織スコープ。ステップ未追加の行も含む） |
 | POST | /workflows | ワークフロー作成。スーパーアドミンは body に `organization_id` 必須。それ以外は JWT の組織スコープで作成（body の organization_id は無視可） |
 | GET | /workflows/:id | ワークフロー詳細取得 |
 | PUT | /workflows/:id | ワークフロー更新 |

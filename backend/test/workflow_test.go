@@ -66,21 +66,10 @@ func TestWorkflow_Create(t *testing.T) {
 func TestWorkflow_List(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "owner@example.com")
-	projectID := createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
-	statusIDs := getStatusIDs(t, ts, projectID)
-	if len(statusIDs) < 1 {
-		t.Fatal("project needs at least 1 status")
-	}
+	createTestProject(t, ts, "WF", "テストプロジェクト", ownerID)
 
-	wf1 := createTestWorkflow(t, ts, "フロー1")
-	wf2 := createTestWorkflow(t, ts, "フロー2")
-	// ユーザーステップを1つ以上持つワークフローのみ一覧に表示される
-	ts.req(t, "POST", "/api/v1/workflows/"+wf1+"/steps", map[string]interface{}{
-		"status_id": statusIDs[0], "threshold": 10,
-	})
-	ts.req(t, "POST", "/api/v1/workflows/"+wf2+"/steps", map[string]interface{}{
-		"status_id": statusIDs[0], "threshold": 10,
-	})
+	createTestWorkflow(t, ts, "フロー1")
+	createTestWorkflow(t, ts, "フロー2")
 
 	t.Run("全ワークフロー一覧を取得できる", func(t *testing.T) {
 		status, resp := ts.req(t, "GET", "/api/v1/workflows", nil)

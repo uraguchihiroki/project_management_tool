@@ -95,36 +95,89 @@ export async function ensureLoginableUser(request: APIRequestContext): Promise<v
   )
 }
 
-export async function setupAuth(page: import('@playwright/test').Page, email = 'e2e-create@example.com') {
-  const userRes = await fetch(`${API}/users`)
-  const userJson = await userRes.json()
-  const users = userJson.data ?? []
-  let user = users.find((u: { email: string }) => u.email === email)
-  if (!user) {
-    const createRes = await fetch(`${API}/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'E2E作成', email }),
-    })
-    const createJson = await createRes.json()
-    user = createJson.data
-  }
-  await fetch(`${API}/users/${user.id}/admin`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ is_admin: true }),
-  })
-  const orgRes = await fetch(`${API}/organizations`)
-  const orgJson = await orgRes.json()
-  const orgs = orgJson.data ?? []
-  const org = orgs.find((o: { id: string }) => o.id === TEST_ORG_ID) ?? orgs[0] ?? { id: TEST_ORG_ID, name: 'FRS' }
-  await fetch(`${API}/organizations/${org.id}/users`, {
+/**
+ * `ensureLoginableUser` と同じく、任意メールでログイン可能なユーザーを fetch で保証する。
+ * （setupAuth は Node 上の fetch しか使えないため）
+ */
+async function ensureLoginableUserFetch(email: string): Promise<void> {
+  const login = await fetch(`${API}/admin/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: user.id, is_org_admin: true }),
-  }).catch(() => {})
+    body: JSON.stringify({ email }),
+  })
+  if (login.ok) return
 
-  // JWT 必須の API と整合させる（currentUser のみ注入だと 401 になる）
+  const tryCreateUser = () =>
+    fetch(`${API}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'E2E Playwright Login', email }),
+    })
+
+  let create = await tryCreateUser()
+  if (create.ok) return
+
+  let body = await create.text()
+  const needsOrg =
+    create.status === 500 &&
+    (body.includes('organization') ||
+      body.includes('組織') ||
+      body.includes('組織が存在') ||
+      body.includes('23502') ||
+      body.includes('null value'))
+
+  if (needsOrg) {
+    const saLogin = await fetch(`${API}/super-admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: E2E_SUPER_ADMIN_EMAIL }),
+    })
+    if (!saLogin.ok) {
+      const t = await saLogin.text()
+      throw new Error(
+        `ensureLoginableUserFetch: 組織があり POST /users できません。super-admin ログイン失敗 ${saLogin.status} ${t}`,
+      )
+    }
+    const saBody = (await saLogin.json()) as { token?: string }
+    const token = saBody.token
+    if (!token) {
+      throw new Error('ensureLoginableUserFetch: super-admin/login に token がありません')
+    }
+    const orgsRes = await fetch(`${API}/super-admin/organizations`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!orgsRes.ok) {
+      const t = await orgsRes.text()
+      throw new Error(`ensureLoginableUserFetch: GET /super-admin/organizations failed ${orgsRes.status} ${t}`)
+    }
+    const orgsJson = (await orgsRes.json()) as { data?: unknown[] }
+    const orgs = orgsJson.data ?? []
+    if (orgs.length === 0) {
+      const createOrg = await fetch(`${API}/super-admin/organizations`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'E2E Bootstrap Organization' }),
+      })
+      if (!createOrg.ok) {
+        const t = await createOrg.text()
+        throw new Error(`ensureLoginableUserFetch: POST /super-admin/organizations failed ${createOrg.status} ${t}`)
+      }
+    }
+    create = await tryCreateUser()
+    if (create.ok) return
+    body = await create.text()
+  }
+
+  throw new Error(
+    `ensureLoginableUserFetch: POST /users failed ${create.status} ${body}\n` +
+      `（ヒント: backend/seed.sql を投入し、バックエンドを JWT 対応ビルドにしてください。）`,
+  )
+}
+
+export async function setupAuth(page: import('@playwright/test').Page, email = 'e2e-create@example.com') {
+  // GET /users は JWT 必須のため未認証では一覧できない。未登録なら POST /users で作成する。
+  await ensureLoginableUserFetch(email)
+
   const loginRes = await fetch(`${API}/admin/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -144,22 +197,57 @@ export async function setupAuth(page: import('@playwright/test').Page, email = '
     throw new Error('setupAuth: admin/login に token または user がありません')
   }
 
-  // 同一メールで複数行ある場合、JWT の組織を目的の org に揃える
+  const uid = String(userForSession.id ?? '')
+  if (!uid) {
+    throw new Error('setupAuth: admin/login の user に id がありません')
+  }
+
+  const userOrgsRes = await fetch(`${API}/users/${uid}/organizations`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const userOrgsJson = (await userOrgsRes.json()) as { data?: Array<{ id: string; name: string }> }
+  if (!userOrgsRes.ok) {
+    throw new Error(
+      `setupAuth: GET /users/${uid}/organizations failed ${userOrgsRes.status} ${JSON.stringify(userOrgsJson)}`,
+    )
+  }
+  const userOrgs = userOrgsJson.data ?? []
+  if (userOrgs.length === 0) {
+    throw new Error(
+      `setupAuth: ユーザー ${email} の所属組織がありません。seed または super-admin で組織を作成してください。`,
+    )
+  }
+
+  const loginOrgId = String(userForSession.organization_id ?? '')
+  // テスト用 FRS を優先。switch が無い古いバックエンドでは後段で JWT の組織に矯正する。
+  let orgForSession =
+    userOrgs.find((o) => o.id === TEST_ORG_ID) ??
+    userOrgs.find((o) => o.id === loginOrgId) ??
+    userOrgs[0]
+
   const switchRes = await fetch(`${API}/admin/switch-organization`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ organization_id: org.id }),
+    body: JSON.stringify({ organization_id: orgForSession.id }),
   })
   const switchJson = (await switchRes.json()) as {
     data?: { token?: string; user?: Record<string, unknown> }
   }
-  if (!switchRes.ok) {
+  if (switchRes.ok) {
+    token = switchJson.data?.token ?? token
+    userForSession = switchJson.data?.user ?? userForSession
+  } else if (switchRes.status === 404) {
+    // ルート未実装: session の currentOrg を JWT の organization_id と一致させないと API と UI がズレる
+    const aligned = userOrgs.find((o) => o.id === loginOrgId) ?? userOrgs[0]
+    if (!aligned) {
+      throw new Error('setupAuth: switch-organization なしで組織を JWT に合わせられません')
+    }
+    orgForSession = aligned
+  } else {
     throw new Error(
       `setupAuth: POST /admin/switch-organization failed ${switchRes.status} ${JSON.stringify(switchJson)}`,
     )
   }
-  token = switchJson.data?.token ?? token
-  userForSession = switchJson.data?.user ?? userForSession
 
   await page.addInitScript(
     ({
@@ -175,7 +263,7 @@ export async function setupAuth(page: import('@playwright/test').Page, email = '
       sessionStorage.setItem('currentUser', JSON.stringify({ ...userData, is_admin: true }))
       sessionStorage.setItem('currentOrg', JSON.stringify(orgData))
     },
-    { authToken: token, userData: userForSession, orgData: org },
+    { authToken: token, userData: userForSession, orgData: orgForSession },
   )
-  return { user, org }
+  return { user: userForSession, org: orgForSession }
 }

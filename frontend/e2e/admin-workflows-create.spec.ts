@@ -13,11 +13,20 @@ test.describe('組織管理者: ワークフロー作成', () => {
     await page.goto('/admin/workflows')
     await expect(page.getByRole('heading', { name: /ワークフロー/ })).toBeVisible({ timeout: 5000 })
 
-    await page.getByRole('button', { name: /ワークフローを追加|新規/ }).first().click()
+    // addInitScript で入れた JWT / currentOrg が React に反映されるまで待つ
+    await page.waitForFunction(
+      () =>
+        sessionStorage.getItem('authToken') != null &&
+        sessionStorage.getItem('currentOrg') != null &&
+        sessionStorage.getItem('currentOrg') !== '',
+      { timeout: 15_000 },
+    )
+    await page.getByRole('button', { name: /ワークフローを追加/ }).click()
     await page.getByPlaceholder('例: 通常承認フロー').fill(name)
     await page.getByPlaceholder('例: 一般的な業務申請に使用').fill('E2Eテスト用')
-    await page.getByRole('button', { name: /追加|作成/ }).click()
+    // h2「新しいワークフロー」は form の外にあるため、送信ボタンは role で直接指定する
+    await page.getByRole('button', { name: '追加' }).click()
 
-    await expect(page.getByText(name)).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText(name)).toBeVisible({ timeout: 10_000 })
   })
 })

@@ -98,7 +98,8 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://localhost:3000", "http://frontend:3000"},
+		// localhost と 127.0.0.1 はブラウザ上で別オリジンになる（Playwright の baseURL 等）
+		AllowOrigins: []string{"http://localhost:3000", "http://127.0.0.1:3000", "http://frontend:3000"},
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{"Content-Type", "Authorization"},
 	}))
