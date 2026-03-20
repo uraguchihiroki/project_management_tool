@@ -253,7 +253,7 @@ export default function StepEditPage({
                       onClick={() =>
                         setApprovalObjects((prev) => [...prev, emptyApprovalObject()])
                       }
-                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                      className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       追加

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, X, Check, ChevronLeft, Pencil, GitBranch } from 'lucide-react'
+import { Plus, Trash2, X, ChevronLeft, Pencil, GitBranch } from 'lucide-react'
 import type { Workflow, Status } from '@/types'
 import { SortableList, DragHandle } from '@/components/SortableList'
 import { useAuth } from '@/context/AuthContext'
@@ -192,7 +192,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             disabled={loading}
             className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
-            <Check className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" />
             追加
           </button>
           <button
