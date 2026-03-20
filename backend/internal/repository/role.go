@@ -9,6 +9,7 @@ import (
 type RoleRepository interface {
 	FindAll() ([]model.Role, error)
 	FindByOrg(orgID uuid.UUID) ([]model.Role, error)
+	FindByOrgAndName(orgID uuid.UUID, name string) (*model.Role, error)
 	FindByID(id uint) (*model.Role, error)
 	Create(role *model.Role) error
 	Update(role *model.Role) error
@@ -37,6 +38,15 @@ func (r *roleRepository) FindByOrg(orgID uuid.UUID) ([]model.Role, error) {
 	var roles []model.Role
 	err := r.db.Where("organization_id = ?", orgID).Order("display_order ASC, level DESC").Find(&roles).Error
 	return roles, err
+}
+
+func (r *roleRepository) FindByOrgAndName(orgID uuid.UUID, name string) (*model.Role, error) {
+	var role model.Role
+	err := r.db.Where("organization_id = ? AND name = ?", orgID, name).First(&role).Error
+	if err != nil {
+		return nil, err
+	}
+	return &role, nil
 }
 
 func (r *roleRepository) FindByID(id uint) (*model.Role, error) {

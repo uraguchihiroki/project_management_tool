@@ -124,7 +124,8 @@ func newTestServer(t *testing.T) *testServer {
 
 	userSvc := service.NewUserService(userRepo, orgRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo)
-	orgSvc := service.NewOrganizationService(orgRepo, userRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo)
+	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
 	issueSvc := service.NewIssueService(issueRepo, projectRepo)

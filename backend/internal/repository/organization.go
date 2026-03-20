@@ -13,6 +13,7 @@ type OrganizationRepository interface {
 	FindByID(id uuid.UUID) (*model.Organization, error)
 	Create(org *model.Organization) error
 	FindByUserID(userID uuid.UUID) ([]model.Organization, error)
+	FindFirstOrgAdminID(orgID uuid.UUID) (*uuid.UUID, error)
 	AddUser(orgUser *model.OrganizationUser) error
 	RemoveUser(orgID, userID uuid.UUID) error
 }
@@ -58,6 +59,16 @@ func (r *organizationRepository) FindByUserID(userID uuid.UUID) ([]model.Organiz
 		orgs = append(orgs, ou.Organization)
 	}
 	return orgs, nil
+}
+
+func (r *organizationRepository) FindFirstOrgAdminID(orgID uuid.UUID) (*uuid.UUID, error) {
+	var ou model.OrganizationUser
+	err := r.db.Where("organization_id = ? AND is_org_admin = ?", orgID, true).
+		First(&ou).Error
+	if err != nil {
+		return nil, err
+	}
+	return &ou.UserID, nil
 }
 
 func (r *organizationRepository) AddUser(orgUser *model.OrganizationUser) error {

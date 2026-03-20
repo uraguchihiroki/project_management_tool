@@ -9,6 +9,7 @@ import (
 type ProjectRepository interface {
 	FindAll() ([]model.Project, error)
 	FindByOrg(orgID uuid.UUID) ([]model.Project, error)
+	FindByOrgAndName(orgID uuid.UUID, name string) (*model.Project, error)
 	FindByID(id uuid.UUID) (*model.Project, error)
 	Create(project *model.Project) error
 	Update(project *model.Project) error
@@ -35,6 +36,15 @@ func (r *projectRepository) FindByOrg(orgID uuid.UUID) ([]model.Project, error) 
 	var projects []model.Project
 	err := r.db.Preload("Owner").Where("organization_id = ?", orgID).Order("display_order ASC").Find(&projects).Error
 	return projects, err
+}
+
+func (r *projectRepository) FindByOrgAndName(orgID uuid.UUID, name string) (*model.Project, error) {
+	var project model.Project
+	err := r.db.Where("organization_id = ? AND name = ?", orgID, name).First(&project).Error
+	if err != nil {
+		return nil, err
+	}
+	return &project, nil
 }
 
 func (r *projectRepository) FindByID(id uuid.UUID) (*model.Project, error) {

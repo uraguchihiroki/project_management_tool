@@ -220,6 +220,27 @@ cat backend/seed.sql | docker exec -i pmt_db psql -U pmt_user -d pmt_db
 
 ---
 
+#### 4b. 既存組織へのseed投入（CLI）
+
+組織作成時は自動で投入されますが、既存組織に後からステータス・役職・部署・サンプルプロジェクトを投入する場合:
+
+```bash
+# 全組織に投入
+./scripts/seed-org.sh --all
+
+# 指定組織に投入
+./scripts/seed-org.sh <org-id> [owner-id]
+```
+
+- **--all**: 全組織に投入
+- **org-id**: 組織のUUID
+- **owner-id**: 省略可。組織の管理者をオーナーとして使用
+- 冪等: 何度でも実行可能。既存レコードは更新、なければ作成
+
+詳細は [.sdd/dev-guide.md](.sdd/dev-guide.md#組織seedcli) を参照。
+
+---
+
 #### 5. 起動順序のまとめ
 
 ```

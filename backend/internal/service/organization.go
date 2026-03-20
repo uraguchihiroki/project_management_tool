@@ -17,12 +17,13 @@ type OrganizationService interface {
 }
 
 type organizationService struct {
-	orgRepo  repository.OrganizationRepository
-	userRepo repository.UserRepository
+	orgRepo    repository.OrganizationRepository
+	userRepo   repository.UserRepository
+	orgSeedSvc OrgSeedService
 }
 
-func NewOrganizationService(orgRepo repository.OrganizationRepository, userRepo repository.UserRepository) OrganizationService {
-	return &organizationService{orgRepo: orgRepo, userRepo: userRepo}
+func NewOrganizationService(orgRepo repository.OrganizationRepository, userRepo repository.UserRepository, orgSeedSvc OrgSeedService) OrganizationService {
+	return &organizationService{orgRepo: orgRepo, userRepo: userRepo, orgSeedSvc: orgSeedSvc}
 }
 
 func (s *organizationService) List() ([]model.Organization, error) {
@@ -43,6 +44,7 @@ func (s *organizationService) Create(name, adminEmail, adminName string) (*model
 	if err := s.orgRepo.Create(org); err != nil {
 		return nil, err
 	}
+	var ownerID *uuid.UUID
 	if adminEmail != "" {
 		user, err := s.userRepo.FindByEmail(adminEmail)
 		if err != nil {
@@ -62,11 +64,16 @@ func (s *organizationService) Create(name, adminEmail, adminName string) (*model
 		} else {
 			_ = s.userRepo.UpdateAdmin(user.ID, true)
 		}
+		ownerID = &user.ID
 		_ = s.orgRepo.AddUser(&model.OrganizationUser{
 			OrganizationID: org.ID,
 			UserID:         user.ID,
 			IsOrgAdmin:     true,
 		})
+	}
+	// 組織作成時に初期データ（ステータス・役職・サンプルプロジェクト）を投入
+	if err := s.orgSeedSvc.SeedNewOrganization(org.ID, ownerID); err != nil {
+		return org, err // 組織は作成済みなのでエラーは返さず org を返すことも検討可。現状はエラーを伝播
 	}
 	return org, nil
 }
