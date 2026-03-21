@@ -1,7 +1,7 @@
-# Project Management Tool
+# Issue Management Tool
 
-Jira / Redmine ライクなチケットベースのプロジェクト管理ツール。  
-マルチテナント対応（会社・組織ごとにデータを分離）。
+**Issue 管理**を主目的とした、Jira / Redmine ライクなチケット・カンバン型のツール。  
+マルチテナント対応（会社・組織ごとにデータを分離）。設計方針は [.sdd/principles.md](.sdd/principles.md)・[.sdd/transition-permissions.md](.sdd/transition-permissions.md) を参照。
 
 ---
 
@@ -351,7 +351,8 @@ bash scripts/setup-wsl.sh   # または bash scripts/start.sh
 | [domain-model.md](.sdd/domain-model.md) | エンティティ関係・ドメインモデル |
 | [db-schema.md](.sdd/db-schema.md) | DB 設計・テーブル定義 |
 | [api-spec.md](.sdd/api-spec.md) | REST API 仕様 |
-| [key-flows.md](.sdd/key-flows.md) | 認証・マルチテナント・承認の主要フロー |
+| [key-flows.md](.sdd/key-flows.md) | 認証・マルチテナント・ステータス遷移の権限（主要フロー） |
+| [transition-permissions.md](.sdd/transition-permissions.md) | ステータス遷移の権限（候補比較・未決事項） |
 | [testing.md](.sdd/testing.md) | テスト方針・実行方法 |
 | [dev-guide.md](.sdd/dev-guide.md) | 新機能追加の手順・規約 |
 

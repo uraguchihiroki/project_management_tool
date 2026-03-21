@@ -4,9 +4,11 @@
 
 > **設計原則**: 開発はローカル、運用はGCP等のクラウド。詳細は [principles.md](principles.md) を参照。
 
-Jira / Redmine ライクなチケットベースのプロジェクト管理ツール。  
+**Issue 管理**を主目的とする。Jira / Redmine ライクなチケット・カンバンを扱う。  
 Go 製 REST API + Next.js フロントエンド + PostgreSQL の3層構成。  
 マルチテナント対応（組織ごとにデータを分離）。
+
+**ステータス遷移の権限**（誰が Close 等を行えるか）は、稟議・承認ワークフローとは別概念として [transition-permissions.md](transition-permissions.md) で整理する。
 
 ---
 
@@ -52,7 +54,7 @@ graph TD
 ### 現行実装との整合メモ
 
 - 上記はシステム全体の必須方針（ターゲット仕様）。
-- 現行実装では、主要な管理系 API（projects/statuses/departments/users/admin-users/issues/templates/workflows など）で JWT 前提の組織スコープ制御を適用している。
+- 現行実装では、主要な管理系 API（projects/statuses/departments/users/admin-users/issues/templates 等）で JWT 前提の組織スコープ制御を適用している。レガシーとして **workflows / approvals** 系ルートが残る場合がある。
 - 方針に対して適用漏れの可能性があるエンドポイントは、同方針に合わせて継続的に補完する。
 
 ---
@@ -78,6 +80,7 @@ project_management_tool/
 ├── .sdd/                        # 設計ドキュメント
 │   ├── README.md                # ナビゲーション
 │   ├── architecture.md         # このファイル
+│   ├── transition-permissions.md # ステータス遷移の権限（候補比較）
 │   ├── layer-responsibility.md # レイヤー責務定義
 │   ├── db-schema.md            # DB設計
 │   ├── api-spec.md             # API仕様

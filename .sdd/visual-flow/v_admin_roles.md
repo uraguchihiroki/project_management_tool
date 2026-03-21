@@ -6,7 +6,7 @@
 
 ## 概要
 
-役職とヒエラルキーレベルを管理。ワークフローの承認条件で使用。
+役職とヒエラルキーレベルを管理。ステータス遷移の権限表現に使うかは [transition-permissions.md](../transition-permissions.md) で決定（TBD）。
 
 ## 遷移元・遷移先
 

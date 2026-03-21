@@ -1,6 +1,6 @@
-# Project Management Tool — AI Assistant Context
+# Issue Management Tool — AI Assistant Context
 
-Jira / Redmine ライクなチケットベースのプロジェクト管理ツール。マルチテナント対応（組織ごとにデータ分離）。
+**Issue 管理**を主目的とした、Jira / Redmine ライクなチケット・カンバン型のツール。マルチテナント対応（組織ごとにデータ分離）。ステータス遷移の権限は [.sdd/transition-permissions.md](.sdd/transition-permissions.md) を参照。
 
 ---
 
@@ -89,7 +89,8 @@ project_management_tool/
 - [layer-responsibility.md](.sdd/layer-responsibility.md) — Handler / Service / Repository の責務
 - [db-schema.md](.sdd/db-schema.md) — テーブル定義
 - [api-spec.md](.sdd/api-spec.md) — REST API 仕様
-- [key-flows.md](.sdd/key-flows.md) — 認証・組織・承認フロー
+- [key-flows.md](.sdd/key-flows.md) — 認証・組織・ステータス遷移の権限（主要フロー）
+- [transition-permissions.md](.sdd/transition-permissions.md) — ステータス遷移の権限（候補比較・TBD）
 - [dev-guide.md](.sdd/dev-guide.md) — 新機能追加の手順
 
 ## WSL 開発環境（エージェント向け）

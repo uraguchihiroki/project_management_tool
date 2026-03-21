@@ -89,6 +89,7 @@ go run ./cmd/cli org seed --org-id=<uuid> [--owner-id=<uuid>]
 | テーブル・モデルの変更 | [db-schema.md](db-schema.md) |
 | アーキテクチャ・構成の変更 | [architecture.md](architecture.md) |
 | 新規フローの追加 | [key-flows.md](key-flows.md) |
+| ステータス遷移の権限の決定・変更 | [transition-permissions.md](transition-permissions.md)、[domain-model.md](domain-model.md)、[db-schema.md](db-schema.md) |
 | テスト方針の変更 | [testing.md](testing.md) |
 
 ---
