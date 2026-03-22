@@ -1,0 +1,16 @@
+---
+description: エージェント返信の末尾に日付と時刻（JST）を1行付ける。全プロジェクト共通は Cursor User Rules 参照。
+alwaysApply: true
+---
+
+# 返信末尾の日時（本リポジトリ）
+
+- 実質的な文面があるユーザー向け返信の **最後の行** に、**日付と時刻の両方**を付ける。
+- 形式: `（応答日時: YYYY-MM-DD HH:MM JST）`
+- 日付: `user_info` の `Today's date` があれば利用。
+- 時刻: コンテキストに無いときは、ターミナルで `TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M %Z'` を **1 回** 実行してよい（WSL bash 想定）。
+- 例外: ツールのみ・一語程度の極端に短い返信は省略可。
+
+**Windows 版 Cursor で全プロジェクトに同じくしたい場合**は、[docs/cursor-user-rules-reply-timestamp.md](../../docs/cursor-user-rules-reply-timestamp.md) の手順で **User Rules** に同趣旨の文を貼ること（Git 不可）。
+
+詳細・例: [.cursor/skills/reply-end-timestamp/SKILL.md](../skills/reply-end-timestamp/SKILL.md)
