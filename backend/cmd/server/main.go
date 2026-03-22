@@ -88,7 +88,7 @@ func main() {
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
-	statusSvc := service.NewStatusService(statusRepo, workflowRepo)
+	statusSvc := service.NewStatusService(statusRepo, workflowRepo, transitionRepo)
 	groupSvc := service.NewGroupService(groupRepo, userGroupRepo)
 
 	userHandler := handler.NewUserHandler(userSvc)
@@ -101,7 +101,7 @@ func main() {
 	orgHandler := handler.NewOrganizationHandler(orgSvc)
 	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
 	departmentHandler := handler.NewDepartmentHandler(departmentSvc)
-	statusHandler := handler.NewStatusHandler(statusSvc)
+	statusHandler := handler.NewStatusHandler(statusSvc, workflowSvc)
 	issueEventHandler := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
 	groupHandler := handler.NewGroupHandler(groupSvc)
 
@@ -163,6 +163,8 @@ func main() {
 	api.POST("/workflows", workflowHandler.Create)
 	api.PUT("/workflows/reorder", workflowHandler.Reorder)
 	api.GET("/workflows/:id", workflowHandler.Get)
+	api.GET("/workflows/:id/statuses", statusHandler.ListByWorkflow)
+	api.POST("/workflows/:id/statuses", statusHandler.CreateForWorkflow)
 	api.PUT("/workflows/:id", workflowHandler.Update)
 	api.DELETE("/workflows/:id", workflowHandler.Delete)
 

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -9,11 +10,70 @@ import (
 )
 
 type StatusHandler struct {
-	statusService service.StatusService
+	statusService   service.StatusService
+	workflowService service.WorkflowService
 }
 
-func NewStatusHandler(statusService service.StatusService) *StatusHandler {
-	return &StatusHandler{statusService: statusService}
+func NewStatusHandler(statusService service.StatusService, workflowService service.WorkflowService) *StatusHandler {
+	return &StatusHandler{statusService: statusService, workflowService: workflowService}
+}
+
+func (h *StatusHandler) authorizeWorkflowAccess(c echo.Context) (uint, error) {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return 0, authErr
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid workflow id")
+	}
+	workflow, err := h.workflowService.GetWorkflow(uint(id))
+	if err != nil {
+		return 0, echo.NewHTTPError(http.StatusNotFound, "workflow not found")
+	}
+	if !isSuperAdmin && (orgScope == nil || workflow.OrganizationID != *orgScope) {
+		return 0, echo.NewHTTPError(http.StatusNotFound, "workflow not found")
+	}
+	return uint(id), nil
+}
+
+// GET /api/v1/workflows/:id/statuses
+func (h *StatusHandler) ListByWorkflow(c echo.Context) error {
+	wfID, err := h.authorizeWorkflowAccess(c)
+	if err != nil {
+		return err
+	}
+	statuses, err := h.statusService.ListByWorkflowID(wfID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": statuses})
+}
+
+// POST /api/v1/workflows/:id/statuses
+func (h *StatusHandler) CreateForWorkflow(c echo.Context) error {
+	wfID, err := h.authorizeWorkflowAccess(c)
+	if err != nil {
+		return err
+	}
+	type Request struct {
+		Name  string `json:"name"`
+		Color string `json:"color"`
+		Type  string `json:"type"`
+		Order int    `json:"order"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if req.Color == "" {
+		req.Color = "#6B7280"
+	}
+	status, err := h.statusService.CreateForWorkflow(wfID, req.Name, req.Color, req.Type, req.Order)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	return c.JSON(http.StatusCreated, map[string]interface{}{"data": status})
 }
 
 // POST /api/v1/organizations/:orgId/statuses

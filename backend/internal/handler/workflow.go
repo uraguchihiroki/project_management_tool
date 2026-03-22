@@ -18,25 +18,52 @@ func NewWorkflowHandler(workflowService service.WorkflowService) *WorkflowHandle
 }
 
 // GET /api/v1/workflows
+// 非スーパーアドミン: JWT の organization_id のワークフローのみ。クエリ org_id が付いた場合は JWT と一致必須（不一致は 403）。
+// スーパーアドミン: org_id 省略時は全組織。org_id 指定時はその組織のみ。
 func (h *WorkflowHandler) List(c echo.Context) error {
 	orgScope, isSuperAdmin, authErr := requireClaims(c)
 	if authErr != nil {
 		return authErr
 	}
+	qOrg := c.QueryParam("org_id")
+	var queryOrgID *uuid.UUID
+	if qOrg != "" {
+		parsed, err := uuid.Parse(qOrg)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+		}
+		queryOrgID = &parsed
+	}
+
 	workflows, err := h.workflowService.ListAll()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-	if !isSuperAdmin && orgScope != nil {
-		filtered := make([]interface{}, 0, len(workflows))
-		for _, wf := range workflows {
-			if wf.OrganizationID == *orgScope {
-				filtered = append(filtered, wf)
-			}
-		}
-		return c.JSON(http.StatusOK, map[string]interface{}{"data": filtered})
+
+	if isSuperAdmin && queryOrgID == nil {
+		return c.JSON(http.StatusOK, map[string]interface{}{"data": workflows})
 	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"data": workflows})
+
+	var targetOrg uuid.UUID
+	if isSuperAdmin {
+		targetOrg = *queryOrgID
+	} else {
+		if orgScope == nil {
+			return echo.NewHTTPError(http.StatusForbidden, "organization scope is missing")
+		}
+		if queryOrgID != nil && *queryOrgID != *orgScope {
+			return echo.NewHTTPError(http.StatusForbidden, "org_id does not match token scope")
+		}
+		targetOrg = *orgScope
+	}
+
+	filtered := make([]interface{}, 0, len(workflows))
+	for _, wf := range workflows {
+		if wf.OrganizationID == targetOrg {
+			filtered = append(filtered, wf)
+		}
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": filtered})
 }
 
 // POST /api/v1/workflows

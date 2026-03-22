@@ -118,7 +118,7 @@ func newTestServer(t *testing.T) *testServer {
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
-	statusSvc := service.NewStatusService(statusRepo, workflowRepo)
+	statusSvc := service.NewStatusService(statusRepo, workflowRepo, transitionRepo)
 	groupSvc := service.NewGroupService(groupRepo, userGroupRepo)
 
 	userH := handler.NewUserHandler(userSvc)
@@ -131,7 +131,7 @@ func newTestServer(t *testing.T) *testServer {
 	orgH := handler.NewOrganizationHandler(orgSvc)
 	superAdminH := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
 	departmentH := handler.NewDepartmentHandler(departmentSvc)
-	statusH := handler.NewStatusHandler(statusSvc)
+	statusH := handler.NewStatusHandler(statusSvc, workflowSvc)
 	issueEventH := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
 	groupH := handler.NewGroupHandler(groupSvc)
 
@@ -169,6 +169,8 @@ func newTestServer(t *testing.T) *testServer {
 	api.POST("/workflows", workflowH.Create)
 	api.PUT("/workflows/reorder", workflowH.Reorder)
 	api.GET("/workflows/:id", workflowH.Get)
+	api.GET("/workflows/:id/statuses", statusH.ListByWorkflow)
+	api.POST("/workflows/:id/statuses", statusH.CreateForWorkflow)
 	api.PUT("/workflows/:id", workflowH.Update)
 	api.DELETE("/workflows/:id", workflowH.Delete)
 	api.GET("/templates", templateH.List)
