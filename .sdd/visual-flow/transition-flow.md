@@ -18,7 +18,7 @@
 | /projects/[id]/issues/[number] | Issue 詳細 | [v_issue_detail.md](v_issue_detail.md) |
 | /admin | 管理画面 | [v_admin.md](v_admin.md) |
 | /admin/users | ユーザー管理 | [v_admin_users.md](v_admin_users.md) |
-| /admin/departments | 部署管理 | [v_admin_departments.md](v_admin_departments.md) |
+| /admin/departments | グループ管理 | [v_admin_departments.md](v_admin_departments.md) |
 | /admin/statuses | ステータス管理 | [v_admin_statuses.md](v_admin_statuses.md) |
 | /admin/projects | プロジェクト管理 | [v_admin_projects.md](v_admin_projects.md) |
 | /admin/projects/[id] | プロジェクト編集 | [v_admin_project_detail.md](v_admin_project_detail.md) |
@@ -70,5 +70,5 @@ flowchart TD
 | 種別 | 入口 | 主な遷移先 |
 |------|------|------------|
 | 一般ユーザー | /login | /select-org（組織複数時）→ /projects → /projects/[id] → /projects/[id]/issues/[number] |
-| 組織管理者 | /login（管理者としてログイン） | 上記 + /admin 配下（ユーザー・部署・ステータス・プロジェクト・ワークフロー・テンプレート等） |
+| 組織管理者 | /login（管理者としてログイン） | 上記 + /admin 配下（ユーザー・グループ・ステータス・プロジェクト・ワークフロー・テンプレート等） |
 | スーパー管理者 | /super-admin/login | /super-admin（組織作成・一覧） |

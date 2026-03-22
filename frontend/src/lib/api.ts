@@ -16,17 +16,26 @@ import type {
 } from '@/types'
 import { clearAuthSession, getAuthToken } from '@/lib/authToken'
 
-/** 空文字の NEXT_PUBLIC_API_URL で相対パスになりバックエンドに届かないのを防ぐ */
-function getApiBaseURL(): string {
+/**
+ * API のベース URL（末尾スラッシュなし）。
+ * - NEXT_PUBLIC_API_URL があれば最優先（本番・API を別ホストに置く場合）。
+ * - 未設定かつブラウザでは同一オリジンの `/api/v1`（Next の rewrite → バックエンド）。
+ *   → Windows 上の Playwright ブラウザから WSL の Next にアクセスしてもログイン API に届く。
+ * - SSR / Node のフォールバックはループバック直叩き。
+ */
+export function resolveApiBaseURL(): string {
   const raw = process.env.NEXT_PUBLIC_API_URL
   if (typeof raw === 'string' && raw.trim() !== '') {
     return raw.replace(/\/+$/, '')
   }
-  return 'http://localhost:8080/api/v1'
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin.replace(/\/+$/, '')}/api/v1`
+  }
+  return 'http://127.0.0.1:8080/api/v1'
 }
 
 const api = axios.create({
-  baseURL: getApiBaseURL(),
+  baseURL: resolveApiBaseURL(),
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
 })

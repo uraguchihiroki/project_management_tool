@@ -3,13 +3,18 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Check } from 'lucide-react'
-import { getTemplates, getProjects, createTemplate, updateTemplate, deleteTemplate } from '@/lib/api'
+import {
+  getTemplates,
+  getProjects,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  resolveApiBaseURL,
+} from '@/lib/api'
 import type { IssueTemplate, Project } from '@/types'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
 import { SortableDndProvider, SortableList, DragHandle } from '@/components/SortableList'
 import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 
 const emptyForm = {
   project_id: '',
@@ -81,7 +86,7 @@ export default function TemplatesPage() {
   const [reorderPending, setReorderPending] = useState<string | null>(null)
   const reorderMutation = useMutation({
     mutationFn: async ({ projectId, ids }: { projectId: string; ids: number[] }) => {
-      const res = await fetch(`${API}/projects/${projectId}/templates/reorder`, {
+      const res = await fetch(`${resolveApiBaseURL()}/projects/${projectId}/templates/reorder`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids }),

@@ -8,7 +8,7 @@ import { useRequireAdmin } from '@/context/AuthContext'
 
 const navItems = [
   { href: '/admin/projects', label: 'プロジェクト管理', icon: FolderKanban },
-  { href: '/admin/departments', label: '部署管理', icon: Building2 },
+  { href: '/admin/departments', label: 'グループ管理', icon: Building2 },
   { href: '/admin/statuses', label: 'ステータス管理', icon: Tag },
   { href: '/admin/users', label: 'ユーザー管理', icon: Users },
   { href: '/admin/workflows', label: 'ワークフロー', icon: GitBranch },

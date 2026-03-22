@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { useRouter } from 'next/navigation'
 import type { SuperAdmin } from '@/types'
 import { clearAuthSession, setAuthToken } from '@/lib/authToken'
+import { resolveApiBaseURL } from '@/lib/api'
 
 const SA_SESSION_KEY = 'currentSuperAdmin'
 
@@ -30,14 +31,11 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
   const login = useCallback(async (email: string): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/super-admin/login`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
-        }
-      )
+      const res = await fetch(`${resolveApiBaseURL()}/super-admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
       if (!res.ok) return { ok: false, error: 'メールアドレスが見つかりません' }
       const json = await res.json()
       const admin: SuperAdmin = json.data

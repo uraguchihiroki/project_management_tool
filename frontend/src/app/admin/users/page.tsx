@@ -4,20 +4,18 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Shield, ShieldOff, X, Check, Plus, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
-import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from '@/lib/api'
+import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, resolveApiBaseURL } from '@/lib/api'
 import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 import type { User, Department } from '@/types'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
-
 async function fetchDepartments(orgId: string): Promise<Department[]> {
-  const res = await fetch(`${API}/organizations/${orgId}/departments`)
+  const res = await fetch(`${resolveApiBaseURL()}/organizations/${orgId}/departments`)
   const json = await res.json()
   return json.data ?? []
 }
 
 async function fetchUserDepartments(orgId: string, userId: string): Promise<Department[]> {
-  const res = await fetch(`${API}/users/${userId}/departments?org_id=${orgId}`)
+  const res = await fetch(`${resolveApiBaseURL()}/users/${userId}/departments?org_id=${orgId}`)
   const json = await res.json()
   return json.data ?? []
 }
@@ -69,7 +67,7 @@ export default function AdminUsersPage() {
 
   const setAdminMutation = useMutation({
     mutationFn: async ({ userId, isAdmin }: { userId: string; isAdmin: boolean }) => {
-      const res = await fetch(`${API}/users/${userId}/admin`, {
+      const res = await fetch(`${resolveApiBaseURL()}/users/${userId}/admin`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_admin: isAdmin }),
@@ -81,12 +79,12 @@ export default function AdminUsersPage() {
 
   const assignDepartmentsMutation = useMutation({
     mutationFn: async ({ userId, deptIds }: { userId: string; deptIds: string[] }) => {
-      const res = await fetch(`${API}/users/${userId}/departments?org_id=${currentOrg!.id}`, {
+      const res = await fetch(`${resolveApiBaseURL()}/users/${userId}/departments?org_id=${currentOrg!.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ department_ids: deptIds }),
       })
-      if (!res.ok) throw new Error('部署の更新に失敗しました')
+      if (!res.ok) throw new Error('グループの更新に失敗しました')
     },
     onSuccess: (_, { userId, deptIds }) => {
       const depts = allDepartments.filter((d) => deptIds.includes(d.id))
@@ -128,7 +126,7 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">ユーザー管理</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {currentOrg.name} のユーザーを管理します（作成・更新・削除・部署）
+            {currentOrg.name} のユーザーを管理します（作成・更新・削除・グループ）
           </p>
         </div>
         <button
@@ -200,7 +198,7 @@ export default function AdminUsersPage() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">ユーザー</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">部署</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">グループ</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-24">管理者</th>
                 <th className="px-4 py-3 w-32"></th>
               </tr>
@@ -253,7 +251,7 @@ export default function AdminUsersPage() {
                       <div className="space-y-2">
                         <div className="flex flex-wrap gap-1.5">
                           {allDepartments.length === 0 ? (
-                            <span className="text-xs text-gray-400">部署がありません</span>
+                            <span className="text-xs text-gray-400">グループがありません</span>
                           ) : (
                             allDepartments.map((dept) => (
                               <button
@@ -292,11 +290,11 @@ export default function AdminUsersPage() {
                       <button
                         onClick={() => startDeptEdit(user)}
                         className="flex flex-wrap gap-1 group"
-                        title="クリックして部署を編集"
+                        title="クリックしてグループを編集"
                       >
                         {(userDepartmentsCache[user.id] ?? []).length === 0 && editingDeptUserId !== user.id ? (
                           <span className="text-xs text-gray-400 group-hover:text-blue-500 transition-colors">
-                            部署なし（クリックして設定）
+                            グループなし（クリックして設定）
                           </span>
                         ) : (
                           (userDepartmentsCache[user.id] ?? []).map((dept) => (
@@ -335,7 +333,7 @@ export default function AdminUsersPage() {
                           onClick={() => startDeptEdit(user)}
                           className="text-xs text-green-600 hover:underline"
                         >
-                          部署編集
+                          グループ編集
                         </button>
                         <button
                           onClick={() => {
