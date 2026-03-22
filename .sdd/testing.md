@@ -24,7 +24,7 @@ go test ./test/... -v
 
 ### E2E テスト（Playwright）
 
-役職のドラッグ並び替えを検証する E2E テストがあります。
+管理画面などの UI を検証する Playwright E2E があります（`frontend/e2e/*.spec.ts`）。
 
 **前提条件**:
 - バックエンド（既定 `http://localhost:8080/api/v1`、環境変数 `PLAYWRIGHT_API_URL` で変更可）が起動していること
@@ -122,7 +122,6 @@ npm run test:e2e:server -- e2e/login.spec.ts
 | [workflow_test.go](backend/test/workflow_test.go) | （レガシー）ワークフロー CRUD 等。Issue 管理方針では廃止方向の API |
 | [department_test.go](backend/test/department_test.go) | 部署 CRUD、正常系フロー（一覧→作成→更新→削除）、ユーザー部署紐づけ |
 | [template_test.go](backend/test/template_test.go) | テンプレート CRUD、テンプレートからの Issue 作成 |
-| [approval_test.go](backend/test/approval_test.go) | （レガシー）承認 API。Issue 管理方針では廃止方向 |
 | [organization_test.go](backend/test/organization_test.go) | 組織 CRUD、ユーザー追加、SuperAdmin ログイン、管理画面ユーザー一覧 |
 | [login_test.go](backend/test/login_test.go) | **一般ユーザーログイン**（`POST /admin/login`）正常系・異常系、JWT で `GET /users/:id/organizations` |
 | [cross_org_authorization_test.go](backend/test/cross_org_authorization_test.go) | クロス組織アクセス不可（多テナント境界） |

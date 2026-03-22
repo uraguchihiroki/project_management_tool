@@ -6,16 +6,9 @@ import { Shield, ShieldOff, X, Check, Plus, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from '@/lib/api'
 import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
-import type { Role, User, Department } from '@/types'
+import type { User, Department } from '@/types'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
-
-async function fetchRoles(orgId?: string): Promise<Role[]> {
-  const url = orgId ? `${API}/roles?org_id=${orgId}` : `${API}/roles`
-  const res = await fetch(url)
-  const json = await res.json()
-  return json.data ?? []
-}
 
 async function fetchDepartments(orgId: string): Promise<Department[]> {
   const res = await fetch(`${API}/organizations/${orgId}/departments`)
@@ -38,11 +31,6 @@ export default function AdminUsersPage() {
     queryFn: () => getAdminUsers(currentOrg!.id),
     enabled: authFetch && !!currentOrg?.id,
   })
-  const { data: allRoles = [] } = useQuery({
-    queryKey: ['roles', currentOrg?.id],
-    queryFn: () => fetchRoles(currentOrg?.id),
-    enabled: authFetch && !!currentOrg?.id,
-  })
   const { data: allDepartments = [] } = useQuery({
     queryKey: ['departments', currentOrg?.id],
     queryFn: () => fetchDepartments(currentOrg!.id),
@@ -52,10 +40,8 @@ export default function AdminUsersPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [createForm, setCreateForm] = useState({ name: '', email: '' })
   const [editingNameUserId, setEditingNameUserId] = useState<string | null>(null)
-  const [editingRoleUserId, setEditingRoleUserId] = useState<string | null>(null)
   const [editingDeptUserId, setEditingDeptUserId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
-  const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([])
   const [selectedDeptIds, setSelectedDeptIds] = useState<string[]>([])
   const [userDepartmentsCache, setUserDepartmentsCache] = useState<Record<string, Department[]>>({})
 
@@ -93,21 +79,6 @@ export default function AdminUsersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-users'] }),
   })
 
-  const assignRolesMutation = useMutation({
-    mutationFn: async ({ userId, roleIds }: { userId: string; roleIds: number[] }) => {
-      const res = await fetch(`${API}/users/${userId}/roles`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role_ids: roleIds }),
-      })
-      if (!res.ok) throw new Error('役職の更新に失敗しました')
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
-      setEditingRoleUserId(null)
-    },
-  })
-
   const assignDepartmentsMutation = useMutation({
     mutationFn: async ({ userId, deptIds }: { userId: string; deptIds: string[] }) => {
       const res = await fetch(`${API}/users/${userId}/departments?org_id=${currentOrg!.id}`, {
@@ -125,11 +96,6 @@ export default function AdminUsersPage() {
     },
   })
 
-  const startRoleEdit = (user: User) => {
-    setEditingRoleUserId(user.id)
-    setSelectedRoleIds((user.roles ?? []).map((r) => r.id))
-  }
-
   const startDeptEdit = async (user: User) => {
     setEditingDeptUserId(user.id)
     const depts = await fetchUserDepartments(currentOrg!.id, user.id)
@@ -140,12 +106,6 @@ export default function AdminUsersPage() {
   const startNameEdit = (user: User) => {
     setEditingNameUserId(user.id)
     setEditingName(user.name)
-  }
-
-  const toggleRole = (roleId: number) => {
-    setSelectedRoleIds((prev) =>
-      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId]
-    )
   }
 
   const toggleDept = (deptId: string) => {
@@ -168,7 +128,7 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">ユーザー管理</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {currentOrg.name} のユーザーを管理します（作成・更新・削除・役職）
+            {currentOrg.name} のユーザーを管理します（作成・更新・削除・部署）
           </p>
         </div>
         <button
@@ -240,7 +200,6 @@ export default function AdminUsersPage() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">ユーザー</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">役職</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">部署</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-24">管理者</th>
                 <th className="px-4 py-3 w-32"></th>
@@ -288,71 +247,6 @@ export default function AdminUsersPage() {
                         </button>
                       </div>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {editingRoleUserId === user.id ? (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {allRoles.length === 0 ? (
-                            <span className="text-xs text-gray-400">役職がありません</span>
-                          ) : (
-                            allRoles.map((role) => (
-                              <button
-                                key={role.id}
-                                onClick={() => toggleRole(role.id)}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
-                                  selectedRoleIds.includes(role.id)
-                                    ? 'bg-blue-100 text-blue-700 border-blue-300'
-                                    : 'bg-white text-gray-500 border-gray-300 hover:border-blue-300'
-                                }`}
-                              >
-                                <span>Lv.{role.level}</span>
-                                <span>{role.name}</span>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                        <div className="flex gap-1.5">
-                          <button
-                            onClick={() => assignRolesMutation.mutate({ userId: user.id, roleIds: selectedRoleIds })}
-                            disabled={assignRolesMutation.isPending}
-                            className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white rounded-md text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                          >
-                            <Check className="w-3 h-3" />
-                            保存
-                          </button>
-                          <button
-                            onClick={() => setEditingRoleUserId(null)}
-                            className="flex items-center gap-1 px-2.5 py-1 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors"
-                          >
-                            <X className="w-3 h-3" />
-                            キャンセル
-                          </button>
-                        </div>
-                      </div>
-                    ) : editingRoleUserId !== user.id ? (
-                      <button
-                        onClick={() => startRoleEdit(user)}
-                        className="flex flex-wrap gap-1 group"
-                        title="クリックして役職を編集"
-                      >
-                        {(user.roles ?? []).length === 0 ? (
-                          <span className="text-xs text-gray-400 group-hover:text-blue-500 transition-colors">
-                            役職なし（クリックして設定）
-                          </span>
-                        ) : (
-                          (user.roles ?? []).map((role) => (
-                            <span
-                              key={role.id}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-medium"
-                            >
-                              <span className="text-blue-400">Lv.{role.level}</span>
-                              {role.name}
-                            </span>
-                          ))
-                        )}
-                      </button>
-                    ) : null}
                   </td>
                   <td className="px-4 py-3">
                     {editingDeptUserId === user.id ? (
@@ -435,14 +329,8 @@ export default function AdminUsersPage() {
                     </button>
                   </td>
                   <td className="px-4 py-3">
-                    {editingNameUserId !== user.id && editingRoleUserId !== user.id && editingDeptUserId !== user.id && (
+                    {editingNameUserId !== user.id && editingDeptUserId !== user.id && (
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => startRoleEdit(user)}
-                          className="text-xs text-blue-600 hover:underline"
-                        >
-                          役職編集
-                        </button>
                         <button
                           onClick={() => startDeptEdit(user)}
                           className="text-xs text-green-600 hover:underline"
