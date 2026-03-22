@@ -12,6 +12,8 @@ import (
 type TransitionAlertEvaluator struct {
 	Rules repository.TransitionAlertRuleRepository
 	UG    repository.UserGroupRepository
+	// AlertFunc が非 nil のとき、想定外 actor 検知時にログの代わりに呼ぶ（テスト用）
+	AlertFunc func(rule *model.TransitionAlertRule, issue *model.Issue, actorID uuid.UUID)
 }
 
 // OnStatusChanged はインプリント記録後に呼ぶ。想定外 actor ならログに出す（将来メール）
@@ -31,6 +33,10 @@ func (e *TransitionAlertEvaluator) OnStatusChanged(issue *model.Issue, fromStatu
 			continue
 		}
 		if e.UG != nil && e.UG.IsMember(actorID, *rule.ExpectedGroupID) {
+			continue
+		}
+		if e.AlertFunc != nil {
+			e.AlertFunc(rule, issue, actorID)
 			continue
 		}
 		log.Printf("[transition-alert] rule=%q issue=%s actor=%s not in expected_group=%s (notify_group=%v)",

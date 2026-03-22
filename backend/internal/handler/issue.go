@@ -1,23 +1,23 @@
 package handler
 
 import (
-	"log"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
+	"gorm.io/gorm"
 )
 
 type IssueHandler struct {
-	issueService    service.IssueService
-	approvalService service.ApprovalService
-	projectService  service.ProjectService
+	issueService   service.IssueService
+	projectService service.ProjectService
 }
 
-func NewIssueHandler(issueService service.IssueService, approvalService service.ApprovalService, projectService service.ProjectService) *IssueHandler {
-	return &IssueHandler{issueService: issueService, approvalService: approvalService, projectService: projectService}
+func NewIssueHandler(issueService service.IssueService, projectService service.ProjectService) *IssueHandler {
+	return &IssueHandler{issueService: issueService, projectService: projectService}
 }
 
 func (h *IssueHandler) List(c echo.Context) error {
@@ -97,7 +97,6 @@ func (h *IssueHandler) Create(c echo.Context) error {
 		AssigneeID  *string  `json:"assignee_id"`
 		ReporterID  string   `json:"reporter_id" validate:"required,uuid"`
 		TemplateID  *uint    `json:"template_id"`
-		WorkflowID  *uint    `json:"workflow_id"`
 		GroupIDs    []string `json:"group_ids"`
 	}
 	var req Request
@@ -119,7 +118,6 @@ func (h *IssueHandler) Create(c echo.Context) error {
 		Priority:    req.Priority,
 		ReporterID:  reporterID,
 		TemplateID:  req.TemplateID,
-		WorkflowID:  req.WorkflowID,
 	}
 	if req.AssigneeID != nil {
 		aid, err := uuid.Parse(*req.AssigneeID)
@@ -137,12 +135,6 @@ func (h *IssueHandler) Create(c echo.Context) error {
 	issue, err := h.issueService.Create(projectID, input)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-	// ワークフローが紐付いている場合は承認レコードを自動生成
-	if issue.WorkflowID != nil {
-		if err := h.approvalService.InitializeForIssue(issue.ID, *issue.WorkflowID); err != nil {
-			log.Printf("failed to initialize approvals for issue %s: %v", issue.ID, err)
-		}
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": issue})
 }
@@ -212,7 +204,10 @@ func (h *IssueHandler) Update(c echo.Context) error {
 	}
 	issue, err := h.issueService.Update(projectID, number, input, actorID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "issue not found")
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": issue})
 }
@@ -277,7 +272,6 @@ func (h *IssueHandler) CreateForOrg(c echo.Context) error {
 		AssigneeID  *string  `json:"assignee_id"`
 		ReporterID  string   `json:"reporter_id" validate:"required,uuid"`
 		TemplateID  *uint    `json:"template_id"`
-		WorkflowID  *uint    `json:"workflow_id"`
 		GroupIDs    []string `json:"group_ids"`
 	}
 	var req Request
@@ -299,7 +293,6 @@ func (h *IssueHandler) CreateForOrg(c echo.Context) error {
 		Priority:    req.Priority,
 		ReporterID:  reporterID,
 		TemplateID:  req.TemplateID,
-		WorkflowID:  req.WorkflowID,
 	}
 	if req.AssigneeID != nil {
 		aid, err := uuid.Parse(*req.AssigneeID)
@@ -317,11 +310,6 @@ func (h *IssueHandler) CreateForOrg(c echo.Context) error {
 	issue, err := h.issueService.CreateForOrg(orgID, input)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-	if issue.WorkflowID != nil {
-		if err := h.approvalService.InitializeForIssue(issue.ID, *issue.WorkflowID); err != nil {
-			log.Printf("failed to initialize approvals for issue %s: %v", issue.ID, err)
-		}
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": issue})
 }
@@ -400,7 +388,10 @@ func (h *IssueHandler) UpdateByOrgAndNumber(c echo.Context) error {
 	}
 	issue, err := h.issueService.UpdateByOrgAndNumber(orgID, number, input, actorID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "issue not found")
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": issue})
 }

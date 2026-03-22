@@ -38,7 +38,6 @@ func (r *issueEventRepository) Create(ev *model.IssueEvent) error {
 func (r *issueEventRepository) ListByIssueID(issueID uuid.UUID) ([]model.IssueEvent, error) {
 	var out []model.IssueEvent
 	err := r.db.
-		Preload("Actor").
 		Where("issue_id = ?", issueID).
 		Order("occurred_at ASC").
 		Find(&out).Error
@@ -64,7 +63,6 @@ func (r *issueEventRepository) ListByOrganization(orgID uuid.UUID, f IssueEventF
 	}
 	var out []model.IssueEvent
 	err := q.
-		Preload("Actor").
 		Order("occurred_at DESC").
 		Find(&out).Error
 	return out, err

@@ -36,12 +36,24 @@ type ProjectService interface {
 }
 
 type projectService struct {
-	projectRepo repository.ProjectRepository
-	statusRepo  repository.StatusRepository
+	projectRepo    repository.ProjectRepository
+	statusRepo     repository.StatusRepository
+	workflowRepo   repository.WorkflowRepository
+	transitionRepo repository.WorkflowTransitionRepository
 }
 
-func NewProjectService(projectRepo repository.ProjectRepository, statusRepo repository.StatusRepository) ProjectService {
-	return &projectService{projectRepo: projectRepo, statusRepo: statusRepo}
+func NewProjectService(
+	projectRepo repository.ProjectRepository,
+	statusRepo repository.StatusRepository,
+	workflowRepo repository.WorkflowRepository,
+	transitionRepo repository.WorkflowTransitionRepository,
+) ProjectService {
+	return &projectService{
+		projectRepo:    projectRepo,
+		statusRepo:     statusRepo,
+		workflowRepo:   workflowRepo,
+		transitionRepo: transitionRepo,
+	}
 }
 
 func (s *projectService) List(orgID *uuid.UUID) ([]model.Project, error) {
@@ -52,7 +64,18 @@ func (s *projectService) List(orgID *uuid.UUID) ([]model.Project, error) {
 }
 
 func (s *projectService) Get(id uuid.UUID) (*model.Project, error) {
-	return s.projectRepo.FindByID(id)
+	p, err := s.projectRepo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if p.DefaultWorkflowID != nil {
+		sts, err := s.statusRepo.FindByWorkflowID(*p.DefaultWorkflowID)
+		if err != nil {
+			return nil, err
+		}
+		p.Statuses = sts
+	}
+	return p, nil
 }
 
 func (s *projectService) Create(input CreateProjectInput) (*model.Project, error) {
@@ -77,35 +100,17 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 		return nil, err
 	}
 
-	// デフォルトステータスを生成
-	defaultStatuses := []struct {
-		Name  string
-		Color string
-		Order int
-	}{
-		{"未着手", "#6B7280", 1},
-		{"進行中", "#3B82F6", 2},
-		{"レビュー中", "#F59E0B", 3},
-		{"完了", "#10B981", 4},
+	wfName := input.Name + " - Issue"
+	wfID, _, err := CreateWorkflowWithIssueStatuses(s.workflowRepo, s.statusRepo, s.transitionRepo, input.OrganizationID, wfName)
+	if err != nil {
+		return nil, err
 	}
-	for _, ds := range defaultStatuses {
-		statusID := uuid.New()
-		status := &model.Status{
-			ID:        statusID,
-			Key:       "sts-" + statusID.String(),
-			ProjectID: &project.ID,
-			Name:      ds.Name,
-			Color:     ds.Color,
-			Order:     ds.Order,
-			Type:      "issue",
-		}
-		if err := s.statusRepo.Create(status); err != nil {
-			return nil, err
-		}
+	project.DefaultWorkflowID = &wfID
+	if err := s.projectRepo.Update(project); err != nil {
+		return nil, err
 	}
 
-	// ステータスを含めて再取得
-	return s.projectRepo.FindByID(project.ID)
+	return s.Get(project.ID)
 }
 
 func (s *projectService) Update(id uuid.UUID, input UpdateProjectInput) (*model.Project, error) {

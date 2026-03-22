@@ -76,7 +76,6 @@ func (h *TemplateHandler) Create(c echo.Context) error {
 		Description     string `json:"description"`
 		Body            string `json:"body"`
 		DefaultPriority string `json:"default_priority"`
-		WorkflowID      *uint  `json:"workflow_id"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -95,7 +94,7 @@ func (h *TemplateHandler) Create(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid project_id")
 	}
-	tmpl, err := h.templateService.CreateTemplate(projectID, req.Name, req.Description, req.Body, req.DefaultPriority, req.WorkflowID)
+	tmpl, err := h.templateService.CreateTemplate(projectID, req.Name, req.Description, req.Body, req.DefaultPriority)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -150,7 +149,6 @@ func (h *TemplateHandler) Update(c echo.Context) error {
 		Description     string `json:"description"`
 		Body            string `json:"body"`
 		DefaultPriority string `json:"default_priority"`
-		WorkflowID      *uint  `json:"workflow_id"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -159,7 +157,7 @@ func (h *TemplateHandler) Update(c echo.Context) error {
 	if req.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
-	tmpl, err := h.templateService.UpdateTemplate(uint(id), req.Name, req.Description, req.Body, req.DefaultPriority, req.WorkflowID)
+	tmpl, err := h.templateService.UpdateTemplate(uint(id), req.Name, req.Description, req.Body, req.DefaultPriority)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}

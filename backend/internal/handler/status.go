@@ -57,7 +57,7 @@ func (h *StatusHandler) Update(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "status not found")
 	}
 	if !isSuperAdmin {
-		if current.OrganizationID == nil || orgScope == nil || *current.OrganizationID != *orgScope {
+		if current.Workflow.ID == 0 || orgScope == nil || current.Workflow.OrganizationID != *orgScope {
 			return echo.NewHTTPError(http.StatusNotFound, "status not found")
 		}
 	}
@@ -92,7 +92,7 @@ func (h *StatusHandler) Delete(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "status not found")
 	}
 	if !isSuperAdmin {
-		if current.OrganizationID == nil || orgScope == nil || *current.OrganizationID != *orgScope {
+		if current.Workflow.ID == 0 || orgScope == nil || current.Workflow.OrganizationID != *orgScope {
 			return echo.NewHTTPError(http.StatusNotFound, "status not found")
 		}
 	}

@@ -18,16 +18,17 @@ type StatusService interface {
 	Delete(id uuid.UUID) error
 }
 
+type statusService struct {
+	statusRepo   repository.StatusRepository
+	workflowRepo repository.WorkflowRepository
+}
+
+func NewStatusService(statusRepo repository.StatusRepository, workflowRepo repository.WorkflowRepository) StatusService {
+	return &statusService{statusRepo: statusRepo, workflowRepo: workflowRepo}
+}
+
 func (s *statusService) Get(id uuid.UUID) (*model.Status, error) {
 	return s.statusRepo.FindByID(id)
-}
-
-type statusService struct {
-	statusRepo repository.StatusRepository
-}
-
-func NewStatusService(statusRepo repository.StatusRepository) StatusService {
-	return &statusService{statusRepo: statusRepo}
 }
 
 func (s *statusService) Create(orgID uuid.UUID, name, color, statusType string, order int) (*model.Status, error) {
@@ -43,21 +44,29 @@ func (s *statusService) Create(orgID uuid.UUID, name, color, statusType string, 
 	if statusType != "issue" && statusType != "project" {
 		statusType = "issue"
 	}
+	wfName := "組織Issue"
+	if statusType == "project" {
+		wfName = "組織Project"
+	}
+	wf, err := s.workflowRepo.FindByOrgAndName(orgID, wfName)
+	if err != nil {
+		return nil, fmt.Errorf("ワークフロー %s が見つかりません（組織シードを実行してください）: %w", wfName, err)
+	}
 	statusID := uuid.New()
 	key := "sts-" + statusID.String()
 	status := &model.Status{
-		ID:             statusID,
-		Key:            key,
-		OrganizationID: &orgID,
-		Name:           name,
-		Color:          color,
-		Order:          order,
-		Type:           statusType,
+		ID:         statusID,
+		Key:        key,
+		WorkflowID: wf.ID,
+		Name:       name,
+		Color:      color,
+		Order:      order,
+		Type:       statusType,
 	}
 	if err := s.statusRepo.Create(status); err != nil {
 		return nil, err
 	}
-	return status, nil
+	return s.statusRepo.FindByID(statusID)
 }
 
 func (s *statusService) Update(id uuid.UUID, name, color string, order int) (*model.Status, error) {
@@ -84,7 +93,7 @@ func (s *statusService) Update(id uuid.UUID, name, color string, order int) (*mo
 	if err := s.statusRepo.Update(status); err != nil {
 		return nil, err
 	}
-	return status, nil
+	return s.statusRepo.FindByID(id)
 }
 
 func (s *statusService) Delete(id uuid.UUID) error {

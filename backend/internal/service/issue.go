@@ -21,7 +21,6 @@ type CreateIssueInput struct {
 	AssigneeID  *uuid.UUID
 	ReporterID  uuid.UUID
 	TemplateID  *uint
-	WorkflowID  *uint
 	GroupIDs    []uuid.UUID
 }
 
@@ -53,17 +52,23 @@ type IssueService interface {
 }
 
 type issueService struct {
-	issueRepo      repository.IssueRepository
-	projectRepo    repository.ProjectRepository
-	eventRepo      repository.IssueEventRepository
-	groupRepo      repository.GroupRepository
-	issueGroupRepo repository.IssueGroupRepository
-	alertEval      *TransitionAlertEvaluator
+	issueRepo        repository.IssueRepository
+	projectRepo      repository.ProjectRepository
+	statusRepo       repository.StatusRepository
+	workflowRepo     repository.WorkflowRepository
+	transitionRepo   repository.WorkflowTransitionRepository
+	eventRepo        repository.IssueEventRepository
+	groupRepo        repository.GroupRepository
+	issueGroupRepo   repository.IssueGroupRepository
+	alertEval        *TransitionAlertEvaluator
 }
 
 func NewIssueService(
 	issueRepo repository.IssueRepository,
 	projectRepo repository.ProjectRepository,
+	statusRepo repository.StatusRepository,
+	workflowRepo repository.WorkflowRepository,
+	transitionRepo repository.WorkflowTransitionRepository,
 	eventRepo repository.IssueEventRepository,
 	groupRepo repository.GroupRepository,
 	issueGroupRepo repository.IssueGroupRepository,
@@ -72,11 +77,57 @@ func NewIssueService(
 	return &issueService{
 		issueRepo:      issueRepo,
 		projectRepo:    projectRepo,
+		statusRepo:     statusRepo,
+		workflowRepo:   workflowRepo,
+		transitionRepo: transitionRepo,
 		eventRepo:      eventRepo,
 		groupRepo:      groupRepo,
 		issueGroupRepo: issueGroupRepo,
 		alertEval:      alertEval,
 	}
+}
+
+func (s *issueService) workflowIDForNewIssue(project *model.Project, orgID uuid.UUID, statusID uuid.UUID) (uint, error) {
+	st, err := s.statusRepo.FindByID(statusID)
+	if err != nil {
+		return 0, fmt.Errorf("status: %w", err)
+	}
+	if project != nil {
+		if project.DefaultWorkflowID == nil {
+			return 0, fmt.Errorf("project has no default workflow")
+		}
+		if st.WorkflowID != *project.DefaultWorkflowID {
+			return 0, fmt.Errorf("status does not belong to project workflow")
+		}
+		return st.WorkflowID, nil
+	}
+	wf, err := s.workflowRepo.FindByOrgAndName(orgID, "組織Issue")
+	if err != nil {
+		return 0, fmt.Errorf("組織Issue workflow: %w", err)
+	}
+	if st.WorkflowID != wf.ID {
+		return 0, fmt.Errorf("status does not belong to organization issue workflow")
+	}
+	return st.WorkflowID, nil
+}
+
+func (s *issueService) validateStatusChange(tx *gorm.DB, issue *model.Issue, newStatusID uuid.UUID) error {
+	if issue.StatusID == newStatusID {
+		return nil
+	}
+	sr := repository.NewStatusRepository(tx)
+	tr := repository.NewWorkflowTransitionRepository(tx)
+	newSt, err := sr.FindByID(newStatusID)
+	if err != nil {
+		return fmt.Errorf("status: %w", err)
+	}
+	if newSt.WorkflowID != issue.WorkflowID {
+		return fmt.Errorf("status not in issue workflow")
+	}
+	if !tr.Exists(issue.WorkflowID, issue.StatusID, newStatusID) {
+		return fmt.Errorf("transition not allowed")
+	}
+	return nil
 }
 
 func (s *issueService) validateGroupIDsForOrg(orgID uuid.UUID, ids []uuid.UUID) error {
@@ -168,6 +219,11 @@ func (s *issueService) Create(projectID uuid.UUID, input CreateIssueInput) (*mod
 		priority = "medium"
 	}
 
+	wfID, err := s.workflowIDForNewIssue(project, orgID, input.StatusID)
+	if err != nil {
+		return nil, err
+	}
+
 	issueID := uuid.New()
 	key := fmt.Sprintf("%s-%d", project.Key, nextNum)
 	issue := &model.Issue{
@@ -183,7 +239,7 @@ func (s *issueService) Create(projectID uuid.UUID, input CreateIssueInput) (*mod
 		OrganizationID: orgID,
 		ProjectID:      &projectID,
 		TemplateID:     input.TemplateID,
-		WorkflowID:     input.WorkflowID,
+		WorkflowID:     wfID,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 	}
@@ -213,6 +269,11 @@ func (s *issueService) CreateForOrg(orgID uuid.UUID, input CreateIssueInput) (*m
 		priority = "medium"
 	}
 
+	wfID, err := s.workflowIDForNewIssue(nil, orgID, input.StatusID)
+	if err != nil {
+		return nil, err
+	}
+
 	issueID := uuid.New()
 	issue := &model.Issue{
 		ID:             issueID,
@@ -227,7 +288,7 @@ func (s *issueService) CreateForOrg(orgID uuid.UUID, input CreateIssueInput) (*m
 		OrganizationID: orgID,
 		ProjectID:      nil,
 		TemplateID:     input.TemplateID,
-		WorkflowID:     input.WorkflowID,
+		WorkflowID:     wfID,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 	}
@@ -266,6 +327,9 @@ func (s *issueService) Update(projectID uuid.UUID, number int, input UpdateIssue
 			issue.Description = input.Description
 		}
 		if input.StatusID != nil {
+			if err := s.validateStatusChange(tx, issue, *input.StatusID); err != nil {
+				return err
+			}
 			issue.StatusID = *input.StatusID
 		}
 		if input.Priority != nil {
@@ -334,6 +398,9 @@ func (s *issueService) UpdateByOrgAndNumber(orgID uuid.UUID, number int, input U
 			issue.Description = input.Description
 		}
 		if input.StatusID != nil {
+			if err := s.validateStatusChange(tx, issue, *input.StatusID); err != nil {
+				return err
+			}
 			issue.StatusID = *input.StatusID
 		}
 		if input.Priority != nil {
@@ -453,6 +520,9 @@ func (s *issueService) UpdateStatusWithImprint(issueID uuid.UUID, newStatusID uu
 		}
 		if issue.StatusID == newStatusID {
 			return nil
+		}
+		if err := s.validateStatusChange(tx, issue, newStatusID); err != nil {
+			return err
 		}
 		changed = true
 		oldSt = issue.StatusID

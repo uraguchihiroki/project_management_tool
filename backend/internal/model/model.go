@@ -101,22 +101,34 @@ type Project struct {
 	Order          int            `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
 	StartDate      *time.Time     `json:"start_date,omitempty"`
 	EndDate        *time.Time     `json:"end_date,omitempty"`
-	Statuses       []Status       `gorm:"foreignKey:ProjectID" json:"statuses,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+	DefaultWorkflowID *uint          `gorm:"index" json:"default_workflow_id,omitempty"`
+	Statuses          []Status       `gorm:"-" json:"statuses,omitempty"` // API 応答用（default_workflow の列）
+	CreatedAt         time.Time      `json:"created_at"`
+	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
+// Status は常に1ワークフローに属し、ワークフロー間で共有しない
 type Status struct {
-	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	Key            string         `gorm:"size:255;not null" json:"key"`
-	ProjectID      *uuid.UUID     `gorm:"type:uuid" json:"project_id,omitempty"`
-	OrganizationID *uuid.UUID     `gorm:"type:uuid" json:"organization_id,omitempty"`
-	Name           string         `gorm:"size:50;not null" json:"name"`
-	Color          string         `gorm:"size:7;not null" json:"color"`
-	Order          int            `gorm:"not null" json:"order"`
-	Type           string         `gorm:"size:20;not null;default:'issue'" json:"type"` // issue | project
-	StatusKey      string         `gorm:"size:50;index" json:"status_key,omitempty"`    // sts_start, sts_goal。空=ユーザー定義
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	Key        string    `gorm:"size:255;not null" json:"key"`
+	WorkflowID uint      `gorm:"not null;index" json:"workflow_id"`
+	Workflow   Workflow  `gorm:"foreignKey:WorkflowID" json:"workflow,omitempty"`
+	Name       string    `gorm:"size:50;not null" json:"name"`
+	Color      string    `gorm:"size:7;not null" json:"color"`
+	Order      int       `gorm:"not null" json:"order"`
+	Type       string    `gorm:"size:20;not null;default:'issue'" json:"type"` // issue | project
+	StatusKey  string    `gorm:"size:50;index" json:"status_key,omitempty"`    // sts_start, sts_goal。空=ユーザー定義
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// WorkflowTransition は同一ワークフロー内の許可遷移（from → to）
+type WorkflowTransition struct {
+	ID           uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	Key          string    `gorm:"size:255;not null" json:"key"`
+	WorkflowID   uint      `gorm:"not null;index" json:"workflow_id"`
+	FromStatusID uuid.UUID `gorm:"type:uuid;not null" json:"from_status_id"`
+	ToStatusID   uuid.UUID `gorm:"type:uuid;not null" json:"to_status_id"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // Group は組織スコープのグループ（開示・通知・タグ等）
@@ -179,27 +191,11 @@ type Issue struct {
 	ProjectID      *uuid.UUID     `gorm:"type:uuid" json:"project_id,omitempty"`
 	DueDate        *time.Time     `json:"due_date,omitempty"`
 	TemplateID     *uint          `json:"template_id,omitempty"`
-	WorkflowID     *uint          `json:"workflow_id,omitempty"`
+	WorkflowID     uint           `gorm:"not null;index" json:"workflow_id"`
 	Comments       []Comment      `gorm:"foreignKey:IssueID" json:"comments,omitempty"`
 	Groups         []Group        `gorm:"-" json:"groups,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
-}
-
-type IssueApproval struct {
-	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	Key            string         `gorm:"size:255;not null" json:"key"`
-	OrganizationID uuid.UUID      `gorm:"type:uuid;not null" json:"organization_id"`
-	IssueID        uuid.UUID      `gorm:"type:uuid;not null" json:"issue_id"`
-	WorkflowStepID uint           `gorm:"not null" json:"workflow_step_id"`
-	WorkflowStep   WorkflowStep   `gorm:"foreignKey:WorkflowStepID" json:"workflow_step,omitempty"`
-	ApproverID     *uuid.UUID     `gorm:"type:uuid" json:"approver_id,omitempty"`
-	Approver       *User          `gorm:"foreignKey:ApproverID" json:"approver,omitempty"`
-	Status         string         `gorm:"size:20;not null;default:'pending'" json:"status"`
-	Comment        string         `gorm:"type:text" json:"comment"`
-	ActedAt        *time.Time     `json:"acted_at,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
@@ -213,8 +209,6 @@ type IssueTemplate struct {
 	Description     string         `gorm:"size:500" json:"description"`
 	Body            string         `gorm:"type:text" json:"body"`
 	DefaultPriority string         `gorm:"size:20;not null;default:'medium'" json:"default_priority"`
-	WorkflowID      *uint          `json:"workflow_id,omitempty"`
-	Workflow        *Workflow      `gorm:"foreignKey:WorkflowID" json:"workflow,omitempty"`
 	Order           int            `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
 	CreatedAt       time.Time      `json:"created_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
@@ -241,46 +235,8 @@ type Workflow struct {
 	Name           string         `gorm:"size:200;not null" json:"name"`
 	Description    string         `gorm:"size:500" json:"description"`
 	Order          int            `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
-	Steps          []WorkflowStep `gorm:"foreignKey:WorkflowID" json:"steps,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
-}
-
-type WorkflowStep struct {
-	ID              uint             `gorm:"primaryKey;autoIncrement" json:"id"`
-	Key             string           `gorm:"size:255;not null" json:"key"`
-	OrganizationID  uuid.UUID        `gorm:"type:uuid;not null" json:"organization_id"`
-	WorkflowID      uint             `gorm:"not null" json:"workflow_id"`
-	StatusID        uuid.UUID        `gorm:"type:uuid;not null" json:"status_id"` // このステップのステータス。表示名は Status.Name
-	Status          *Status          `gorm:"foreignKey:StatusID" json:"status,omitempty"`
-	NextStatusID    *uuid.UUID       `gorm:"type:uuid" json:"next_status_id,omitempty"` // 承認後ステータス。ゴールでは NULL
-	NextStatus      *Status          `gorm:"foreignKey:NextStatusID" json:"next_status,omitempty"`
-	Description     string           `gorm:"type:text" json:"description"`
-	Threshold       int              `gorm:"not null;default:10" json:"threshold"`
-	ApprovalObjects []ApprovalObject `gorm:"foreignKey:WorkflowStepID" json:"approval_objects,omitempty"`
-	ExcludeReporter bool             `gorm:"default:false" json:"exclude_reporter"`
-	ExcludeAssignee bool             `gorm:"default:false" json:"exclude_assignee"`
-	// 後方互換（Order は status チェーンで辿るため未使用だが既存データ用に残す）
-	Order     int            `gorm:"not null;default:1" json:"order"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-}
-
-type ApprovalObject struct {
-	ID              uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	Key             string         `gorm:"size:255;not null" json:"key"`
-	OrganizationID  uuid.UUID      `gorm:"type:uuid;not null" json:"organization_id"`
-	WorkflowStepID  uint           `gorm:"not null" json:"workflow_step_id"`
-	Order           int            `gorm:"column:sort_order;not null;default:1" json:"order"`
-	Type            string         `gorm:"size:20;not null" json:"type"` // role / user
-	RoleID          *uint          `json:"role_id,omitempty"`
-	Role            *Role          `gorm:"foreignKey:RoleID" json:"role,omitempty"`
-	RoleOperator    string         `gorm:"size:10" json:"role_operator,omitempty"` // eq / gte
-	UserID          *uuid.UUID     `gorm:"type:uuid" json:"user_id,omitempty"`
-	User            *User          `gorm:"foreignKey:UserID" json:"user,omitempty"`
-	Points          int            `gorm:"not null;default:1" json:"points"`
-	ExcludeReporter bool           `gorm:"default:false" json:"exclude_reporter"`
-	ExcludeAssignee bool           `gorm:"default:false" json:"exclude_assignee"`
-	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // IssueEvent は Issue に対する操作事実の1記録（インプリント）。追記のみ。
@@ -290,7 +246,6 @@ type IssueEvent struct {
 	OrganizationID       uuid.UUID      `gorm:"type:uuid;not null;index" json:"organization_id"`
 	IssueID              uuid.UUID      `gorm:"type:uuid;not null;index" json:"issue_id"`
 	ActorID              uuid.UUID      `gorm:"type:uuid;not null;index" json:"actor_id"`
-	Actor                User           `gorm:"foreignKey:ActorID" json:"actor,omitempty"`
 	EventType            string         `gorm:"size:80;not null;index" json:"event_type"`
 	OccurredAt           time.Time      `gorm:"not null;index" json:"occurred_at"`
 	FromStatusID         *uuid.UUID     `gorm:"type:uuid" json:"from_status_id,omitempty"`

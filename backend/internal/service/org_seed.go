@@ -24,6 +24,8 @@ type orgSeedService struct {
 	projectRepo    repository.ProjectRepository
 	departmentRepo repository.DepartmentRepository
 	issueRepo      repository.IssueRepository
+	workflowRepo   repository.WorkflowRepository
+	transitionRepo repository.WorkflowTransitionRepository
 }
 
 func NewOrgSeedService(
@@ -33,6 +35,8 @@ func NewOrgSeedService(
 	projectRepo repository.ProjectRepository,
 	departmentRepo repository.DepartmentRepository,
 	issueRepo repository.IssueRepository,
+	workflowRepo repository.WorkflowRepository,
+	transitionRepo repository.WorkflowTransitionRepository,
 ) OrgSeedService {
 	return &orgSeedService{
 		orgRepo:        orgRepo,
@@ -41,47 +45,60 @@ func NewOrgSeedService(
 		projectRepo:    projectRepo,
 		departmentRepo: departmentRepo,
 		issueRepo:      issueRepo,
+		workflowRepo:   workflowRepo,
+		transitionRepo: transitionRepo,
 	}
 }
 
+func (s *orgSeedService) ensureOrgIssueWorkflow(orgID uuid.UUID) error {
+	_, err := s.workflowRepo.FindByOrgAndName(orgID, "組織Issue")
+	if err == nil {
+		return nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return err
+	}
+	_, _, err = CreateWorkflowWithIssueStatuses(s.workflowRepo, s.statusRepo, s.transitionRepo, orgID, "組織Issue")
+	return err
+}
+
+func (s *orgSeedService) ensureOrgProjectWorkflow(orgID uuid.UUID) error {
+	_, err := s.workflowRepo.FindByOrgAndName(orgID, "組織Project")
+	if err == nil {
+		return nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return err
+	}
+	_, _, err = CreateWorkflowWithProjectStatuses(s.workflowRepo, s.statusRepo, s.transitionRepo, orgID, "組織Project")
+	return err
+}
+
+func (s *orgSeedService) ensureProjectDefaultWorkflow(project *model.Project) error {
+	if project.DefaultWorkflowID != nil {
+		return nil
+	}
+	wfID, _, err := CreateWorkflowWithIssueStatuses(
+		s.workflowRepo, s.statusRepo, s.transitionRepo,
+		project.OrganizationID,
+		project.Name+" - Issue",
+	)
+	if err != nil {
+		return err
+	}
+	project.DefaultWorkflowID = &wfID
+	return s.projectRepo.Update(project)
+}
+
 // SeedNewOrganization は新規組織にステータス・役職・サンプルプロジェクトを投入する
-// 既存レコードは更新、なければ作成。開発中に何度でも実行可能（冪等）
-// ownerID が nil の場合はサンプルプロジェクトは作成しない
 func (s *orgSeedService) SeedNewOrganization(orgID uuid.UUID, ownerID *uuid.UUID) error {
-	// 1. 組織用ステータス（Issue用: カンバン列）
-	issueStatuses := []struct {
-		Name  string
-		Color string
-		Order int
-	}{
-		{"未着手", "#6B7280", 1},
-		{"進行中", "#3B82F6", 2},
-		{"レビュー中", "#F59E0B", 3},
-		{"完了", "#10B981", 4},
+	if err := s.ensureOrgIssueWorkflow(orgID); err != nil {
+		return err
 	}
-	for _, st := range issueStatuses {
-		if err := s.upsertOrgStatus(orgID, nil, st.Name, "issue", st.Color, st.Order); err != nil {
-			return err
-		}
+	if err := s.ensureOrgProjectWorkflow(orgID); err != nil {
+		return err
 	}
 
-	// 2. 組織用ステータス（Project用: ライフサイクル）
-	projectStatuses := []struct {
-		Name  string
-		Color string
-		Order int
-	}{
-		{"計画中", "#6B7280", 1},
-		{"進行中", "#3B82F6", 2},
-		{"完了", "#10B981", 3},
-	}
-	for _, st := range projectStatuses {
-		if err := s.upsertOrgStatus(orgID, nil, st.Name, "project", st.Color, st.Order); err != nil {
-			return err
-		}
-	}
-
-	// 3. 役職
 	roles := []struct {
 		Name  string
 		Level int
@@ -97,7 +114,6 @@ func (s *orgSeedService) SeedNewOrganization(orgID uuid.UUID, ownerID *uuid.UUID
 		}
 	}
 
-	// 4. 部署
 	departments := []string{"開発部", "営業部", "管理部"}
 	for i, name := range departments {
 		if err := s.upsertDepartment(orgID, name, i+1); err != nil {
@@ -105,30 +121,15 @@ func (s *orgSeedService) SeedNewOrganization(orgID uuid.UUID, ownerID *uuid.UUID
 		}
 	}
 
-	// 5. サンプルプロジェクト（owner がいる場合のみ）
 	if ownerID != nil {
 		project, err := s.upsertSampleProject(orgID, *ownerID)
 		if err != nil {
 			return err
 		}
 		if project != nil {
-			// 6. サンプルプロジェクト用のIssueステータス
-			issueStatusesForProject := []struct {
-				Name  string
-				Color string
-				Order int
-			}{
-				{"未着手", "#6B7280", 1},
-				{"進行中", "#3B82F6", 2},
-				{"レビュー中", "#F59E0B", 3},
-				{"完了", "#10B981", 4},
+			if err := s.ensureProjectDefaultWorkflow(project); err != nil {
+				return err
 			}
-			for _, st := range issueStatusesForProject {
-				if err := s.upsertOrgStatus(orgID, &project.ID, st.Name, "issue", st.Color, st.Order); err != nil {
-					return err
-				}
-			}
-			// 7. サンプルIssue（プロジェクトに1件もない場合のみ作成）
 			if err := s.upsertSampleIssue(orgID, project.ID, *ownerID); err != nil {
 				return err
 			}
@@ -151,32 +152,6 @@ func (s *orgSeedService) SeedAllOrganizations() error {
 		}
 	}
 	return nil
-}
-
-func (s *orgSeedService) upsertOrgStatus(orgID uuid.UUID, projectID *uuid.UUID, name, statusType, color string, order int) error {
-	existing, err := s.statusRepo.FindByOrgNameType(orgID, projectID, name, statusType)
-	if err == nil {
-		existing.Color = color
-		existing.Order = order
-		return s.statusRepo.Update(existing)
-	}
-	if err != gorm.ErrRecordNotFound {
-		return err
-	}
-	statusID := uuid.New()
-	status := &model.Status{
-		ID:        statusID,
-		Key:       "sts-" + statusID.String(),
-		ProjectID: projectID,
-		Name:      name,
-		Color:     color,
-		Order:     order,
-		Type:      statusType,
-	}
-	if projectID == nil {
-		status.OrganizationID = &orgID
-	}
-	return s.statusRepo.Create(status)
 }
 
 func (s *orgSeedService) upsertRole(orgID uuid.UUID, name string, level int) error {
@@ -258,13 +233,26 @@ func (s *orgSeedService) upsertSampleIssue(orgID uuid.UUID, projectID uuid.UUID,
 	if err != nil || len(issues) > 0 {
 		return err
 	}
+	project, err := s.projectRepo.FindByID(projectID)
+	if err != nil {
+		return err
+	}
+	if err := s.ensureProjectDefaultWorkflow(project); err != nil {
+		return err
+	}
+	project, err = s.projectRepo.FindByID(projectID)
+	if err != nil {
+		return err
+	}
 	statuses, err := s.statusRepo.FindByProject(projectID)
 	if err != nil || len(statuses) == 0 {
 		return err
 	}
+	if project.DefaultWorkflowID == nil {
+		return fmt.Errorf("project has no default workflow")
+	}
 	number, _ := s.issueRepo.NextNumber(projectID)
 	now := time.Now()
-	project, _ := s.projectRepo.FindByID(projectID)
 	issueKey := uuid.New().String()
 	if project != nil {
 		issueKey = fmt.Sprintf("%s-%d", project.Key, number)
@@ -280,6 +268,7 @@ func (s *orgSeedService) upsertSampleIssue(orgID uuid.UUID, projectID uuid.UUID,
 		ReporterID:     reporterID,
 		OrganizationID: orgID,
 		ProjectID:      &projectID,
+		WorkflowID:     *project.DefaultWorkflowID,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	})

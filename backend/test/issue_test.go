@@ -157,7 +157,7 @@ func TestIssue_Update(t *testing.T) {
 
 		ts.req(t, "PUT",
 			fmt.Sprintf("/api/v1/projects/%s/issues/%d", projectID, int(number)),
-			map[string]string{"status_id": secondStatusID})
+			map[string]interface{}{"status_id": secondStatusID})
 
 		// GETで確認
 		_, getResp := ts.req(t, "GET",
