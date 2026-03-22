@@ -2,7 +2,7 @@
 name: reply-end-timestamp
 description: >-
   エージェントの返信末尾に応答時点の日付と時刻の両方を1行付ける（形式: 応答日時 YYYY-MM-DD HH:MM JST）。
-  全プロジェクト適用は Cursor User Rules。本リポでは .cursor/rules/reply-end-timestamp.mdc も alwaysApply。
+  全プロジェクト適用は Cursor User Rules。本リポでは .cursor/rules/reply-end-timestamp.mdc が alwaysApply で最優先。
 ---
 
 # 返信末尾に日時を付ける
@@ -10,17 +10,17 @@ description: >-
 ## 優先順位（どこに書くか）
 
 1. **全 Cursor プロジェクト** … **Cursor Settings → User Rules** にルールを貼る（手順は [docs/cursor-user-rules-reply-timestamp.md](../../../docs/cursor-user-rules-reply-timestamp.md)）。
-2. **本リポジトリ** … [`.cursor/rules/reply-end-timestamp.mdc`](../../rules/reply-end-timestamp.mdc) が `alwaysApply: true` で補強する。
+2. **本リポジトリ** … [`.cursor/rules/reply-end-timestamp.mdc`](../../rules/reply-end-timestamp.mdc) が `alwaysApply: true` で **最優先**。
 
-## ルール
+## ルール（mdc と同一方針）
 
-1. **ユーザーへの返信**（説明・まとめ・レビュー・手順案内など、実質的な文面があるもの）の **最後の行** に、応答時点の **日付と時刻の両方** を付ける。
-2. **形式**（推奨）: `（応答日時: YYYY-MM-DD HH:MM JST）`
-3. **日付の出所**: メッセージに含まれる user_info の `Today's date` があればそれを使う。
-4. **時刻**: user_info に時刻が無い場合は、正確に付けるために **1 回** ターミナルで  
+1. **ユーザーに見える返信テキストが1文字でもあるターン**は、**最後の行**に応答時点の **日付と時刻の両方** を付ける。Plan・説明・手順・箇条書きも含む。
+2. **形式**: `（応答日時: YYYY-MM-DD HH:MM JST）`
+3. **日付**: user_info の `Today's date` があればそれを使う。
+4. **時刻**: 無い場合は **1 回** ターミナルで  
    `TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M %Z'`  
-   を実行してよい（WSL の bash 想定。Windows 版 Cursor + Remote WSL では統合ターミナルが bash になりやすい）。
-5. **例外**: ツール呼び出しのみ・1 語の返答など、末尾に時刻がノイズになるほど短い返信では省略してよい。
+   を実行してよい（WSL bash 想定。Windows 版 Cursor + Remote WSL では統合ターミナルが bash になりやすい）。
+5. **省略可**: **ユーザー向けの自然文・見出し・箇条書きが一切無い**ターンのみ。「はい」「OK」だけは省略可（付けてもよい）。
 
 ## ソースコード内のコメント（任意）
 

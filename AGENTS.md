@@ -41,6 +41,7 @@
 
 **実質的な文面があるユーザー向け返信の最後の行に、日付と時刻の両方を付ける。**
 
+- **各ターンの「ユーザーに見える最終メッセージ」に必ず付ける**（Plan 本文・説明のみの返信も含む。省略できるのは本文ゼロのターンのみ）。詳細は [`.cursor/rules/reply-end-timestamp.mdc`](.cursor/rules/reply-end-timestamp.mdc)。
 - **全 Cursor プロジェクト**で同じにしたい場合の正本は **Cursor User Rules**（Windows 版 Cursor では Windows 側の設定）。**AI がユーザーの Cursor 設定を代わりに書き換えることはできない**ため、人が **1 回** 貼り付ける。手順とコピペ用テキスト → [docs/cursor-user-rules-reply-timestamp.md](docs/cursor-user-rules-reply-timestamp.md)
 - **本リポジトリを開いているとき**は [`.cursor/rules/reply-end-timestamp.mdc`](.cursor/rules/reply-end-timestamp.mdc)（`alwaysApply: true`）も読み込まれる。
 - 形式・`date` コマンド・例 → [`.cursor/skills/reply-end-timestamp/SKILL.md`](.cursor/skills/reply-end-timestamp/SKILL.md)
