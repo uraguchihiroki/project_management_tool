@@ -25,7 +25,7 @@
 | [api-spec.md](api-spec.md) | REST API 仕様・エンドポイント一覧 |
 | [key-flows.md](key-flows.md) | 認証・マルチテナント・ステータス遷移の権限の主要フロー |
 | [visual-flow/](visual-flow/) | 画面設計・遷移（Visual Flow 方式） |
-| [testing.md](testing.md) | テスト方針・実行方法・カバー範囲 |
+| [testing.md](testing.md) | テスト方針・実行方法・カバー範囲・**BB の AAA / 日本語コメント / ログ / アンチパターン** |
 | [dev-guide.md](dev-guide.md) | 新機能追加の手順・規約・ドキュメント更新のタイミング |
 
 ---

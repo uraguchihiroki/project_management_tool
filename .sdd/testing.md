@@ -19,6 +19,66 @@
 
 ---
 
+## ブラックボックステスト（`backend/test`）の記述仕様
+
+HTTP で API を叩きレスポンスで検証するテストの書き方を次に揃える。
+
+### AAA（Arrange – Act – Assert）
+
+1. **Arrange（準備）** … トークン、テストユーザー／組織、リクエストパス・ボディを用意する。
+2. **Act（実行）** … `ts.req` / `ts.reqWithToken` 等で、**このテストで検証したい 1 つの操作**に対応するリクエストを送る（無関係な API を同じテストに詰め込まない）。
+3. **Assert（検証）** … ステータスコードと JSON（または本文）について、**そのテストが証明したいことだけ**を検証する。
+
+コード上はコメントや空行で 3 段が一目で分かるようにする。
+
+### コメントとログ（日本語）
+
+- **コメントは日本語**で書く（識別子・パス・JSON キーは英語のままでよい）。
+- 各テストで次を**コメントで明記**する（関数直後のブロック推奨）:
+  - **何のためのテストか** … 守りたい仕様、再現したい不具合、マトリクス／レジストリのどの行に対応するかなど。
+  - **何を期待しているか** … 例: ステータス、返却の意味、返ってはいけないデータの有無。
+- **Act のあと**、失敗時の調査に役立つよう、**実際に返った結果を `t.Logf` などで残す**（`go test ./test/... -v` でログに出る）。ステータスと要点（ID・件数・エラーメッセージなど）が分かればよい。
+
+### アンチパターン
+
+- **カバレッジを埋めるためだけのテスト** … 仕様やデグレの根拠が書けない、ありきたりな 200 のみの確認、意味のないエンドポイントのならし。追加するテストには必ず「何のため」「何を期待するか」がコメントで説明できること。
+
+### 記述例（骨架）
+
+```go
+func TestExample_TenantIsolation(t *testing.T) {
+	// 目的: 他組織ユーザー JWT では、自組織以外のリソースを取得できないこと。
+	// 期待: GET は 404（または仕様どおりの 403）。
+
+	ts := newTestServer(t)
+	// --- Arrange ---
+	userID := createTestUser(t, ts, "User", "user@example.com")
+	projectID := createTestProject(t, ts, "PRJ", "Project", userID)
+	tokenOtherOrg := mintJWTForOtherOrganization(t, ts) // 実装に合わせて別組織 JWT を用意
+
+	// --- Act ---
+	status, resp := ts.reqWithToken(t, tokenOtherOrg, "GET", "/api/v1/projects/"+projectID, nil)
+	t.Logf("status=%d keys=%v", status, keysOf(resp)) // 実際の結果をログに残す
+
+	// --- Assert ---
+	assertStatus(t, status, http.StatusNotFound, "他組織からはプロジェクトが見えない")
+	_ = resp
+}
+```
+
+> 上記の `mintJWTForOtherOrganization` / `keysOf` は説明用の仮名。既存ヘルパー（別組織ユーザー作成、`reqWithToken` 等）に置き換えること。
+
+### 仕様との関係とテスト修正時の判断（開発者・AI 向け）
+
+人間・AI の両方を想定した節。**テストが赤いときに、実装を直さずテストだけを緑にする**癖を防ぐのが主目的。
+
+- **ブラックボックステストは仕様に基づく契約である。** 根拠として [api-spec.md](api-spec.md)、[tenant-invariants.md](tenant-invariants.md)、[backend/test/TENANT_TEST_MATRIX.md](../backend/test/TENANT_TEST_MATRIX.md)、および該当エンドポイントの api-spec 節を参照する。
+- **テストを修正するときは一度立ち止まる。** その変更が「仕様の意図を正しく反映した更新」か、「実装バグを隠すための緩和」ではないかを考える。
+- **テストを変えるべきではない**と判断したら → **実装（コード）の修正に戻る**。
+- **仕様どうしが矛盾する**、または **仕様の解釈が割れている**と考えたら → **作業を中断しユーザーと確認する**（テストも仕様も勝手に書き換えない）。
+
+---
+
 ## 実行方法
 
 ### バックエンド単体テスト

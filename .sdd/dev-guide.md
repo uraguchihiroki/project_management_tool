@@ -32,7 +32,7 @@
 
 - [backend/test/](backend/test/) にテストを追加
 - [setup_test.go](backend/test/setup_test.go) の `newTestServer` にルートを追加
-- [testing.md](testing.md) を参照
+- [testing.md](testing.md) を参照（**ブラックボックステストの AAA・日本語コメント・ログ・アンチパターン**は同ドキュメントの「記述仕様」節）
 
 ---
 
