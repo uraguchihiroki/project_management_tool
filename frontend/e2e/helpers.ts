@@ -58,10 +58,24 @@ async function ensureOrganizationExistsViaSuperAdmin(request: APIRequestContext)
  * 未登録なら `POST /users`（公開 API）。組織が無い場合はスーパー管理者で組織を1件作成してから再試行。
  */
 export async function ensureLoginableUser(request: APIRequestContext): Promise<void> {
-  const login = await request.post(`${API}/admin/login`, {
-    data: JSON.stringify({ email: E2E_LOGIN_EMAIL }),
-    headers: { 'Content-Type': 'application/json' },
-  })
+  let login
+  try {
+    login = await request.post(`${API}/admin/login`, {
+      data: JSON.stringify({ email: E2E_LOGIN_EMAIL }),
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('ECONNREFUSED') || msg.includes('connect ECONNREFUSED')) {
+      throw new Error(
+        `ensureLoginableUser: API に接続できません (${API})。` +
+          `PostgreSQL 起動後にバックエンドを立ててください: ` +
+          `DATABASE_URL=postgres://... PORT=8080 go run ./cmd/server\n` +
+          `（DB で AutoMigrate が失敗しているとサーバーが起動しません。ログを確認してください。）\n元: ${msg}`,
+      )
+    }
+    throw err
+  }
   if (login.ok()) return
 
   const tryCreateUser = () =>

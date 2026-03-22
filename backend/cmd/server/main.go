@@ -2,11 +2,14 @@ package main
 
 import (
 	"log"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/handler"
+	appdb "github.com/uraguchihiroki/project_management_tool/internal/db"
 	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
@@ -28,6 +31,10 @@ func main() {
 
 	db.SetupJoinTable(&model.User{}, "Roles", &model.UserRole{})
 
+	if err := appdb.PrepareStatusesWorkflowColumn(db); err != nil {
+		log.Fatalf("failed to prepare statuses.workflow_id (legacy DB): %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
@@ -36,11 +43,11 @@ func main() {
 		&model.Department{},
 		&model.OrganizationUserDepartment{},
 		&model.Project{},
+		&model.Workflow{},
 		&model.Status{},
 		&model.WorkflowTransition{},
 		&model.Issue{},
 		&model.Comment{},
-		&model.Workflow{},
 		&model.IssueTemplate{},
 		&model.IssueEvent{},
 		&model.Group{},
@@ -102,8 +109,28 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://localhost:3000", "http://127.0.0.1:3000", "http://frontend:3000"},
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		// 開発: LAN IP や別ポートの Next（WSL / Windows 混在）を許可。本番はリバースプロキシ同オリジンが一般的。
+		AllowOriginFunc: func(origin string) (bool, error) {
+			if origin == "" {
+				return true, nil
+			}
+			u, err := url.Parse(origin)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+				return false, nil
+			}
+			host := u.Hostname()
+			if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+				return true, nil
+			}
+			if host == "frontend" {
+				return true, nil
+			}
+			if strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "172.") {
+				return true, nil
+			}
+			return false, nil
+		},
+		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
 		AllowHeaders: []string{"Content-Type", "Authorization"},
 	}))
 

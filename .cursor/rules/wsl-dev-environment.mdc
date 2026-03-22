@@ -12,6 +12,10 @@ alwaysApply: true
 
 タスク実行前に `/mnt/c/Users/diversion/.cursor/skills/`（= `C:\Users\diversion\.cursor\skills\`）内のスキルを必ず確認すること。該当するスキルがあれば SKILL.md の手順に従う。
 
+## Cursor / AI のターミナル実行
+
+- **サンドボックス制限なし（`all` 権限）で実行する**（ユーザー方針）。Playwright のブラウザキャッシュ・`npx`・Docker・DB 接続などが権限でコケるのを避ける。
+
 ## ターミナル・シェル
 
 - WSL Ubuntu の bash を使用する（PowerShell は使用しない）

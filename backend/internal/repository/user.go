@@ -46,7 +46,8 @@ func (r *userRepository) FindByID(id uuid.UUID) (*model.User, error) {
 
 func (r *userRepository) FindByEmail(email string) (*model.User, error) {
 	var user model.User
-	err := r.db.Where("email = ?", email).First(&user).Error
+	// 同一メールが複数組織にいる場合は先頭を決定的に（created_at → id）
+	err := r.db.Where("email = ?", email).Order("created_at ASC").Order("id ASC").First(&user).Error
 	if err != nil {
 		return nil, err
 	}

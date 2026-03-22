@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { isAxiosError } from 'axios'
 import type {
   ApiResponse,
   ListResponse,
@@ -34,6 +34,53 @@ export function resolveApiBaseURL(): string {
   return 'http://127.0.0.1:8080/api/v1'
 }
 
+/** Next の rewrite 失敗や Echo の素の 500 など、プレーン「Internal Server Error」を判別 */
+function isGenericInternalError(text: string): boolean {
+  return /internal\s+server\s+error/i.test(text.trim())
+}
+
+/** 502/503/504 や上記のとき、ログイン画面向けに「APIに接続」系の文へ寄せる（E2E の期待文言とも整合） */
+function messageForUnreachableOrBrokenApi(status: number, rawMessage: string): string | null {
+  if ([502, 503, 504].includes(status)) {
+    return 'ログインに失敗しました。APIに接続できません（プロキシ先のバックエンドが起動しているか確認してください）。'
+  }
+  if (status >= 500 && isGenericInternalError(rawMessage)) {
+    return 'ログインに失敗しました。APIに接続できないか、サーバー内部エラーです（バックエンド起動・DATABASE_URL・Next の rewrite 先を確認してください）。'
+  }
+  return null
+}
+
+/** ログイン画面などで Axios 例外を人が読める文にする（Echo の message / ネットワークエラー等） */
+export function formatApiError(e: unknown): string {
+  if (isAxiosError(e)) {
+    if (e.response) {
+      const { status, statusText, data } = e.response
+      if (typeof data === 'string' && data.trim()) {
+        const t = data.trim().slice(0, 300)
+        if (t.startsWith('<')) {
+          return `HTTP ${status}（HTML が返りました。API の URL を確認してください）`
+        }
+        const mapped = messageForUnreachableOrBrokenApi(status, t)
+        if (mapped) return mapped
+        return t
+      }
+      if (data && typeof data === 'object' && 'message' in data) {
+        const msg = String((data as { message: unknown }).message)
+        const mapped = messageForUnreachableOrBrokenApi(status, msg)
+        if (mapped) return mapped
+        return msg
+      }
+      const fallback = `HTTP ${status}${statusText ? ` ${statusText}` : ''}`
+      const mapped = messageForUnreachableOrBrokenApi(status, statusText || '')
+      return mapped ?? fallback
+    }
+    if (e.code === 'ECONNABORTED') return '接続がタイムアウトしました'
+    return e.message || 'サーバーに接続できません'
+  }
+  if (e instanceof Error) return e.message
+  return String(e)
+}
+
 const api = axios.create({
   baseURL: resolveApiBaseURL(),
   headers: { 'Content-Type': 'application/json' },
@@ -41,6 +88,8 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
+  // モジュール読み込み時と異なる origin で動かすケースに備え毎回解決
+  config.baseURL = resolveApiBaseURL()
   const token = getAuthToken()
   if (token) {
     config.headers = config.headers ?? {}
