@@ -8,6 +8,19 @@ import (
 	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 )
 
+// actorIDFromClaims は JWT の user_id を返す（インプリントの actor_id 用）
+func actorIDFromClaims(c echo.Context) (uuid.UUID, error) {
+	claims, ok := authmw.GetClaims(c)
+	if !ok || claims.UserID == "" {
+		return uuid.Nil, echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+	}
+	id, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return uuid.Nil, echo.NewHTTPError(http.StatusUnauthorized, "invalid user id in token")
+	}
+	return id, nil
+}
+
 func requireClaims(c echo.Context) (*uuid.UUID, bool, error) {
 	claims, ok := authmw.GetClaims(c)
 	if !ok {

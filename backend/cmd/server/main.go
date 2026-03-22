@@ -46,6 +46,7 @@ func main() {
 		&model.ApprovalObject{},
 		&model.IssueTemplate{},
 		&model.IssueApproval{},
+		&model.IssueEvent{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
 	}
@@ -55,6 +56,7 @@ func main() {
 	projectRepo := repository.NewProjectRepository(db)
 	statusRepo := repository.NewStatusRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
+	issueEventRepo := repository.NewIssueEventRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
@@ -71,7 +73,7 @@ func main() {
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
-	issueSvc := service.NewIssueService(issueRepo, projectRepo)
+	issueSvc := service.NewIssueService(issueRepo, projectRepo, issueEventRepo)
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo, statusRepo)
@@ -92,6 +94,7 @@ func main() {
 	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
 	departmentHandler := handler.NewDepartmentHandler(departmentSvc)
 	statusHandler := handler.NewStatusHandler(statusSvc)
+	issueEventHandler := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
 
 	// Echo
 	e := echo.New()
@@ -212,8 +215,10 @@ func main() {
 	api.GET("/projects/:projectId/issues/:number", issueHandler.Get)
 	api.PUT("/projects/:projectId/issues/:number", issueHandler.Update)
 	api.DELETE("/projects/:projectId/issues/:number", issueHandler.Delete)
+	api.GET("/organizations/:orgId/issue-events", issueEventHandler.ListByOrganization)
 
 	// Comments
+	api.GET("/issues/:issueId/events", issueEventHandler.ListByIssue)
 	api.GET("/issues/:issueId/comments", commentHandler.List)
 	api.POST("/issues/:issueId/comments", commentHandler.Create)
 	api.PUT("/issues/:issueId/comments/:id", commentHandler.Update)

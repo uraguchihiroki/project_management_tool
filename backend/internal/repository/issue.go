@@ -7,6 +7,7 @@ import (
 )
 
 type IssueRepository interface {
+	DB() *gorm.DB
 	FindByProject(projectID uuid.UUID) ([]model.Issue, error)
 	FindByNumber(projectID uuid.UUID, number int) (*model.Issue, error)
 	FindByOrgAndNumber(orgID uuid.UUID, number int) (*model.Issue, error)
@@ -26,6 +27,10 @@ type issueRepository struct {
 
 func NewIssueRepository(db *gorm.DB) IssueRepository {
 	return &issueRepository{db: db}
+}
+
+func (r *issueRepository) DB() *gorm.DB {
+	return r.db
 }
 
 func (r *issueRepository) FindByProject(projectID uuid.UUID) ([]model.Issue, error) {

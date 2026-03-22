@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -8,6 +9,8 @@ import (
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 type CreateIssueInput struct {
@@ -36,8 +39,8 @@ type IssueService interface {
 	GetByOrgAndNumber(orgID uuid.UUID, number int) (*model.Issue, error)
 	Create(projectID uuid.UUID, input CreateIssueInput) (*model.Issue, error)
 	CreateForOrg(orgID uuid.UUID, input CreateIssueInput) (*model.Issue, error)
-	Update(projectID uuid.UUID, number int, input UpdateIssueInput) (*model.Issue, error)
-	UpdateByOrgAndNumber(orgID uuid.UUID, number int, input UpdateIssueInput) (*model.Issue, error)
+	Update(projectID uuid.UUID, number int, input UpdateIssueInput, actorID uuid.UUID) (*model.Issue, error)
+	UpdateByOrgAndNumber(orgID uuid.UUID, number int, input UpdateIssueInput, actorID uuid.UUID) (*model.Issue, error)
 	Delete(projectID uuid.UUID, number int) error
 	DeleteByOrgAndNumber(orgID uuid.UUID, number int) error
 }
@@ -45,10 +48,29 @@ type IssueService interface {
 type issueService struct {
 	issueRepo   repository.IssueRepository
 	projectRepo repository.ProjectRepository
+	eventRepo   repository.IssueEventRepository
 }
 
-func NewIssueService(issueRepo repository.IssueRepository, projectRepo repository.ProjectRepository) IssueService {
-	return &issueService{issueRepo: issueRepo, projectRepo: projectRepo}
+func NewIssueService(issueRepo repository.IssueRepository, projectRepo repository.ProjectRepository, eventRepo repository.IssueEventRepository) IssueService {
+	return &issueService{issueRepo: issueRepo, projectRepo: projectRepo, eventRepo: eventRepo}
+}
+
+func assigneePtrEqual(a, b *uuid.UUID) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
+}
+
+func uuidPtrStr(p *uuid.UUID) *string {
+	if p == nil {
+		return nil
+	}
+	s := p.String()
+	return &s
 }
 
 func (s *issueService) List(projectID uuid.UUID) ([]model.Issue, error) {
@@ -146,58 +168,150 @@ func (s *issueService) CreateForOrg(orgID uuid.UUID, input CreateIssueInput) (*m
 	return s.issueRepo.FindByOrgAndNumber(orgID, issue.Number)
 }
 
-func (s *issueService) Update(projectID uuid.UUID, number int, input UpdateIssueInput) (*model.Issue, error) {
-	issue, err := s.issueRepo.FindByNumber(projectID, number)
-	if err != nil {
-		return nil, err
-	}
-	if input.Title != nil {
-		issue.Title = *input.Title
-	}
-	if input.Description != nil {
-		issue.Description = input.Description
-	}
-	if input.StatusID != nil {
-		issue.StatusID = *input.StatusID
-	}
-	if input.Priority != nil {
-		issue.Priority = *input.Priority
-	}
-	if input.AssigneeID != nil {
-		issue.AssigneeID = input.AssigneeID
-	}
-	issue.UpdatedAt = time.Now()
-	if err := s.issueRepo.Update(issue); err != nil {
-		return nil, err
-	}
-	return s.issueRepo.FindByNumber(projectID, number)
+func (s *issueService) Update(projectID uuid.UUID, number int, input UpdateIssueInput, actorID uuid.UUID) (*model.Issue, error) {
+	var out *model.Issue
+	err := s.issueRepo.DB().Transaction(func(tx *gorm.DB) error {
+		ir := repository.NewIssueRepository(tx)
+		er := repository.NewIssueEventRepository(tx)
+		issue, err := ir.FindByNumber(projectID, number)
+		if err != nil {
+			return err
+		}
+		oldStatus := issue.StatusID
+		oldAssignee := issue.AssigneeID
+		if input.Title != nil {
+			issue.Title = *input.Title
+		}
+		if input.Description != nil {
+			issue.Description = input.Description
+		}
+		if input.StatusID != nil {
+			issue.StatusID = *input.StatusID
+		}
+		if input.Priority != nil {
+			issue.Priority = *input.Priority
+		}
+		if input.AssigneeID != nil {
+			issue.AssigneeID = input.AssigneeID
+		}
+		issue.UpdatedAt = time.Now()
+		statusChanged := oldStatus != issue.StatusID
+		assigneeChanged := !assigneePtrEqual(oldAssignee, issue.AssigneeID)
+		if err := ir.Update(issue); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		if statusChanged {
+			ev := newStatusImprint(issue, actorID, oldStatus, issue.StatusID, issue.AssigneeID, now)
+			if err := er.Create(ev); err != nil {
+				return err
+			}
+		}
+		if assigneeChanged {
+			ev, err := newAssigneeImprint(issue, actorID, oldAssignee, issue.AssigneeID, now)
+			if err != nil {
+				return err
+			}
+			if err := er.Create(ev); err != nil {
+				return err
+			}
+		}
+		out, err = ir.FindByNumber(projectID, number)
+		return err
+	})
+	return out, err
 }
 
-func (s *issueService) UpdateByOrgAndNumber(orgID uuid.UUID, number int, input UpdateIssueInput) (*model.Issue, error) {
-	issue, err := s.issueRepo.FindByOrgAndNumber(orgID, number)
+func (s *issueService) UpdateByOrgAndNumber(orgID uuid.UUID, number int, input UpdateIssueInput, actorID uuid.UUID) (*model.Issue, error) {
+	var out *model.Issue
+	err := s.issueRepo.DB().Transaction(func(tx *gorm.DB) error {
+		ir := repository.NewIssueRepository(tx)
+		er := repository.NewIssueEventRepository(tx)
+		issue, err := ir.FindByOrgAndNumber(orgID, number)
+		if err != nil {
+			return err
+		}
+		oldStatus := issue.StatusID
+		oldAssignee := issue.AssigneeID
+		if input.Title != nil {
+			issue.Title = *input.Title
+		}
+		if input.Description != nil {
+			issue.Description = input.Description
+		}
+		if input.StatusID != nil {
+			issue.StatusID = *input.StatusID
+		}
+		if input.Priority != nil {
+			issue.Priority = *input.Priority
+		}
+		if input.AssigneeID != nil {
+			issue.AssigneeID = input.AssigneeID
+		}
+		issue.UpdatedAt = time.Now()
+		statusChanged := oldStatus != issue.StatusID
+		assigneeChanged := !assigneePtrEqual(oldAssignee, issue.AssigneeID)
+		if err := ir.Update(issue); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		if statusChanged {
+			ev := newStatusImprint(issue, actorID, oldStatus, issue.StatusID, issue.AssigneeID, now)
+			if err := er.Create(ev); err != nil {
+				return err
+			}
+		}
+		if assigneeChanged {
+			ev, err := newAssigneeImprint(issue, actorID, oldAssignee, issue.AssigneeID, now)
+			if err != nil {
+				return err
+			}
+			if err := er.Create(ev); err != nil {
+				return err
+			}
+		}
+		out, err = ir.FindByOrgAndNumber(orgID, number)
+		return err
+	})
+	return out, err
+}
+
+func newStatusImprint(issue *model.Issue, actorID, from, to uuid.UUID, assigneeSnap *uuid.UUID, at time.Time) *model.IssueEvent {
+	id := uuid.New()
+	return &model.IssueEvent{
+		ID:                   id,
+		Key:                  keygen.UUIDKey(id),
+		OrganizationID:       issue.OrganizationID,
+		IssueID:              issue.ID,
+		ActorID:              actorID,
+		EventType:            model.EventIssueStatusChanged,
+		OccurredAt:           at,
+		FromStatusID:         &from,
+		ToStatusID:           &to,
+		AssigneeIDAtOccurred: assigneeSnap,
+	}
+}
+
+func newAssigneeImprint(issue *model.Issue, actorID uuid.UUID, from, to *uuid.UUID, at time.Time) (*model.IssueEvent, error) {
+	id := uuid.New()
+	p := map[string]interface{}{
+		"from_assignee_id": uuidPtrStr(from),
+		"to_assignee_id":   uuidPtrStr(to),
+	}
+	raw, err := json.Marshal(p)
 	if err != nil {
 		return nil, err
 	}
-	if input.Title != nil {
-		issue.Title = *input.Title
-	}
-	if input.Description != nil {
-		issue.Description = input.Description
-	}
-	if input.StatusID != nil {
-		issue.StatusID = *input.StatusID
-	}
-	if input.Priority != nil {
-		issue.Priority = *input.Priority
-	}
-	if input.AssigneeID != nil {
-		issue.AssigneeID = input.AssigneeID
-	}
-	issue.UpdatedAt = time.Now()
-	if err := s.issueRepo.Update(issue); err != nil {
-		return nil, err
-	}
-	return s.issueRepo.FindByOrgAndNumber(orgID, number)
+	return &model.IssueEvent{
+		ID:             id,
+		Key:            keygen.UUIDKey(id),
+		OrganizationID: issue.OrganizationID,
+		IssueID:        issue.ID,
+		ActorID:        actorID,
+		EventType:      model.EventIssueAssigneeChanged,
+		OccurredAt:     at,
+		Payload:        datatypes.JSON(raw),
+	}, nil
 }
 
 func (s *issueService) Delete(projectID uuid.UUID, number int) error {

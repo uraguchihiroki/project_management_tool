@@ -17,8 +17,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	"github.com/uraguchihiroki/project_management_tool/internal/auth"
+	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
@@ -66,6 +66,7 @@ func newTestServer(t *testing.T) *testServer {
 		&model.ApprovalObject{},
 		&model.IssueTemplate{},
 		&model.IssueApproval{},
+		&model.IssueEvent{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
@@ -123,6 +124,7 @@ func newTestServer(t *testing.T) *testServer {
 	userRepo := repository.NewUserRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
+	issueEventRepo := repository.NewIssueEventRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
@@ -138,7 +140,7 @@ func newTestServer(t *testing.T) *testServer {
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
-	issueSvc := service.NewIssueService(issueRepo, projectRepo)
+	issueSvc := service.NewIssueService(issueRepo, projectRepo, issueEventRepo)
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo, statusRepo)
@@ -158,6 +160,7 @@ func newTestServer(t *testing.T) *testServer {
 	superAdminH := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
 	departmentH := handler.NewDepartmentHandler(departmentSvc)
 	statusH := handler.NewStatusHandler(statusSvc)
+	issueEventH := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -247,6 +250,8 @@ func newTestServer(t *testing.T) *testServer {
 	api.GET("/projects/:projectId/issues/:number", issueH.Get)
 	api.PUT("/projects/:projectId/issues/:number", issueH.Update)
 	api.DELETE("/projects/:projectId/issues/:number", issueH.Delete)
+	api.GET("/organizations/:orgId/issue-events", issueEventH.ListByOrganization)
+	api.GET("/issues/:issueId/events", issueEventH.ListByIssue)
 	api.GET("/issues/:issueId/comments", commentH.List)
 	api.POST("/issues/:issueId/comments", commentH.Create)
 	api.PUT("/issues/:issueId/comments/:id", commentH.Update)

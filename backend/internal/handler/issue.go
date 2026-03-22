@@ -177,7 +177,11 @@ func (h *IssueHandler) Update(c echo.Context) error {
 			input.AssigneeID = &aid
 		}
 	}
-	issue, err := h.issueService.Update(projectID, number, input)
+	actorID, err := actorIDFromClaims(c)
+	if err != nil {
+		return err
+	}
+	issue, err := h.issueService.Update(projectID, number, input, actorID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
 	}
@@ -332,7 +336,11 @@ func (h *IssueHandler) UpdateByOrgAndNumber(c echo.Context) error {
 			input.AssigneeID = &aid
 		}
 	}
-	issue, err := h.issueService.UpdateByOrgAndNumber(orgID, number, input)
+	actorID, err := actorIDFromClaims(c)
+	if err != nil {
+		return err
+	}
+	issue, err := h.issueService.UpdateByOrgAndNumber(orgID, number, input, actorID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "issue not found")
 	}
