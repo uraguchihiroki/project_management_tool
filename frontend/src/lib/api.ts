@@ -302,8 +302,13 @@ export const deleteIssue = (projectId: string, number: number) =>
   api.delete(`/projects/${projectId}/issues/${number}`)
 
 // Workflows
-export const getWorkflows = () =>
-  api.get<ListResponse<Workflow>>('/workflows').then((r) => r.data.data)
+/** 管理画面で選択中の組織に合わせる場合は orgId を渡す（スーパーアドミン時のサーバー側絞り込み） */
+export const getWorkflows = (orgId?: string) =>
+  api
+    .get<ListResponse<Workflow>>('/workflows', {
+      params: orgId ? { org_id: orgId } : undefined,
+    })
+    .then((r) => r.data.data)
 
 export const createWorkflow = (data: {
   organization_id: string
@@ -321,6 +326,15 @@ export const reorderWorkflowsApi = (ids: number[]) =>
 
 export const getWorkflow = (id: string) =>
   api.get<ApiResponse<Workflow>>(`/workflows/${id}`).then((r) => r.data.data)
+
+export const getWorkflowStatuses = (workflowId: string) =>
+  api.get<ListResponse<Status>>(`/workflows/${workflowId}/statuses`).then((r) => r.data.data)
+
+export const createWorkflowStatus = (
+  workflowId: string,
+  data: { name: string; color?: string; type?: 'issue' | 'project'; order?: number }
+) =>
+  api.post<ApiResponse<Status>>(`/workflows/${workflowId}/statuses`, data).then((r) => r.data.data)
 
 // Comments
 export const getComments = (issueId: string) =>

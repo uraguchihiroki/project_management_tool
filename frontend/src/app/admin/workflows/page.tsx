@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import axios from 'axios'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -21,11 +21,17 @@ export default function WorkflowsPage() {
   const queryClient = useQueryClient()
   const { currentOrg } = useAuth()
   const authFetch = useAuthFetchEnabled()
-  const { data: workflows = [], isLoading } = useQuery({
+  const { data: allWorkflows = [], isLoading } = useQuery({
     queryKey: ['workflows', currentOrg?.id],
-    queryFn: () => getWorkflows(),
+    queryFn: () => getWorkflows(currentOrg!.id),
     enabled: authFetch && !!currentOrg?.id,
   })
+
+  /** 二重防御: API は org_id で絞るが、表示も currentOrg に一致する行のみ */
+  const workflows = useMemo(
+    () => allWorkflows.filter((w) => w.organization_id === currentOrg?.id),
+    [allWorkflows, currentOrg?.id],
+  )
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)

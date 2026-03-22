@@ -55,6 +55,7 @@ export interface Status {
   id: string
   project_id?: string
   organization_id?: string
+  workflow_id?: number
   name: string
   color: string
   order: number
@@ -180,6 +181,7 @@ export interface WorkflowStep {
 
 export interface Workflow {
   id: number
+  organization_id: string
   name: string
   description: string
   steps?: WorkflowStep[]
