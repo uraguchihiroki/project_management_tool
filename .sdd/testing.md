@@ -96,7 +96,20 @@ npx playwright run-server --port 9222 --host 0.0.0.0
 # Listening on ws://0.0.0.0:9222/
 ```
 
-**WSL（bash）** — バックエンド・フロントを起動したうえで、エンドポイントを指定して E2E を実行する。
+**WSL（bash）— 手動でブラウザを立ち上げる（デバッグ）**
+
+E2E（`playwright test`）の前に **Windows 上の `run-server` に紐づく Chromium を、WSL から一度開きたい**ときなどに使う。Playwright CLI の **`cr`** は **Chromium で URL を開く**短縮コマンドである（`playwright open` と同系）。
+
+```bash
+cd frontend
+npx playwright cr "http://$(grep -m 1 nameserver /etc/resolv.conf | awk '{print $2}'):9222/"
+```
+
+- Windows 側は **`--host 0.0.0.0`** で待ち受けていること（WSL から Windows ホスト IP へ届くようにする）。
+- ホスト IP は **`ip route | awk '/^default/ {print $3; exit}'`** でもよい（[`scripts/playwright-server-e2e.sh`](../scripts/playwright-server-e2e.sh) と同じ考え方）。
+- 開いたブラウザで **`http://localhost:3000`** などを手動確認する場合、**API は WSL のバックエンド**に向ける必要がある（下記「ログイン E2E が…」の rewrite / `NEXT_PUBLIC_API_URL` の注意と同じ）。
+
+**WSL（bash）** — バックエンド・フロントを起動したうえで、エンドポイントを指定して **E2E を実行**する。
 
 - 既定では `scripts/playwright-server-e2e.sh` が **default gateway**（WSL2 の Windows ホスト想定）を使い `ws://<そのIP>:9222/` を組み立てる。
 - うまく繋がらない場合は **手動で** Windows ホスト IP を指定する（例: `grep nameserver /etc/resolv.conf` の第2列、または `ip route` の default 先）。
