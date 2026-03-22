@@ -2,20 +2,14 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, X, Check, GitBranch } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Check } from 'lucide-react'
 import { getTemplates, getProjects, createTemplate, updateTemplate, deleteTemplate } from '@/lib/api'
-import type { IssueTemplate, Project, Workflow } from '@/types'
+import type { IssueTemplate, Project } from '@/types'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
 import { SortableDndProvider, SortableList, DragHandle } from '@/components/SortableList'
 import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
-
-async function fetchWorkflows(): Promise<Workflow[]> {
-  const res = await fetch(`${API}/workflows`)
-  const json = await res.json()
-  return json.data ?? []
-}
 
 const emptyForm = {
   project_id: '',
@@ -23,7 +17,6 @@ const emptyForm = {
   description: '',
   body: '',
   default_priority: 'medium' as Priority,
-  workflow_id: '' as string,
 }
 
 export default function TemplatesPage() {
@@ -37,11 +30,6 @@ export default function TemplatesPage() {
   const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: () => getProjects(),
-    enabled: authFetch,
-  })
-  const { data: workflows = [] } = useQuery({
-    queryKey: ['workflows'],
-    queryFn: fetchWorkflows,
     enabled: authFetch,
   })
 
@@ -58,7 +46,6 @@ export default function TemplatesPage() {
         description: data.description,
         body: data.body,
         default_priority: data.default_priority,
-        workflow_id: data.workflow_id ? Number(data.workflow_id) : undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['templates'] })
@@ -76,7 +63,6 @@ export default function TemplatesPage() {
         description: data.description,
         body: data.body,
         default_priority: data.default_priority,
-        workflow_id: data.workflow_id ? Number(data.workflow_id) : null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['templates'] })
@@ -115,7 +101,6 @@ export default function TemplatesPage() {
       description: tmpl.description,
       body: tmpl.body,
       default_priority: tmpl.default_priority,
-      workflow_id: tmpl.workflow_id ? String(tmpl.workflow_id) : '',
     })
     setShowForm(false)
     setError('')
@@ -131,9 +116,6 @@ export default function TemplatesPage() {
       createMutation.mutate(form)
     }
   }
-
-  // ワークフローは組織に属さないため全件表示
-  const filteredWorkflows = workflows
 
   const getProjectName = (id: string) => {
     const p = projects.find((p: Project) => p.id === id)
@@ -181,7 +163,7 @@ export default function TemplatesPage() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">プロジェクト *</label>
                 <select
                   value={form.project_id}
-                  onChange={(e) => setForm({ ...form, project_id: e.target.value, workflow_id: '' })}
+                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">プロジェクトを選択...</option>
@@ -237,26 +219,6 @@ export default function TemplatesPage() {
                 rows={6}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                承認ワークフロー
-                <span className="ml-1 font-normal text-gray-400">（任意）</span>
-              </label>
-              <select
-                value={form.workflow_id}
-                onChange={(e) => setForm({ ...form, workflow_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">承認フローなし</option>
-                {filteredWorkflows.map((w: Workflow) => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </select>
-              {form.project_id && filteredWorkflows.length === 0 && (
-                <p className="text-xs text-gray-400 mt-1">このプロジェクトにはワークフローがありません</p>
-              )}
             </div>
 
             {error && <p className="text-sm text-red-500">{error}</p>}
@@ -317,12 +279,6 @@ export default function TemplatesPage() {
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_COLORS[tmpl.default_priority]}`}>
                                   {PRIORITY_LABELS[tmpl.default_priority]}
                                 </span>
-                                {tmpl.workflow && (
-                                  <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                                    <GitBranch className="w-3 h-3" />
-                                    {tmpl.workflow.name}
-                                  </span>
-                                )}
                               </div>
                               {tmpl.description && (
                                 <p className="text-xs text-gray-400 mt-0.5">{tmpl.description}</p>

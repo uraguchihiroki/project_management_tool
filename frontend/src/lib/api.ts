@@ -8,12 +8,9 @@ import type {
   User,
   Status,
   IssueTemplate,
-  IssueApproval,
   Organization,
   SuperAdmin,
   Workflow,
-  WorkflowStep,
-  ApprovalObject,
   Group,
   IssueEvent,
 } from '@/types'
@@ -183,7 +180,6 @@ export const createIssue = (
     reporter_id: string
     due_date?: string
     template_id?: number
-    workflow_id?: number
     group_ids?: string[]
   }
 ) => api.post<ApiResponse<Issue>>(`/projects/${projectId}/issues`, data).then((r) => r.data.data)
@@ -201,7 +197,6 @@ export const createTemplate = (data: {
   description?: string
   body?: string
   default_priority?: string
-  workflow_id?: number
 }) => api.post<ApiResponse<IssueTemplate>>('/templates', data).then((r) => r.data.data)
 
 export const updateTemplate = (id: number, data: {
@@ -209,7 +204,6 @@ export const updateTemplate = (id: number, data: {
   description?: string
   body?: string
   default_priority?: string
-  workflow_id?: number | null
 }) => api.put<ApiResponse<IssueTemplate>>(`/templates/${id}`, data).then((r) => r.data.data)
 
 export const deleteTemplate = (id: number) =>
@@ -249,17 +243,7 @@ export const getUserGroups = (userId: string) =>
 export const deleteIssue = (projectId: string, number: number) =>
   api.delete(`/projects/${projectId}/issues/${number}`)
 
-// Approvals
-export const getApprovals = (issueId: string) =>
-  api.get<{ data: IssueApproval[] }>(`/issues/${issueId}/approvals`).then((r) => r.data.data)
-
-export const approveStep = (approvalId: string, approverId: string, comment: string) =>
-  api.post<ApiResponse<IssueApproval>>(`/approvals/${approvalId}/approve`, { approver_id: approverId, comment }).then((r) => r.data.data)
-
-export const rejectStep = (approvalId: string, approverId: string, comment: string) =>
-  api.post<ApiResponse<IssueApproval>>(`/approvals/${approvalId}/reject`, { approver_id: approverId, comment }).then((r) => r.data.data)
-
-// Workflows & Steps
+// Workflows
 export const getWorkflows = () =>
   api.get<ListResponse<Workflow>>('/workflows').then((r) => r.data.data)
 
@@ -279,51 +263,6 @@ export const reorderWorkflowsApi = (ids: number[]) =>
 
 export const getWorkflow = (id: string) =>
   api.get<ApiResponse<Workflow>>(`/workflows/${id}`).then((r) => r.data.data)
-
-export const getWorkflowStep = (workflowId: string, stepId: string) =>
-  api.get<ApiResponse<WorkflowStep>>(`/workflows/${workflowId}/steps/${stepId}`).then((r) => r.data.data)
-
-export const createWorkflowStep = (
-  workflowId: string,
-  data: {
-    status_id: string
-    next_status_id?: string
-    description?: string
-    threshold?: number
-    approval_objects?: Array<{
-      type: 'role' | 'user'
-      role_id?: number
-      role_operator?: 'eq' | 'gte'
-      user_id?: string
-      points?: number
-      exclude_reporter?: boolean
-      exclude_assignee?: boolean
-    }>
-  }
-) => api.post<ApiResponse<WorkflowStep>>(`/workflows/${workflowId}/steps`, data).then((r) => r.data.data)
-
-export const updateWorkflowStep = (
-  workflowId: string,
-  stepId: string,
-  data: {
-    status_id?: string
-    next_status_id?: string
-    description?: string
-    threshold?: number
-    approval_objects?: Array<{
-      type: 'role' | 'user'
-      role_id?: number
-      role_operator?: 'eq' | 'gte'
-      user_id?: string
-      points?: number
-      exclude_reporter?: boolean
-      exclude_assignee?: boolean
-    }>
-  }
-) => api.put<ApiResponse<WorkflowStep>>(`/workflow-steps/${stepId}`, data).then((r) => r.data.data)
-
-export const deleteWorkflowStep = (workflowId: string, stepId: string) =>
-  api.delete(`/workflows/${workflowId}/steps/${stepId}`)
 
 // Comments
 export const getComments = (issueId: string) =>
