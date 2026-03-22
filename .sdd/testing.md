@@ -6,6 +6,11 @@
 - **テスト DB**: インメモリ SQLite（PostgreSQL 不要）
 - **実行**: `go test ./test/... -v`
 
+**PR 前の最小回帰（SDD 改修後も共通）**:
+
+- `cd backend && go test ./... -count=1`（`internal/service` のユニット含む）
+- フロント＋API 起動後 `cd frontend && npx playwright test`（またはプロジェクトの `npm run test:e2e`）
+
 ---
 
 ## 実行方法

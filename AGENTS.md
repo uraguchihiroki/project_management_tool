@@ -37,6 +37,14 @@
 - Conventional Commits のプレフィックス（`feat:`, `fix:` など）は使用可だが、本文は日本語にする
 - このルールはコミット文面に関する他の慣習より優先する
 
+### 5. エージェント返信末尾の日時（日付＋時刻）
+
+**実質的な文面があるユーザー向け返信の最後の行に、日付と時刻の両方を付ける。**
+
+- **全 Cursor プロジェクト**で同じにしたい場合の正本は **Cursor User Rules**（Windows 版 Cursor では Windows 側の設定）。**AI がユーザーの Cursor 設定を代わりに書き換えることはできない**ため、人が **1 回** 貼り付ける。手順とコピペ用テキスト → [docs/cursor-user-rules-reply-timestamp.md](docs/cursor-user-rules-reply-timestamp.md)
+- **本リポジトリを開いているとき**は [`.cursor/rules/reply-end-timestamp.mdc`](.cursor/rules/reply-end-timestamp.mdc)（`alwaysApply: true`）も読み込まれる。
+- 形式・`date` コマンド・例 → [`.cursor/skills/reply-end-timestamp/SKILL.md`](.cursor/skills/reply-end-timestamp/SKILL.md)
+
 ---
 
 ## ユーザースキルの参照
@@ -45,10 +53,11 @@
 
 | コンテキスト | パス |
 |-------------|------|
+| **本リポジトリ（共有）** | `.cursor/skills/`（例: 返信末尾に日時を付ける `reply-end-timestamp`）。常時ルールは `.cursor/rules/reply-end-timestamp.mdc` を参照 |
 | Windows | `C:\Users\diversion\.cursor\skills\` |
 | WSL | `/mnt/c/Users/diversion/.cursor/skills/` |
 
-同一の実体を指す。該当するスキルがあれば SKILL.md の手順に従う。
+後者は同一の実体を指す。該当するスキルがあれば SKILL.md の手順に従う。
 
 ---
 
