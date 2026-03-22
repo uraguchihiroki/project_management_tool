@@ -47,6 +47,10 @@ func main() {
 		&model.IssueTemplate{},
 		&model.IssueApproval{},
 		&model.IssueEvent{},
+		&model.Group{},
+		&model.UserGroup{},
+		&model.IssueGroup{},
+		&model.TransitionAlertRule{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
 	}
@@ -57,6 +61,10 @@ func main() {
 	statusRepo := repository.NewStatusRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
 	issueEventRepo := repository.NewIssueEventRepository(db)
+	groupRepo := repository.NewGroupRepository(db)
+	userGroupRepo := repository.NewUserGroupRepository(db)
+	issueGroupRepo := repository.NewIssueGroupRepository(db)
+	alertRuleRepo := repository.NewTransitionAlertRuleRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
@@ -73,13 +81,15 @@ func main() {
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
-	issueSvc := service.NewIssueService(issueRepo, projectRepo, issueEventRepo)
+	alertEval := &service.TransitionAlertEvaluator{Rules: alertRuleRepo, UG: userGroupRepo}
+	issueSvc := service.NewIssueService(issueRepo, projectRepo, issueEventRepo, groupRepo, issueGroupRepo, alertEval)
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo, statusRepo)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
-	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
+	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, issueSvc, roleRepo)
 	statusSvc := service.NewStatusService(statusRepo)
+	groupSvc := service.NewGroupService(groupRepo, userGroupRepo)
 
 	// Handlers
 	userHandler := handler.NewUserHandler(userSvc)
@@ -95,6 +105,7 @@ func main() {
 	departmentHandler := handler.NewDepartmentHandler(departmentSvc)
 	statusHandler := handler.NewStatusHandler(statusSvc)
 	issueEventHandler := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
+	groupHandler := handler.NewGroupHandler(groupSvc)
 
 	// Echo
 	e := echo.New()
@@ -125,6 +136,7 @@ func main() {
 	public.POST("/admin/login", userHandler.AdminLogin)
 	public.POST("/super-admin/login", superAdminHandler.Login)
 	api.GET("/users", userHandler.List)
+	api.GET("/users/:id/groups", groupHandler.ListByUser)
 	api.GET("/users/:id", userHandler.Get)
 	api.POST("/admin/switch-organization", userHandler.SwitchOrganization)
 	api.PUT("/users/:id/admin", userHandler.SetAdmin)
@@ -204,6 +216,15 @@ func main() {
 	api.PUT("/projects/:id", projectHandler.Update)
 	api.DELETE("/projects/:id", projectHandler.Delete)
 
+	// Groups（/organizations/:orgId/issues より前に登録）
+	api.GET("/organizations/:orgId/groups", groupHandler.List)
+	api.POST("/organizations/:orgId/groups", groupHandler.Create)
+	api.GET("/groups/:id/members", groupHandler.ListMembers)
+	api.PUT("/groups/:id/members", groupHandler.ReplaceMembers)
+	api.GET("/groups/:id", groupHandler.Get)
+	api.PUT("/groups/:id", groupHandler.Update)
+	api.DELETE("/groups/:id", groupHandler.Delete)
+
 	// Issues
 	api.GET("/projects/:projectId/issues", issueHandler.List)
 	api.POST("/projects/:projectId/issues", issueHandler.Create)
@@ -212,6 +233,8 @@ func main() {
 	api.GET("/organizations/:orgId/issues/:number", issueHandler.GetByOrgAndNumber)
 	api.PUT("/organizations/:orgId/issues/:number", issueHandler.UpdateByOrgAndNumber)
 	api.DELETE("/organizations/:orgId/issues/:number", issueHandler.DeleteByOrgAndNumber)
+	api.GET("/projects/:projectId/issues/:number/groups", issueHandler.ListIssueGroups)
+	api.PUT("/projects/:projectId/issues/:number/groups", issueHandler.PutIssueGroups)
 	api.GET("/projects/:projectId/issues/:number", issueHandler.Get)
 	api.PUT("/projects/:projectId/issues/:number", issueHandler.Update)
 	api.DELETE("/projects/:projectId/issues/:number", issueHandler.Delete)

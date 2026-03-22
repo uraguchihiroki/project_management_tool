@@ -8,7 +8,7 @@ import (
 
 type IssueRepository interface {
 	DB() *gorm.DB
-	FindByProject(projectID uuid.UUID) ([]model.Issue, error)
+	FindByProject(projectID uuid.UUID, groupID *uuid.UUID) ([]model.Issue, error)
 	FindByNumber(projectID uuid.UUID, number int) (*model.Issue, error)
 	FindByOrgAndNumber(orgID uuid.UUID, number int) (*model.Issue, error)
 	FindByID(id uuid.UUID) (*model.Issue, error)
@@ -18,7 +18,7 @@ type IssueRepository interface {
 	Delete(id uuid.UUID) error
 	NextNumber(projectID uuid.UUID) (int, error)
 	NextNumberForOrg(orgID uuid.UUID) (int, error)
-	FindByOrg(orgID uuid.UUID) ([]model.Issue, error)
+	FindByOrg(orgID uuid.UUID, groupID *uuid.UUID) ([]model.Issue, error)
 }
 
 type issueRepository struct {
@@ -33,15 +33,17 @@ func (r *issueRepository) DB() *gorm.DB {
 	return r.db
 }
 
-func (r *issueRepository) FindByProject(projectID uuid.UUID) ([]model.Issue, error) {
+func (r *issueRepository) FindByProject(projectID uuid.UUID, groupID *uuid.UUID) ([]model.Issue, error) {
 	var issues []model.Issue
-	err := r.db.
+	q := r.db.
 		Preload("Status").
 		Preload("Assignee").
 		Preload("Reporter").
-		Where("project_id = ?", projectID).
-		Order("number desc").
-		Find(&issues).Error
+		Where("project_id = ?", projectID)
+	if groupID != nil {
+		q = q.Where("issues.id IN (SELECT issue_id FROM issue_groups WHERE group_id = ?)", *groupID)
+	}
+	err := q.Order("number desc").Find(&issues).Error
 	return issues, err
 }
 
@@ -108,15 +110,17 @@ func (r *issueRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&model.Issue{}, "id = ?", id).Error
 }
 
-func (r *issueRepository) FindByOrg(orgID uuid.UUID) ([]model.Issue, error) {
+func (r *issueRepository) FindByOrg(orgID uuid.UUID, groupID *uuid.UUID) ([]model.Issue, error) {
 	var issues []model.Issue
-	err := r.db.
+	q := r.db.
 		Preload("Status").
 		Preload("Assignee").
 		Preload("Reporter").
-		Where("organization_id = ?", orgID).
-		Order("created_at DESC").
-		Find(&issues).Error
+		Where("organization_id = ?", orgID)
+	if groupID != nil {
+		q = q.Where("issues.id IN (SELECT issue_id FROM issue_groups WHERE group_id = ?)", *groupID)
+	}
+	err := q.Order("created_at DESC").Find(&issues).Error
 	return issues, err
 }
 

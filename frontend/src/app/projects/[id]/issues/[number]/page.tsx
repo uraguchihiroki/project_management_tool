@@ -4,12 +4,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getProject, getIssue, createComment, updateIssue,
   getApprovals, approveStep, rejectStep,
+  getIssueEvents,
 } from '@/lib/api'
 import { useState, use } from 'react'
 import Link from 'next/link'
-import { Circle, MessageSquare, Send, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Circle, MessageSquare, Send, CheckCircle, XCircle, Clock, History, Users } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
-import type { Status, Comment, IssueApproval } from '@/types'
+import type { Status, Comment, IssueApproval, IssueEvent } from '@/types'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { useRequireAuth } from '@/context/AuthContext'
@@ -20,6 +21,21 @@ const APPROVAL_STATUS_LABELS: Record<string, string> = {
   pending: '未承認',
   approved: '承認済み',
   rejected: '却下',
+}
+
+const ISSUE_EVENT_TYPE_LABELS: Record<string, string> = {
+  'issue.status_changed': 'ステータス変更',
+  'issue.assignee_changed': '担当者変更',
+}
+
+function labelForIssueEvent(ev: IssueEvent, statusById: Map<string, string>): string {
+  const base = ISSUE_EVENT_TYPE_LABELS[ev.event_type] ?? ev.event_type
+  if (ev.event_type === 'issue.status_changed' && (ev.from_status_id || ev.to_status_id)) {
+    const from = ev.from_status_id ? statusById.get(ev.from_status_id) ?? '—' : '—'
+    const to = ev.to_status_id ? statusById.get(ev.to_status_id) ?? '—' : '—'
+    return `${base}: ${from} → ${to}`
+  }
+  return base
 }
 
 const ApprovalStatusIcon = ({ status }: { status: string }) => {
@@ -55,6 +71,12 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
     enabled: authFetch && !!issue?.id,
   })
 
+  const { data: issueEvents = [] } = useQuery({
+    queryKey: ['issue-events', issue?.id],
+    queryFn: () => getIssueEvents(issue!.id),
+    enabled: authFetch && !!issue?.id,
+  })
+
   const commentMutation = useMutation({
     mutationFn: (body: string) =>
       createComment(issue!.id, { author_id: currentUser?.id ?? '', body }),
@@ -69,6 +91,7 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
       updateIssue(id, Number(number), { status_id: statusId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue', id, number] })
+      queryClient.invalidateQueries({ queryKey: ['issue-events', issue?.id] })
       setEditingStatus(false)
     },
   })
@@ -79,6 +102,7 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approvals', issue?.id] })
       queryClient.invalidateQueries({ queryKey: ['issue', id, number] })
+      queryClient.invalidateQueries({ queryKey: ['issue-events', issue?.id] })
     },
   })
 
@@ -87,12 +111,15 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
       rejectStep(approvalId, currentUser!.id, comment),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approvals', issue?.id] })
+      queryClient.invalidateQueries({ queryKey: ['issue-events', issue?.id] })
     },
   })
 
   if (!currentUser) return null
   if (isLoading) return <div className="flex items-center justify-center h-screen text-gray-500">読み込み中...</div>
   if (!issue) return <div className="flex items-center justify-center h-screen text-gray-500">Issueが見つかりません</div>
+
+  const statusById = new Map<string, string>((project?.statuses ?? []).map((s) => [s.id, s.name]))
 
   // 承認ステップをorder順にソート
   const sortedApprovals = [...approvals].sort(
@@ -126,6 +153,33 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
                 <p className="mt-4 text-gray-700 leading-relaxed whitespace-pre-wrap">{issue.description}</p>
               ) : (
                 <p className="mt-4 text-gray-400 italic">説明はありません</p>
+              )}
+            </div>
+
+            {/* インプリント（履歴） */}
+            <div
+              className="bg-white rounded-xl border border-gray-200 p-6"
+              data-testid="issue-imprint-timeline"
+            >
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <History className="w-5 h-5 text-gray-600" />
+                履歴
+              </h2>
+              {issueEvents.length === 0 ? (
+                <p className="text-sm text-gray-400">まだ記録がありません（ステータスや担当の変更などがここに表示されます）</p>
+              ) : (
+                <ul className="space-y-3 border-l-2 border-gray-200 ml-2 pl-4">
+                  {issueEvents.map((ev: IssueEvent) => (
+                    <li key={ev.id} className="relative">
+                      <span className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-blue-500 border-2 border-white" />
+                      <p className="text-sm text-gray-900">{labelForIssueEvent(ev, statusById)}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {ev.actor?.name ?? '—'} ·{' '}
+                        {format(new Date(ev.occurred_at), 'yyyy/MM/dd HH:mm:ss', { locale: ja })}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
 
@@ -341,6 +395,26 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
                 </button>
               )}
             </div>
+
+            {/* Groups */}
+            {(issue.groups?.length ?? 0) > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1">
+                  <Users className="w-3.5 h-3.5" />
+                  グループ
+                </h3>
+                <div className="flex flex-wrap gap-2" data-testid="issue-groups">
+                  {(issue.groups ?? []).map((g) => (
+                    <span
+                      key={g.id}
+                      className="text-xs px-2 py-1 rounded-md bg-indigo-50 text-indigo-800 border border-indigo-100"
+                    >
+                      {g.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Details */}
             <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">

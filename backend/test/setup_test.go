@@ -67,6 +67,10 @@ func newTestServer(t *testing.T) *testServer {
 		&model.IssueTemplate{},
 		&model.IssueApproval{},
 		&model.IssueEvent{},
+		&model.Group{},
+		&model.UserGroup{},
+		&model.IssueGroup{},
+		&model.TransitionAlertRule{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
@@ -125,6 +129,10 @@ func newTestServer(t *testing.T) *testServer {
 	projectRepo := repository.NewProjectRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
 	issueEventRepo := repository.NewIssueEventRepository(db)
+	groupRepo := repository.NewGroupRepository(db)
+	userGroupRepo := repository.NewUserGroupRepository(db)
+	issueGroupRepo := repository.NewIssueGroupRepository(db)
+	alertRuleRepo := repository.NewTransitionAlertRuleRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
@@ -140,13 +148,15 @@ func newTestServer(t *testing.T) *testServer {
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
-	issueSvc := service.NewIssueService(issueRepo, projectRepo, issueEventRepo)
+	alertEval := &service.TransitionAlertEvaluator{Rules: alertRuleRepo, UG: userGroupRepo}
+	issueSvc := service.NewIssueService(issueRepo, projectRepo, issueEventRepo, groupRepo, issueGroupRepo, alertEval)
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo, statusRepo)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
-	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
+	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, issueSvc, roleRepo)
 	statusSvc := service.NewStatusService(statusRepo)
+	groupSvc := service.NewGroupService(groupRepo, userGroupRepo)
 
 	userH := handler.NewUserHandler(userSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
@@ -161,6 +171,7 @@ func newTestServer(t *testing.T) *testServer {
 	departmentH := handler.NewDepartmentHandler(departmentSvc)
 	statusH := handler.NewStatusHandler(statusSvc)
 	issueEventH := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
+	groupH := handler.NewGroupHandler(groupSvc)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -182,6 +193,7 @@ func newTestServer(t *testing.T) *testServer {
 	public.POST("/admin/login", userH.AdminLogin)
 	public.POST("/super-admin/login", superAdminH.Login)
 	api.POST("/admin/switch-organization", userH.SwitchOrganization)
+	api.GET("/users/:id/groups", groupH.ListByUser)
 	api.GET("/users/:id", userH.Get)
 	api.PUT("/users/:id/admin", userH.SetAdmin)
 	api.GET("/users/:id/roles", roleH.GetUserRoles)
@@ -240,6 +252,13 @@ func newTestServer(t *testing.T) *testServer {
 	api.GET("/projects/:id", projectH.Get)
 	api.PUT("/projects/:id", projectH.Update)
 	api.DELETE("/projects/:id", projectH.Delete)
+	api.GET("/organizations/:orgId/groups", groupH.List)
+	api.POST("/organizations/:orgId/groups", groupH.Create)
+	api.GET("/groups/:id/members", groupH.ListMembers)
+	api.PUT("/groups/:id/members", groupH.ReplaceMembers)
+	api.GET("/groups/:id", groupH.Get)
+	api.PUT("/groups/:id", groupH.Update)
+	api.DELETE("/groups/:id", groupH.Delete)
 	api.GET("/projects/:projectId/issues", issueH.List)
 	api.POST("/projects/:projectId/issues", issueH.Create)
 	api.GET("/organizations/:orgId/issues", issueH.ListByOrg)
@@ -247,6 +266,8 @@ func newTestServer(t *testing.T) *testServer {
 	api.GET("/organizations/:orgId/issues/:number", issueH.GetByOrgAndNumber)
 	api.PUT("/organizations/:orgId/issues/:number", issueH.UpdateByOrgAndNumber)
 	api.DELETE("/organizations/:orgId/issues/:number", issueH.DeleteByOrgAndNumber)
+	api.GET("/projects/:projectId/issues/:number/groups", issueH.ListIssueGroups)
+	api.PUT("/projects/:projectId/issues/:number/groups", issueH.PutIssueGroups)
 	api.GET("/projects/:projectId/issues/:number", issueH.Get)
 	api.PUT("/projects/:projectId/issues/:number", issueH.Update)
 	api.DELETE("/projects/:projectId/issues/:number", issueH.Delete)

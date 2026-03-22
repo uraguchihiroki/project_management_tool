@@ -18,24 +18,32 @@ type ApprovalService interface {
 	Reject(approvalID uuid.UUID, approverID uuid.UUID, comment string) (*model.IssueApproval, error)
 }
 
+// issueStatusImprinter は承認によるステータス更新時にインプリントを残すための抽象
+type issueStatusImprinter interface {
+	UpdateStatusWithImprint(issueID uuid.UUID, newStatusID uuid.UUID, actorID uuid.UUID) error
+}
+
 type approvalService struct {
-	approvalRepo repository.ApprovalRepository
-	workflowRepo repository.WorkflowRepository
-	issueRepo    repository.IssueRepository
-	roleRepo     repository.RoleRepository
+	approvalRepo   repository.ApprovalRepository
+	workflowRepo   repository.WorkflowRepository
+	issueRepo      repository.IssueRepository
+	issueImprinter issueStatusImprinter
+	roleRepo       repository.RoleRepository
 }
 
 func NewApprovalService(
 	approvalRepo repository.ApprovalRepository,
 	workflowRepo repository.WorkflowRepository,
 	issueRepo repository.IssueRepository,
+	issueImprinter issueStatusImprinter,
 	roleRepo repository.RoleRepository,
 ) ApprovalService {
 	return &approvalService{
-		approvalRepo: approvalRepo,
-		workflowRepo: workflowRepo,
-		issueRepo:    issueRepo,
-		roleRepo:     roleRepo,
+		approvalRepo:   approvalRepo,
+		workflowRepo:   workflowRepo,
+		issueRepo:      issueRepo,
+		issueImprinter: issueImprinter,
+		roleRepo:       roleRepo,
 	}
 }
 
@@ -138,10 +146,10 @@ func (s *approvalService) act(approvalID uuid.UUID, approverID uuid.UUID, commen
 		return nil, err
 	}
 
-	// 承認時: ステップ完了なら next_status_id へ遷移
+	// 承認時: ステップ完了なら next_status_id へ遷移（インプリント付き）
 	if action == "approved" && step.NextStatusID != nil {
 		if s.isStepComplete(approval.IssueID, step) {
-			_ = s.issueRepo.UpdateStatus(approval.IssueID, *step.NextStatusID)
+			_ = s.issueImprinter.UpdateStatusWithImprint(approval.IssueID, *step.NextStatusID, approverID)
 		}
 	}
 
@@ -314,7 +322,7 @@ func (s *approvalService) ApproveStep(issueID uuid.UUID, stepID uint, approverID
 		return nil, err
 	}
 	if step.NextStatusID != nil && s.isStepComplete(issueID, step) {
-		_ = s.issueRepo.UpdateStatus(issueID, *step.NextStatusID)
+		_ = s.issueImprinter.UpdateStatusWithImprint(issueID, *step.NextStatusID, approverID)
 	}
 	return s.approvalRepo.FindByID(approval.ID)
 }

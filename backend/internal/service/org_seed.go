@@ -254,7 +254,7 @@ func (s *orgSeedService) upsertDepartment(orgID uuid.UUID, name string, _ int) e
 }
 
 func (s *orgSeedService) upsertSampleIssue(orgID uuid.UUID, projectID uuid.UUID, reporterID uuid.UUID) error {
-	issues, err := s.issueRepo.FindByProject(projectID)
+	issues, err := s.issueRepo.FindByProject(projectID, nil)
 	if err != nil || len(issues) > 0 {
 		return err
 	}
