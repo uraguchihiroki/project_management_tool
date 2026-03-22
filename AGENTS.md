@@ -58,6 +58,8 @@
 
 **これらのあと**で、Network・ログ、必要なら Handler / DB / プロキシを追う。常時ルールの詳細 → [`.cursor/rules/browser-first-investigation.mdc`](.cursor/rules/browser-first-investigation.mdc)。
 
+**設計との矛盾**: ユーザーの説明や求める修正が、[`.sdd/tenant-invariants.md`](.sdd/tenant-invariants.md) や [`.sdd/api-spec.md`](.sdd/api-spec.md) と食い違うときは、**いきなりコードを書かず**不変条件を読み直し、必要ならユーザーに確認してから進める。
+
 ---
 
 ## ユーザースキルの参照
@@ -108,6 +110,7 @@ project_management_tool/
 **必ず [.sdd/README.md](.sdd/README.md) を参照すること。** ナビゲーションと各ドキュメントの役割が記載されている。
 
 - [architecture.md](.sdd/architecture.md) — システム構成・マルチテナント
+- [tenant-invariants.md](.sdd/tenant-invariants.md) — テナント不変条件の正本（JWT・親子 API・禁止事項）
 - [layer-responsibility.md](.sdd/layer-responsibility.md) — Handler / Service / Repository の責務
 - [db-schema.md](.sdd/db-schema.md) — テーブル定義
 - [api-spec.md](.sdd/api-spec.md) — REST API 仕様

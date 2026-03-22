@@ -17,6 +17,7 @@
 | [principles.md](principles.md) | 設計原則（開発はローカル、運用はクラウド）・Issue 管理の方針 |
 | [dev-environment.md](dev-environment.md) | 開発環境の構成・リソース配置・使用ツール |
 | [architecture.md](architecture.md) | システムアーキテクチャ、技術スタック、ディレクトリ構成 |
+| [tenant-invariants.md](tenant-invariants.md) | テナント（組織）不変条件の正本（JWT・親子 API・スーパーアドミン・禁止事項） |
 | [layer-responsibility.md](layer-responsibility.md) | Handler / Service / Repository の責務分担と境界線 |
 | [domain-model.md](domain-model.md) | エンティティ関係・ドメインモデル |
 | [transition-permissions.md](transition-permissions.md) | ステータス遷移・**遷移アラート**・監査（**§5–§7** と [db-schema](db-schema.md) / [api-spec](api-spec.md) の役割分担） |
@@ -53,3 +54,4 @@
 - **新規フローが追加されたとき** → [key-flows.md](key-flows.md) を更新
 - **ステータス遷移の権限の決定・変更** → [transition-permissions.md](transition-permissions.md)、必要に応じて [domain-model.md](domain-model.md) / [db-schema.md](db-schema.md) を更新
 - **画面追加・変更時** → [visual-flow/](visual-flow/) を更新（[transition-flow.md](visual-flow/transition-flow.md)、該当 v_xxx.md）
+- **テナント不変条件（誰が組織境界を張るか・親子の責務）を変えたとき** → [tenant-invariants.md](tenant-invariants.md) を更新し、必要なら [api-spec.md](api-spec.md) / [architecture.md](architecture.md) と整合させる

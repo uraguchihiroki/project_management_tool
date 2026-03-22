@@ -24,6 +24,12 @@ http://localhost:8080/api/v1
 - スーパーアドミン以外は、JWT の `organization_id` に一致するデータのみ返却する。
 - 他組織の `org_id` / `project_id` / `issue_id` 等を指定した場合は、`403` または `404` を返す。
 
+### テナント境界のパターン
+
+- **組織の壁はサーバが張る。** フロントだけで一覧を会社 ID で絞って表示しても、テナント分離の代わりにはならない。
+- **親子リソース**（例: ワークフロー配下のステータス）: パスの親 ID について「JWT の組織に属するか」を先に検証し、通ったあとは子を **親 ID**（例: `workflow_id`）で列挙する。詳細は [tenant-invariants.md](tenant-invariants.md) の (B)。
+- **スーパーアドミン**で「選択中の1組織」だけを出す画面では、クエリに `org_id`（または仕様で定めた同等パラメータ）を付け、**サーバが**その組織の行だけ返す。全件取得してクライアントだけで絞るのはセキュリティの代わりにならない。
+
 ---
 
 ## エンドポイント一覧
@@ -70,6 +76,27 @@ http://localhost:8080/api/v1
 | GET | /users/:id/organizations | ユーザーの所属組織（1ユーザー＝1組織のため1件） |
 | POST | /organizations/:orgId/users | 組織にユーザーを追加（既存ユーザーの name/email で新規ユーザーを作成） |
 | GET | /organizations/:orgId/statuses | 組織のステータス一覧。`?type=issue` で Issue 用にフィルタ。`?exclude_system=1` で sts_start/sts_goal を除外 |
+| POST | /organizations/:orgId/statuses | 組織の「組織Issue」「組織Project」固定ワークフローへステータス追加 |
+
+### Workflows（組織スコープのワークフロー）
+
+| Method | Path | 説明 |
+|--------|------|------|
+| GET | /workflows | ワークフロー一覧。**非スーパーアドミン**: JWT の `organization_id` のワークフローのみ。クエリ `org_id` を付ける場合は JWT と同一 UUID 必須（不一致は 403）。**スーパーアドミン**: `org_id` 省略時は全組織分、`org_id` 指定時はその組織のみ。無効な UUID は 400。 |
+| POST | /workflows | 作成（body: `organization_id`, `name`, `description`） |
+| PUT | /workflows/reorder | 表示順更新（body: `ids`） |
+| GET | /workflows/:id | 詳細取得（他組織の ID は 404） |
+| GET | /workflows/:id/statuses | **当該ワークフローに紐づく Status 一覧**（`order` 昇順）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。列挙は `workflow_id = :id`。**同一レスポンス内の重複行は DB 欠陥**であり、API でマージして隠してテナント合格にしてはならない（[tenant-invariants.md](tenant-invariants.md)）。 |
+| POST | /workflows/:id/statuses | **ステータス追加**。上記と同様に親ワークフローの組織を先に検証。body: `name`（必須）, `color`（省略時 `#6B7280`）, `type`（`issue` \| `project`、省略時 `issue`）, `order`（`0` または省略時は同一 WF 内の最大 `order` + 1）。作成後、当該 WF の **許可遷移を全ペア再シード**（Issue のステータス変更と整合） |
+| PUT | /workflows/:id | 名前・説明の更新 |
+| DELETE | /workflows/:id | 削除 |
+
+### Statuses（個別更新・削除）
+
+| Method | Path | 説明 |
+|--------|------|------|
+| PUT | /statuses/:id | 更新 |
+| DELETE | /statuses/:id | 削除 |
 
 ### Super Admin
 

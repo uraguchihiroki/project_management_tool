@@ -6,6 +6,12 @@
 - **テスト DB**: インメモリ SQLite（PostgreSQL 不要）
 - **実行**: `go test ./test/... -v`
 
+**マルチテナント（組織境界）のブラックボックステスト**は、[backend/test/TENANT_TEST_MATRIX.md](../backend/test/TENANT_TEST_MATRIX.md) で API ごとの網羅状況を追跡する（スーパーアドミン専用ルートは対象外）。新規エンドポイント追加時は `main.go` と併せてマトリクスを更新すること。
+
+- **全パラメータ組み合わせの網羅は求めない**が、**JWT 必須の各 API はマトリクスで追跡し、テナント観点のテストを少なくとも1本ずつ足すことを目標**とする。
+- 過去に解釈ミスやデグレがあった箇所は、マトリクス末尾の **「過去バグ・デグレ防止レジストリ」** に残し、テスト名・ファイルで固定する。
+- 不変条件の読み違いを防ぐ正本は [.sdd/tenant-invariants.md](tenant-invariants.md)。
+
 **PR 前の最小回帰（SDD 改修後も共通）**:
 
 - `cd backend && go test ./... -count=1`（`internal/service` のユニット含む）

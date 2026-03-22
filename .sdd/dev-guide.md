@@ -26,6 +26,7 @@
 - リクエストのパース、Service の呼び出し、レスポンスの返却のみ
 - `main.go` にルートを追加
 - [api-spec.md](api-spec.md) を更新
+- テナント（組織境界）に触れる変更では [tenant-invariants.md](tenant-invariants.md)（不変条件の変更時）、[backend/test/TENANT_TEST_MATRIX.md](../backend/test/TENANT_TEST_MATRIX.md)（行の追加・`テナントBB` 列）も更新する
 
 ### 5. テスト
 

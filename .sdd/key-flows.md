@@ -73,6 +73,8 @@ flowchart TD
 - `PUT /admin/users/:id` でユーザー更新
 - `DELETE /admin/users/:id` でユーザーを削除（1ユーザー＝1組織のため、org_id で確認後に削除）
 
+**読み分け**: 一覧でクエリの `org_id` を付けるのか、パスの `:id` で親を引いてから子を列挙するのかは、[tenant-invariants.md](tenant-invariants.md) と [api-spec.md](api-spec.md) の「テナント境界のパターン」で揃える。
+
 ---
 
 ## ステータス遷移の権限（Issue 管理）
