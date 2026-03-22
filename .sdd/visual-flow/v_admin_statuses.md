@@ -6,7 +6,7 @@
 
 ## 概要
 
-組織のステータス（Issue用・プロジェクト用）を管理。カンバンの列として使用。**遷移の門番**（誰がどの列へ移動できるか）は [transition-permissions.md](../transition-permissions.md) で決定（TBD。フォーム項目は合意後に追記）。
+組織のステータス（Issue用・プロジェクト用）を管理。カンバンの列として使用。**許可される遷移（形）**・**遷移アラート**は [transition-permissions.md](../transition-permissions.md) で決定（TBD。フォーム項目は合意後に追記）。
 
 ## 遷移元・遷移先
 

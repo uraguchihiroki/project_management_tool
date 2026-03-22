@@ -4,7 +4,7 @@
 
 **プロダクト方針**: 本プロジェクトは **Issue 管理システム**を主目的とする。稟議・承認ワークフロー専用のドメイン（Workflow / 承認ログ等）は **設計の中心から外す**（既存コードは移行・整理対象として扱う）。
 
-**ステータス遷移の権限**（誰がカンバン上の列を変えてよいか）は [transition-permissions.md](transition-permissions.md) を参照（**採用案は議論中 / TBD**）。
+**ステータス遷移・遷移アラート・監査**の意味論と、**db-schema / api-spec / 本ドキュメントの役割分担（§5–§7）**は [transition-permissions.md](transition-permissions.md) を参照。
 
 ---
 
@@ -13,8 +13,18 @@
 - **プロジェクト**を持つ（1:N、プロジェクトテーブルのマスタ）
 - **ユーザー**を持つ（users.organization_id 経由、1:N。1ユーザー＝1組織）
 - **部署**を持つ（1:N）
-- **役職（またはそれに相当する権限単位）**を持つ（1:N）
+- **Group** を持つ（1:N、開示・共同文脈・通知・タグ用途。詳細は [db-schema.md](db-schema.md)）
+- **役職（roles）**は補助・既存互換。Issue 文脈の主たる単位は **Group**（[transition-permissions.md](transition-permissions.md) §5–§7）
 - **Issue**を持つ（1:N、会社に直接紐づく想定）
+
+---
+
+## Group（グループ）
+
+- 組織に紐づく（`organization_id`）
+- **ユーザー**と **多対多**（`user_groups`）。兼務・通知宛先・「このチームだけ」を表現。
+- **Issue**と **多対多**（`issue_groups`）。単一部門だけ／複数部門共同などの**文脈**を表現。
+- 稟議システムのような **ディレクトリサービス完全同期**を前提にしない。**Issue 主体で自由に作れる**グループを優先する。
 
 ---
 
@@ -24,7 +34,7 @@
 - 例: 開発部、営業部、経理部 / 予算委員会、教育委員会
 - **ユーザー**を持つ（組織内でユーザーが部署に所属。1ユーザーが複数部署に所属可能 → N:M）
 
-> **Note:** 部署は組織構造のための概念。**「営業部の課長のみ Close」**のような **部署スコープ付きの遷移権限**を表現するために重要になりうる（詳細は [transition-permissions.md](transition-permissions.md)）。役職／グループとの関係も同ドキュメントで整理する。
+> **Note:** 部署は組織構造のための概念。**「営業部の課長のみを想定アクターとする」**のような **部署スコープ付きの表現**は **遷移アラート**や想定の整理に重要になりうる（詳細は [transition-permissions.md](transition-permissions.md)）。役職／グループとの関係も同ドキュメントで整理する。
 
 ---
 
@@ -57,7 +67,7 @@
 ## ステータス（Status）と Issue
 
 - Issue は **`status_id`** を持ち、Status がカンバンの**列**を定義する。
-- **ステータス遷移の権限**（例: 完了列へ誰が移動できるか）は、**承認フローとは独立**に設計する。候補・用語・ルールは [transition-permissions.md](transition-permissions.md)。
+- **ステータス遷移**（経路の形・**遷移アラート**・インプリントによる監査）は、**承認フローとは独立**に設計する。候補・用語・ルールは [transition-permissions.md](transition-permissions.md)。
 
 ---
 
@@ -66,7 +76,7 @@
 **可能。** Issue は `status_id` を持ち、Status がカラム（列）を定義する。
 
 - **表示**: Status を列、Issue をカードとして配置
-- **操作**: Issue の status_id を変更することでカードを列間で移動（権限チェックは [transition-permissions.md](transition-permissions.md) の合意に従う）
+- **操作**: Issue の status_id を変更することでカードを列間で移動（経路・**遷移アラート**・インプリントは [transition-permissions.md](transition-permissions.md) の合意に従う）
 - **スコープ**: 現状は Status が Project に紐づくため、カンバンはプロジェクト単位。将来、Issue がプロジェクト未紐づけを許容する場合、組織単位の Status またはデフォルト Status の検討が必要
 
 ---
@@ -74,7 +84,7 @@
 ## 役職（Role）／権限グループ（名称 TBD）
 
 - 会社に紐づく（organization_id）
-- **ワークフロー承認用の required_level** という位置づけは、**Issue 管理方針では採用しない**。`level` 等の属性は、**ステータス遷移の門番**や **グループ的な表現**に再利用するかは [transition-permissions.md](transition-permissions.md) で決定する。
+- **ワークフロー承認用の required_level** という位置づけは、**Issue 管理方針では採用しない**。`level` 等の属性は、**遷移アラートの想定アクター表現**や **グループ的な表現**に再利用するかは [transition-permissions.md](transition-permissions.md) で決定する。
 
 ---
 

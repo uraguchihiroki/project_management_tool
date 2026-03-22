@@ -2,6 +2,16 @@
 
 **方針**: Issue 管理を主目的とする。**ワークフロー／承認**用エンドポイントは、設計上の正規 API からは **除外**（コードに残る場合はレガシー扱いで移行予定）。以下の一覧はその方針に合わせて記載する。
 
+### 仕様の三本柱（.sdd README の **5 → 6 → 7**）
+
+| 順 | ドキュメント | 内容 |
+|----|--------------|------|
+| **5** | [db-schema.md](db-schema.md) | **インプリント**（`issue_events` の追記行）、**イベントログ**、**Group** と **Issue↔Group / User↔Group** 多対多 |
+| **6** | 本ドキュメント（api-spec） | 一覧・フィルタ・**イベント取得**など **クエリしやすい** API 契約 |
+| **7** | [transition-permissions.md](transition-permissions.md) | **許可される遷移（形）**、**遷移アラート**、**監査の意味**（運用・通知・ログの分担） |
+
+---
+
 ## ベースURL
 
 ```
@@ -90,15 +100,43 @@ http://localhost:8080/api/v1
 
 > **Note:** プロジェクト詳細取得（GET /projects/:id）のレスポンスに `statuses` が含まれる。ステータスはプロジェクト作成時に自動生成され、専用の CRUD API はない。
 
+### Groups（グループ）
+
+組織内の **Group**（開示・共同文脈・通知の宛先・タグ的用途）。**Issue 文脈を主**とし、HR ディレクトリと完全一致させる必要はない（同期は `kind` 等で表現可能）。
+
+| Method | Path | 説明 |
+|--------|------|------|
+| GET | /organizations/:orgId/groups | グループ一覧（`?kind=` でフィルタ可） |
+| POST | /organizations/:orgId/groups | グループ作成 |
+| GET | /groups/:id | グループ詳細 |
+| PUT | /groups/:id | グループ更新 |
+| DELETE | /groups/:id | グループ削除 |
+| GET | /groups/:id/members | メンバー（User）一覧 |
+| PUT | /groups/:id/members | メンバー一括置換または差分（実装で確定） |
+| GET | /users/:id/groups | ユーザーが所属するグループ一覧 |
+
 ### Issues（チケット）
 
 | Method | Path | 説明 |
 |--------|------|------|
-| GET | /projects/:projectId/issues | Issue一覧取得 |
-| POST | /projects/:projectId/issues | Issue作成 |
-| GET | /projects/:projectId/issues/:number | Issue詳細取得 |
-| PUT | /projects/:projectId/issues/:number | Issue更新 |
+| GET | /projects/:projectId/issues | Issue一覧取得。**クエリ例**: `group_id`（Group に紐づく Issue のみ）、`status_id`、`assignee_id`、期間は **`updated_at` またはイベント API** と整合させる（一覧は軽量を優先） |
+| POST | /projects/:projectId/issues | Issue作成（body に `group_ids` 任意） |
+| GET | /projects/:projectId/issues/:number | Issue詳細取得（**groups** を含めてもよい） |
+| PUT | /projects/:projectId/issues/:number | Issue更新（ステータス・担当変更時はサーバが **issue_events** に追記する想定） |
 | DELETE | /projects/:projectId/issues/:number | Issue削除 |
+| GET | /projects/:projectId/issues/:number/groups | Issue に付いた Group 一覧 |
+| PUT | /projects/:projectId/issues/:number/groups | Issue ↔ Group の紐付け更新（多対多） |
+
+### Issue events（インプリント・イベントログ・監査向け）
+
+**追記のみ**の **インプリント**列を読む API（[db-schema.md](db-schema.md) の `issue_events` と対応。各行＝1 事実）。
+
+| Method | Path | 説明 |
+|--------|------|------|
+| GET | /issues/:issueId/events | 当該 Issue の **インプリント**の時系列（`occurred_at` 昇順） |
+| GET | /organizations/:orgId/issue-events | 組織横断。**クエリ例**: `event_type`、`from_occurred_at`、`to_occurred_at`（発生時刻の範囲。DB は `TIMESTAMPTZ`）、`actor_id`、`issue_id`。**監査**: 「完了遷移で `actor_id` = `assignee_id_at_occurred`」等はクライアントまたはバックエンドのレポートで集計 |
+
+> **Note:** レスポンスの時刻は **ISO 8601（タイムゾーン付き）** とし、インプリントの `occurred_at`（DB `TIMESTAMPTZ`）と一致させる。
 
 ### Comments（コメント）
 
