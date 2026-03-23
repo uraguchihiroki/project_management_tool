@@ -81,30 +81,7 @@ func (s *statusService) Create(orgID uuid.UUID, name, color, statusType string, 
 }
 
 func (s *statusService) ListByWorkflowID(workflowID uint) ([]model.Status, error) {
-	rows, err := s.statusRepo.FindByWorkflowID(workflowID)
-	if err != nil {
-		return nil, err
-	}
-	return dedupeStatusesForWorkflowList(rows), nil
-}
-
-// dedupeStatusesForWorkflowList は同一ワークフロー内で (name,type,order) が同一の重複行を1件にまとめる。
-// レガシー移行で workflow_id が誤って共有された場合など、管理画面の一覧が何重にも見えるのを抑える。
-func dedupeStatusesForWorkflowList(statuses []model.Status) []model.Status {
-	if len(statuses) < 2 {
-		return statuses
-	}
-	seen := make(map[string]struct{}, len(statuses))
-	out := make([]model.Status, 0, len(statuses))
-	for _, s := range statuses {
-		key := s.Name + "\x00" + s.Type + "\x00" + fmt.Sprintf("%d", s.Order)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, s)
-	}
-	return out
+	return s.statusRepo.FindByWorkflowID(workflowID)
 }
 
 func (s *statusService) CreateForWorkflow(workflowID uint, name, color, statusType string, order int) (*model.Status, error) {

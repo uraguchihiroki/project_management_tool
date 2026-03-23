@@ -15,9 +15,9 @@
 
 | Method | Path | テナントBB | 主なテスト・備考 |
 |--------|------|------------|-------------------|
-| GET | /users | todo | 一覧が org スコープか |
+| GET | /users | **done** | `user_tenant_test.go`（一覧は JWT org のみ） |
 | GET | /users/:id/groups | todo | |
-| GET | /users/:id | todo | 他 org ユーザー 404 |
+| GET | /users/:id | **done** | `user_tenant_test.go`（他 org ユーザー 404） |
 | POST | /admin/switch-organization | — | 組織切替（別観点） |
 | PUT | /users/:id/admin | todo | |
 | GET | /users/:id/roles | todo | |
@@ -28,16 +28,16 @@
 | PUT | /roles/:id | todo | |
 | DELETE | /roles/:id | todo | |
 | GET | /workflows | **done** | `workflow_tenant_test.go`（一覧 org のみ、org_id クエリ、SA+org_id） |
-| POST | /workflows | todo | |
-| PUT | /workflows/reorder | todo | |
-| GET | /workflows/:id | todo | 他 org 404 |
-| GET | /workflows/:id/statuses | partial | `workflow_status_test.go` 別組織 404 |
-| POST | /workflows/:id/statuses | partial | 同上 |
-| PUT | /workflows/:id | todo | |
-| DELETE | /workflows/:id | todo | |
-| GET | /templates | todo | |
-| POST | /templates | todo | |
-| GET | /templates/:id | todo | |
+| POST | /workflows | **done** | `workflow_tenant_test.go`（body の他 org ID は無視して JWT org に作成）ほか |
+| PUT | /workflows/reorder | **done** | `workflow_tenant_test.go`（他 org ID 混在は 403） |
+| GET | /workflows/:id | **done** | `workflow_tenant_test.go`（他 org 404） |
+| GET | /workflows/:id/statuses | **done** | `workflow_status_test.go`（別組織 404、重複行は API でマージしない） |
+| POST | /workflows/:id/statuses | **done** | 同上 |
+| PUT | /workflows/:id | **done** | `workflow_tenant_test.go`（他 org 404） |
+| DELETE | /workflows/:id | **done** | 同上 |
+| GET | /templates | **done** | `template_tenant_test.go`（他 org テンプレは一覧に出ない） |
+| POST | /templates | **done** | `template_tenant_test.go`（他 org project_id は 403） |
+| GET | /templates/:id | **done** | `template_tenant_test.go`（他 org 404） |
 | PUT | /templates/:id | todo | |
 | DELETE | /templates/:id | todo | |
 | GET | /projects/:projectId/templates | todo | |
@@ -59,16 +59,16 @@
 | POST | /admin/users | todo | |
 | PUT | /admin/users/:id | todo | |
 | DELETE | /admin/users/:id | todo | |
-| GET | /projects | todo | |
+| GET | /projects | **done** | `project_tenant_test.go`（一覧は JWT org のみ） |
 | GET | /organizations/:orgId/statuses | todo | |
 | POST | /organizations/:orgId/statuses | todo | |
 | PUT | /statuses/:id | todo | |
 | DELETE | /statuses/:id | todo | |
-| POST | /projects | todo | |
+| POST | /projects | **done** | `project_tenant_test.go`（他 org_id は 403） |
 | PUT | /projects/reorder | todo | |
-| GET | /projects/:id | todo | |
-| PUT | /projects/:id | todo | |
-| DELETE | /projects/:id | todo | |
+| GET | /projects/:id | **done** | `project_tenant_test.go`（他 org 404） |
+| PUT | /projects/:id | **done** | 同上 |
+| DELETE | /projects/:id | **done** | 同上 |
 | GET | /organizations/:orgId/groups | todo | |
 | POST | /organizations/:orgId/groups | todo | |
 | GET | /groups/:id/members | todo | |

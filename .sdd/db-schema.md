@@ -302,6 +302,8 @@ issue_templates
 | type | VARCHAR(20) | NOT NULL | issue / project |
 | status_key | VARCHAR(50) | nullable, UNIQUE | システム用: sts_start, sts_goal。NULL=ユーザー定義 |
 
+> **実装メモ・重複行**: 現行モデルではワークフロー配下のステータスに `workflow_id` がある。同一 `workflow_id` で `(name, type, order)` が重複する行は [tenant-invariants.md](tenant-invariants.md) 上はデータ欠陥であり、API 一覧ではマージして隠さない。**将来の整合性対応**として、DB ユニーク制約（例: `(workflow_id, name, type, order)`）やマイグレーションによる重複除去を検討する（GORM AutoMigrate 方針・既存データとの兼ね合いは別途設計）。
+
 ### issues
 
 | カラム | 型 | 制約 | 説明 |

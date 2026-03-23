@@ -83,12 +83,14 @@ func TestWorkflowStatuses_OrgIsolation(t *testing.T) {
 	})
 }
 
-// レガシーDB等で同一 workflow_id に (name,type,order) 重複行がある場合、一覧は1件にまとめる
-func TestWorkflowStatuses_List_DedupesDuplicateNameTypeOrder(t *testing.T) {
+// 目的: tenant-invariants / api-spec に合わせ、DB に同一 (name,type,order) の重複行があっても API がマージして隠さないこと。
+// 期待: GET /workflows/:id/statuses の data は行数そのまま（ここでは「未着手」が3件）。
+func TestWorkflowStatuses_List_ReturnsAllRowsIncludingDuplicates(t *testing.T) {
 	ts := newTestServer(t)
-	ownerID := createTestUser(t, ts, "オーナー", "wf-st-dedup@example.com")
-	createTestProject(t, ts, "WFD", "重複テスト", ownerID)
-	wfID := createTestWorkflow(t, ts, "重複WF")
+	// --- Arrange ---
+	ownerID := createTestUser(t, ts, "オーナー", "wf-st-duprows@example.com")
+	createTestProject(t, ts, "WFD", "重複行テスト", ownerID)
+	wfID := createTestWorkflow(t, ts, "重複行WF")
 	wid64, err := strconv.ParseUint(wfID, 10, 64)
 	if err != nil {
 		t.Fatal(err)
@@ -108,9 +110,13 @@ func TestWorkflowStatuses_List_DedupesDuplicateNameTypeOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// --- Act ---
 	status, resp := ts.req(t, "GET", "/api/v1/workflows/"+wfID+"/statuses", nil)
-	assertStatus(t, status, http.StatusOK, "GET with dup rows")
+	t.Logf("GET statuses: http=%d", status)
+	// --- Assert ---
+	assertStatus(t, status, http.StatusOK, "GET with duplicate rows")
 	arr := mustGetArray(t, resp, "data")
+	t.Logf("len(data)=%d", len(arr))
 	dup := 0
 	for _, x := range arr {
 		m := x.(map[string]interface{})
@@ -118,7 +124,7 @@ func TestWorkflowStatuses_List_DedupesDuplicateNameTypeOrder(t *testing.T) {
 			dup++
 		}
 	}
-	if dup != 1 {
-		t.Fatalf("expected 1 未着手 after dedupe, got %d (total rows %d)", dup, len(arr))
+	if dup != 3 {
+		t.Fatalf("期待: 未着手が3件（マージしない）, 実際: %d 件 (data 総数 %d)", dup, len(arr))
 	}
 }
