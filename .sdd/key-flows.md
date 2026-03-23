@@ -73,33 +73,23 @@ flowchart TD
 - `PUT /admin/users/:id` でユーザー更新
 - `DELETE /admin/users/:id` でユーザーを削除（1ユーザー＝1組織のため、org_id で確認後に削除）
 
+**読み分け**: 一覧でクエリの `org_id` を付けるのか、パスの `:id` で親を引いてから子を列挙するのかは、[tenant-invariants.md](tenant-invariants.md) と [api-spec.md](api-spec.md) の「テナント境界のパターン」で揃える。
+
 ---
 
-## 承認フロー
+## ステータス遷移の権限（Issue 管理）
 
-```mermaid
-flowchart LR
-    Template[IssueTemplate] -->|workflow_id| Workflow[Workflow]
-    Workflow --> Steps[WorkflowStep]
-    Issue[Issue] -->|workflow_id| Workflow
-    Issue --> Approvals[IssueApproval]
-    Steps --> Approvals
-    Approvals -->|approved/rejected| Next[次ステップ or 完了]
-```
+**稟議・承認ワークフロー（誰が許可したかの証跡）とは別**に、「**誰が Issue のステータス（カンバンの列）を変更してよいか**」を制御する。詳細・候補案・未決事項は [transition-permissions.md](transition-permissions.md) を参照（**採用案は TBD**）。
 
-### 概要
+### ざっくりした流れ（概念）
 
-1. **Workflow**: プロジェクトに紐づく承認プロセス。複数の **WorkflowStep** を持つ。
-2. **WorkflowStep**: 承認ステップ。`required_level` で必要な役職レベルを指定。`status_id` で紐づくステータスを指定可能。
-3. **IssueTemplate**: Issue 作成時に使用。`workflow_id` を指定すると、その Issue に承認フローが適用される。
-4. **IssueApproval**: Issue ごとの承認レコード。各 WorkflowStep に対応。`status` は pending / approved / rejected。
+1. ユーザーが Issue の `status_id` を変更する（またはカンバンでドラッグする）。
+2. バックエンドは **遷移ルール**（組織・部署・役職／グループ等）に照らし、操作者の権限を検証する。
+3. ルールは **特定ユーザー ID に Close を結び付けない**方向で設計する（人事異動時の運用を考慮）。
 
-### 承認の流れ
+### 将来のフロー図（確定後に Mermaid を追記）
 
-1. テンプレートにワークフローを紐づけた Issue を作成
-2. Issue 作成時に、ワークフローの各ステップに対応する `IssueApproval` が自動作成（status: pending）
-3. 承認者は `POST /approvals/:id/approve` または `POST /approvals/:id/reject` で承認/却下
-4. 承認者の `required_level` 以上の役職レベルが必要
+合意後、`domain-model.md` / `db-schema.md` と整合する図をここに置く。
 
 ---
 
@@ -112,5 +102,5 @@ flowchart LR
 | 組織選択 | /select-org | 所属組織が複数ある場合 |
 | プロジェクト一覧 | /projects | プロジェクト一覧 |
 | プロジェクト詳細 | /projects/[id] | プロジェクト内 Issue 一覧 |
-| Issue 詳細 | /projects/[id]/issues/[number] | Issue 詳細・コメント・承認 |
-| 管理画面 | /admin | ユーザー・役職・ワークフロー・テンプレート管理 |
+| Issue 詳細 | /projects/[id]/issues/[number] | Issue 詳細・コメント・ステータス変更 |
+| 管理画面 | /admin | ユーザー・グループ・ステータス・プロジェクト・ワークフロー・テンプレート等（管理メニューは実装に合わせる） |

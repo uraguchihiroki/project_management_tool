@@ -27,4 +27,4 @@
 - `GET /projects/:id` でプロジェクト・ステータス取得
 - `GET /projects/:projectId/issues` で Issue 一覧
 - `POST /projects/:projectId/issues` で Issue 作成
-- テンプレート選択時は本文・優先度・ワークフローを自動適用
+- テンプレート選択時は本文・優先度等を自動適用

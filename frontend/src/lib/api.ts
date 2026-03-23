@@ -1,23 +1,95 @@
-import axios from 'axios'
-import type { ApiResponse, ListResponse, Project, Issue, Comment, User, Status, IssueTemplate, IssueApproval, Organization, SuperAdmin, Workflow, WorkflowStep, ApprovalObject } from '@/types'
+import axios, { isAxiosError } from 'axios'
+import type {
+  ApiResponse,
+  ListResponse,
+  Project,
+  Issue,
+  Comment,
+  User,
+  Status,
+  IssueTemplate,
+  Organization,
+  SuperAdmin,
+  Workflow,
+  Group,
+  IssueEvent,
+} from '@/types'
 import { clearAuthSession, getAuthToken } from '@/lib/authToken'
 
-/** 空文字の NEXT_PUBLIC_API_URL で相対パスになりバックエンドに届かないのを防ぐ */
-function getApiBaseURL(): string {
+/**
+ * API のベース URL（末尾スラッシュなし）。
+ * - NEXT_PUBLIC_API_URL があれば最優先（本番・API を別ホストに置く場合）。
+ * - 未設定かつブラウザでは同一オリジンの `/api/v1`（Next の rewrite → バックエンド）。
+ *   → Windows 上の Playwright ブラウザから WSL の Next にアクセスしてもログイン API に届く。
+ * - SSR / Node のフォールバックはループバック直叩き。
+ */
+export function resolveApiBaseURL(): string {
   const raw = process.env.NEXT_PUBLIC_API_URL
   if (typeof raw === 'string' && raw.trim() !== '') {
     return raw.replace(/\/+$/, '')
   }
-  return 'http://localhost:8080/api/v1'
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin.replace(/\/+$/, '')}/api/v1`
+  }
+  return 'http://127.0.0.1:8080/api/v1'
+}
+
+/** Next の rewrite 失敗や Echo の素の 500 など、プレーン「Internal Server Error」を判別 */
+function isGenericInternalError(text: string): boolean {
+  return /internal\s+server\s+error/i.test(text.trim())
+}
+
+/** 502/503/504 や上記のとき、ログイン画面向けに「APIに接続」系の文へ寄せる（E2E の期待文言とも整合） */
+function messageForUnreachableOrBrokenApi(status: number, rawMessage: string): string | null {
+  if ([502, 503, 504].includes(status)) {
+    return 'ログインに失敗しました。APIに接続できません（プロキシ先のバックエンドが起動しているか確認してください）。'
+  }
+  if (status >= 500 && isGenericInternalError(rawMessage)) {
+    return 'ログインに失敗しました。APIに接続できないか、サーバー内部エラーです（バックエンド起動・DATABASE_URL・Next の rewrite 先を確認してください）。'
+  }
+  return null
+}
+
+/** ログイン画面などで Axios 例外を人が読める文にする（Echo の message / ネットワークエラー等） */
+export function formatApiError(e: unknown): string {
+  if (isAxiosError(e)) {
+    if (e.response) {
+      const { status, statusText, data } = e.response
+      if (typeof data === 'string' && data.trim()) {
+        const t = data.trim().slice(0, 300)
+        if (t.startsWith('<')) {
+          return `HTTP ${status}（HTML が返りました。API の URL を確認してください）`
+        }
+        const mapped = messageForUnreachableOrBrokenApi(status, t)
+        if (mapped) return mapped
+        return t
+      }
+      if (data && typeof data === 'object' && 'message' in data) {
+        const msg = String((data as { message: unknown }).message)
+        const mapped = messageForUnreachableOrBrokenApi(status, msg)
+        if (mapped) return mapped
+        return msg
+      }
+      const fallback = `HTTP ${status}${statusText ? ` ${statusText}` : ''}`
+      const mapped = messageForUnreachableOrBrokenApi(status, statusText || '')
+      return mapped ?? fallback
+    }
+    if (e.code === 'ECONNABORTED') return '接続がタイムアウトしました'
+    return e.message || 'サーバーに接続できません'
+  }
+  if (e instanceof Error) return e.message
+  return String(e)
 }
 
 const api = axios.create({
-  baseURL: getApiBaseURL(),
+  baseURL: resolveApiBaseURL(),
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
 })
 
 api.interceptors.request.use((config) => {
+  // モジュール読み込み時と異なる origin で動かすケースに備え毎回解決
+  config.baseURL = resolveApiBaseURL()
   const token = getAuthToken()
   if (token) {
     config.headers = config.headers ?? {}
@@ -145,8 +217,12 @@ export const getStatuses = (projectId: string) =>
   api.get<ListResponse<Status>>(`/projects/${projectId}/statuses`).then((r) => r.data.data)
 
 // Issues
-export const getIssues = (projectId: string) =>
-  api.get<ListResponse<Issue>>(`/projects/${projectId}/issues`).then((r) => r.data.data)
+export const getIssues = (projectId: string, opts?: { group_id?: string }) =>
+  api
+    .get<ListResponse<Issue>>(`/projects/${projectId}/issues`, {
+      params: opts?.group_id ? { group_id: opts.group_id } : {},
+    })
+    .then((r) => r.data.data)
 
 export const getIssue = (projectId: string, number: number) =>
   api.get<ApiResponse<Issue>>(`/projects/${projectId}/issues/${number}`).then((r) => r.data.data)
@@ -162,7 +238,7 @@ export const createIssue = (
     reporter_id: string
     due_date?: string
     template_id?: number
-    workflow_id?: number
+    group_ids?: string[]
   }
 ) => api.post<ApiResponse<Issue>>(`/projects/${projectId}/issues`, data).then((r) => r.data.data)
 
@@ -179,7 +255,6 @@ export const createTemplate = (data: {
   description?: string
   body?: string
   default_priority?: string
-  workflow_id?: number
 }) => api.post<ApiResponse<IssueTemplate>>('/templates', data).then((r) => r.data.data)
 
 export const updateTemplate = (id: number, data: {
@@ -187,7 +262,6 @@ export const updateTemplate = (id: number, data: {
   description?: string
   body?: string
   default_priority?: string
-  workflow_id?: number | null
 }) => api.put<ApiResponse<IssueTemplate>>(`/templates/${id}`, data).then((r) => r.data.data)
 
 export const deleteTemplate = (id: number) =>
@@ -196,25 +270,45 @@ export const deleteTemplate = (id: number) =>
 export const updateIssue = (
   projectId: string,
   number: number,
-  data: Partial<{ title: string; description: string; status_id: string; priority: string; assignee_id: string }>
+  data: Partial<{
+    title: string
+    description: string
+    status_id: string
+    priority: string
+    assignee_id: string
+    group_ids: string[]
+  }>
 ) => api.put<ApiResponse<Issue>>(`/projects/${projectId}/issues/${number}`, data).then((r) => r.data.data)
+
+/** Issue のインプリント（時系列） */
+export const getIssueEvents = (issueId: string) =>
+  api.get<{ data: IssueEvent[] }>(`/issues/${issueId}/events`).then((r) => r.data.data)
+
+/** 組織のグループ一覧 */
+export const getOrganizationGroups = (orgId: string, params?: { kind?: string }) =>
+  api.get<ListResponse<Group>>(`/organizations/${orgId}/groups`, { params: params ?? {} }).then((r) => r.data.data)
+
+/** Issue に付いたグループ一覧（GET は Issue 詳細に含まれることもあるが、明示取得用） */
+export const getIssueGroups = (projectId: string, number: number) =>
+  api.get<{ data: Group[] }>(`/projects/${projectId}/issues/${number}/groups`).then((r) => r.data.data)
+
+export const putIssueGroups = (projectId: string, number: number, groupIds: string[]) =>
+  api.put(`/projects/${projectId}/issues/${number}/groups`, { group_ids: groupIds })
+
+export const getUserGroups = (userId: string) =>
+  api.get<ListResponse<Group>>(`/users/${userId}/groups`).then((r) => r.data.data)
 
 export const deleteIssue = (projectId: string, number: number) =>
   api.delete(`/projects/${projectId}/issues/${number}`)
 
-// Approvals
-export const getApprovals = (issueId: string) =>
-  api.get<{ data: IssueApproval[] }>(`/issues/${issueId}/approvals`).then((r) => r.data.data)
-
-export const approveStep = (approvalId: string, approverId: string, comment: string) =>
-  api.post<ApiResponse<IssueApproval>>(`/approvals/${approvalId}/approve`, { approver_id: approverId, comment }).then((r) => r.data.data)
-
-export const rejectStep = (approvalId: string, approverId: string, comment: string) =>
-  api.post<ApiResponse<IssueApproval>>(`/approvals/${approvalId}/reject`, { approver_id: approverId, comment }).then((r) => r.data.data)
-
-// Workflows & Steps
-export const getWorkflows = () =>
-  api.get<ListResponse<Workflow>>('/workflows').then((r) => r.data.data)
+// Workflows
+/** 管理画面で選択中の組織に合わせる場合は orgId を渡す（スーパーアドミン時のサーバー側絞り込み） */
+export const getWorkflows = (orgId?: string) =>
+  api
+    .get<ListResponse<Workflow>>('/workflows', {
+      params: orgId ? { org_id: orgId } : undefined,
+    })
+    .then((r) => r.data.data)
 
 export const createWorkflow = (data: {
   organization_id: string
@@ -233,50 +327,14 @@ export const reorderWorkflowsApi = (ids: number[]) =>
 export const getWorkflow = (id: string) =>
   api.get<ApiResponse<Workflow>>(`/workflows/${id}`).then((r) => r.data.data)
 
-export const getWorkflowStep = (workflowId: string, stepId: string) =>
-  api.get<ApiResponse<WorkflowStep>>(`/workflows/${workflowId}/steps/${stepId}`).then((r) => r.data.data)
+export const getWorkflowStatuses = (workflowId: string) =>
+  api.get<ListResponse<Status>>(`/workflows/${workflowId}/statuses`).then((r) => r.data.data)
 
-export const createWorkflowStep = (
+export const createWorkflowStatus = (
   workflowId: string,
-  data: {
-    status_id: string
-    next_status_id?: string
-    description?: string
-    threshold?: number
-    approval_objects?: Array<{
-      type: 'role' | 'user'
-      role_id?: number
-      role_operator?: 'eq' | 'gte'
-      user_id?: string
-      points?: number
-      exclude_reporter?: boolean
-      exclude_assignee?: boolean
-    }>
-  }
-) => api.post<ApiResponse<WorkflowStep>>(`/workflows/${workflowId}/steps`, data).then((r) => r.data.data)
-
-export const updateWorkflowStep = (
-  workflowId: string,
-  stepId: string,
-  data: {
-    status_id?: string
-    next_status_id?: string
-    description?: string
-    threshold?: number
-    approval_objects?: Array<{
-      type: 'role' | 'user'
-      role_id?: number
-      role_operator?: 'eq' | 'gte'
-      user_id?: string
-      points?: number
-      exclude_reporter?: boolean
-      exclude_assignee?: boolean
-    }>
-  }
-) => api.put<ApiResponse<WorkflowStep>>(`/workflow-steps/${stepId}`, data).then((r) => r.data.data)
-
-export const deleteWorkflowStep = (workflowId: string, stepId: string) =>
-  api.delete(`/workflows/${workflowId}/steps/${stepId}`)
+  data: { name: string; color?: string; type?: 'issue' | 'project'; order?: number }
+) =>
+  api.post<ApiResponse<Status>>(`/workflows/${workflowId}/statuses`, data).then((r) => r.data.data)
 
 // Comments
 export const getComments = (issueId: string) =>

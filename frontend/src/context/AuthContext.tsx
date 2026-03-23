@@ -4,7 +4,14 @@ import { createContext, useContext, useState, useEffect, useLayoutEffect, useCal
 import { useRouter } from 'next/navigation'
 import type { User, Organization } from '@/types'
 import { clearAuthSession, setAuthToken } from '@/lib/authToken'
-import { adminLogin, createUser, getUserOrganizations, setUserAdmin, switchOrganization } from '@/lib/api'
+import {
+  adminLogin,
+  createUser,
+  formatApiError,
+  getUserOrganizations,
+  setUserAdmin,
+  switchOrganization,
+} from '@/lib/api'
 
 const SESSION_KEY = 'currentUser'
 const ORG_KEY = 'currentOrg'
@@ -127,12 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.push(dest)
       return { ok: true }
     } catch (e: unknown) {
-      const msg =
-        typeof e === 'object' && e !== null && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined
-      if (msg) return { ok: false, error: String(msg) }
-      return { ok: false, error: 'ログインに失敗しました（メールが未登録、またはAPIに接続できません）' }
+      return { ok: false, error: formatApiError(e) }
     }
   }, [handleOrgSelection, router])
 
@@ -166,11 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.push(dest)
       return { ok: true }
     } catch (e: unknown) {
-      const msg =
-        typeof e === 'object' && e !== null && 'response' in e
-          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined
-      return { ok: false, error: msg ? String(msg) : '登録に失敗しました' }
+      return { ok: false, error: formatApiError(e) }
     }
   }, [handleOrgSelection, router])
 

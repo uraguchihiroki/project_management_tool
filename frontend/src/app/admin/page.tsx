@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 export default function AdminPage() {
   const router = useRouter()
   useEffect(() => {
-    router.replace('/admin/roles')
+    router.replace('/admin/projects')
   }, [router])
   return null
 }

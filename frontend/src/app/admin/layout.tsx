@@ -2,14 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Settings, Users, Shield, GitBranch, FileText, FolderKanban, Building2, Tag } from 'lucide-react'
+import { Settings, Users, GitBranch, FileText, FolderKanban, Building2, Tag } from 'lucide-react'
 import Header from '@/components/Header'
 import { useRequireAdmin } from '@/context/AuthContext'
 
 const navItems = [
   { href: '/admin/projects', label: 'プロジェクト管理', icon: FolderKanban },
-  { href: '/admin/departments', label: '部署管理', icon: Building2 },
-  { href: '/admin/roles', label: '役職管理', icon: Shield },
+  { href: '/admin/departments', label: 'グループ管理', icon: Building2 },
   { href: '/admin/statuses', label: 'ステータス管理', icon: Tag },
   { href: '/admin/users', label: 'ユーザー管理', icon: Users },
   { href: '/admin/workflows', label: 'ワークフロー', icon: GitBranch },

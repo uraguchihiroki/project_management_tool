@@ -18,25 +18,52 @@ func NewWorkflowHandler(workflowService service.WorkflowService) *WorkflowHandle
 }
 
 // GET /api/v1/workflows
+// 非スーパーアドミン: JWT の organization_id のワークフローのみ。クエリ org_id が付いた場合は JWT と一致必須（不一致は 403）。
+// スーパーアドミン: org_id 省略時は全組織。org_id 指定時はその組織のみ。
 func (h *WorkflowHandler) List(c echo.Context) error {
 	orgScope, isSuperAdmin, authErr := requireClaims(c)
 	if authErr != nil {
 		return authErr
 	}
+	qOrg := c.QueryParam("org_id")
+	var queryOrgID *uuid.UUID
+	if qOrg != "" {
+		parsed, err := uuid.Parse(qOrg)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid org_id")
+		}
+		queryOrgID = &parsed
+	}
+
 	workflows, err := h.workflowService.ListAll()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-	if !isSuperAdmin && orgScope != nil {
-		filtered := make([]interface{}, 0, len(workflows))
-		for _, wf := range workflows {
-			if wf.OrganizationID == *orgScope {
-				filtered = append(filtered, wf)
-			}
-		}
-		return c.JSON(http.StatusOK, map[string]interface{}{"data": filtered})
+
+	if isSuperAdmin && queryOrgID == nil {
+		return c.JSON(http.StatusOK, map[string]interface{}{"data": workflows})
 	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"data": workflows})
+
+	var targetOrg uuid.UUID
+	if isSuperAdmin {
+		targetOrg = *queryOrgID
+	} else {
+		if orgScope == nil {
+			return echo.NewHTTPError(http.StatusForbidden, "organization scope is missing")
+		}
+		if queryOrgID != nil && *queryOrgID != *orgScope {
+			return echo.NewHTTPError(http.StatusForbidden, "org_id does not match token scope")
+		}
+		targetOrg = *orgScope
+	}
+
+	filtered := make([]interface{}, 0, len(workflows))
+	for _, wf := range workflows {
+		if wf.OrganizationID == targetOrg {
+			filtered = append(filtered, wf)
+		}
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": filtered})
 }
 
 // POST /api/v1/workflows
@@ -62,9 +89,6 @@ func (h *WorkflowHandler) Create(c echo.Context) error {
 	}
 	var orgID uuid.UUID
 	if isSuperAdmin {
-		if req.OrganizationID == "" {
-			return echo.NewHTTPError(http.StatusBadRequest, "organization_id is required")
-		}
 		parsed, err := uuid.Parse(req.OrganizationID)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid organization_id")
@@ -74,7 +98,6 @@ func (h *WorkflowHandler) Create(c echo.Context) error {
 		if orgScope == nil {
 			return echo.NewHTTPError(http.StatusForbidden, "organization scope is missing")
 		}
-		// JWT の組織スコープで作成（クライアントの currentOrg とズレても 403 にしない）
 		orgID = *orgScope
 	}
 	workflow, err := h.workflowService.CreateWorkflow(orgID, req.Name, req.Description)
@@ -111,15 +134,15 @@ func (h *WorkflowHandler) Update(c echo.Context) error {
 		return authErr
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid workflow id")
+	}
 	current, err := h.workflowService.GetWorkflow(uint(id))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "workflow not found")
 	}
 	if !isSuperAdmin && (orgScope == nil || current.OrganizationID != *orgScope) {
 		return echo.NewHTTPError(http.StatusNotFound, "workflow not found")
-	}
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid workflow id")
 	}
 	type Request struct {
 		Name        string `json:"name"`
@@ -166,35 +189,6 @@ func (h *WorkflowHandler) Reorder(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-// PUT /api/v1/workflows/:id/steps/reorder
-func (h *WorkflowHandler) ReorderSteps(c echo.Context) error {
-	orgScope, isSuperAdmin, authErr := requireClaims(c)
-	if authErr != nil {
-		return authErr
-	}
-	workflowID, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid workflow id")
-	}
-	if !isSuperAdmin {
-		wf, err := h.workflowService.GetWorkflow(uint(workflowID))
-		if err != nil || orgScope == nil || wf.OrganizationID != *orgScope {
-			return echo.NewHTTPError(http.StatusNotFound, "workflow not found")
-		}
-	}
-	type Request struct {
-		IDs []uint `json:"ids"`
-	}
-	var req Request
-	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	}
-	if err := h.workflowService.ReorderSteps(uint(workflowID), req.IDs); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-	return c.NoContent(http.StatusNoContent)
-}
-
 // DELETE /api/v1/workflows/:id
 func (h *WorkflowHandler) Delete(c echo.Context) error {
 	orgScope, isSuperAdmin, authErr := requireClaims(c)
@@ -202,245 +196,16 @@ func (h *WorkflowHandler) Delete(c echo.Context) error {
 		return authErr
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid workflow id")
+	}
 	if !isSuperAdmin {
 		wf, err := h.workflowService.GetWorkflow(uint(id))
 		if err != nil || orgScope == nil || wf.OrganizationID != *orgScope {
 			return echo.NewHTTPError(http.StatusNotFound, "workflow not found")
 		}
 	}
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid workflow id")
-	}
 	if err := h.workflowService.DeleteWorkflow(uint(id)); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-	return c.NoContent(http.StatusNoContent)
-}
-
-// GET /api/v1/workflows/:id/steps/:stepId
-func (h *WorkflowHandler) GetStep(c echo.Context) error {
-	orgScope, isSuperAdmin, authErr := requireClaims(c)
-	if authErr != nil {
-		return authErr
-	}
-	stepID, err := strconv.ParseUint(c.Param("stepId"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid step id")
-	}
-	step, err := h.workflowService.GetStep(uint(stepID))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "step not found")
-	}
-	if !isSuperAdmin && (orgScope == nil || step.OrganizationID != *orgScope) {
-		return echo.NewHTTPError(http.StatusNotFound, "step not found")
-	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"data": step})
-}
-
-type approvalObjectReq struct {
-	Type            string  `json:"type"`
-	RoleID          *uint   `json:"role_id"`
-	RoleOperator    string  `json:"role_operator"`
-	UserID          *string `json:"user_id"`
-	Points          int     `json:"points"`
-	ExcludeReporter bool    `json:"exclude_reporter"`
-	ExcludeAssignee bool    `json:"exclude_assignee"`
-}
-
-// POST /api/v1/workflows/:id/steps
-func (h *WorkflowHandler) AddStep(c echo.Context) error {
-	orgScope, isSuperAdmin, authErr := requireClaims(c)
-	if authErr != nil {
-		return authErr
-	}
-	workflowID, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if !isSuperAdmin {
-		wf, err := h.workflowService.GetWorkflow(uint(workflowID))
-		if err != nil || orgScope == nil || wf.OrganizationID != *orgScope {
-			return echo.NewHTTPError(http.StatusNotFound, "workflow not found")
-		}
-	}
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid workflow id")
-	}
-	type Request struct {
-		StatusID        string             `json:"status_id"` // このステップのステータス（必須）
-		NextStatusID    *string            `json:"next_status_id"`
-		Description     string             `json:"description"`
-		Threshold       int                `json:"threshold"`
-		ApprovalObjects []approvalObjectReq `json:"approval_objects"`
-		ExcludeReporter bool               `json:"exclude_reporter"`
-		ExcludeAssignee bool               `json:"exclude_assignee"`
-	}
-	var req Request
-	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	}
-	if req.StatusID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "status_id is required")
-	}
-	statusID, err := uuid.Parse(req.StatusID)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid status_id")
-	}
-	if req.Threshold < 0 || req.Threshold > 99999 {
-		return echo.NewHTTPError(http.StatusBadRequest, "閾値は0～99999の範囲で指定してください")
-	}
-	var nextStatusID *uuid.UUID
-	if req.NextStatusID != nil && *req.NextStatusID != "" {
-		parsed, err := uuid.Parse(*req.NextStatusID)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid next_status_id")
-		}
-		nextStatusID = &parsed
-	}
-	aos := make([]service.ApprovalObjectInput, 0, len(req.ApprovalObjects))
-	for _, ao := range req.ApprovalObjects {
-		var userID *uuid.UUID
-		if ao.UserID != nil && *ao.UserID != "" {
-			parsed, err := uuid.Parse(*ao.UserID)
-			if err != nil {
-				continue
-			}
-			userID = &parsed
-		}
-		points := ao.Points
-		if points < 1 {
-			points = 1
-		}
-		aos = append(aos, service.ApprovalObjectInput{
-			Type:            ao.Type,
-			RoleID:          ao.RoleID,
-			RoleOperator:    ao.RoleOperator,
-			UserID:          userID,
-			Points:          points,
-			ExcludeReporter: ao.ExcludeReporter,
-			ExcludeAssignee: ao.ExcludeAssignee,
-		})
-	}
-	input := service.AddStepInput{
-		StatusID:        statusID,
-		NextStatusID:    nextStatusID,
-		Description:     req.Description,
-		Threshold:       req.Threshold,
-		ApprovalObjects: aos,
-		ExcludeReporter: req.ExcludeReporter,
-		ExcludeAssignee: req.ExcludeAssignee,
-	}
-	step, err := h.workflowService.AddStep(uint(workflowID), input)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-	return c.JSON(http.StatusCreated, map[string]interface{}{"data": step})
-}
-
-// PUT /api/v1/workflows/:id/steps/:stepId
-func (h *WorkflowHandler) UpdateStep(c echo.Context) error {
-	orgScope, isSuperAdmin, authErr := requireClaims(c)
-	if authErr != nil {
-		return authErr
-	}
-	stepID, err := strconv.ParseUint(c.Param("stepId"), 10, 64)
-	if !isSuperAdmin {
-		current, err := h.workflowService.GetStep(uint(stepID))
-		if err != nil || orgScope == nil || current.OrganizationID != *orgScope {
-			return echo.NewHTTPError(http.StatusNotFound, "step not found")
-		}
-	}
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid step id")
-	}
-	type Request struct {
-		StatusID        *string            `json:"status_id"`
-		NextStatusID    *string            `json:"next_status_id"`
-		Description     string             `json:"description"`
-		Threshold       int                `json:"threshold"`
-		ApprovalObjects []approvalObjectReq `json:"approval_objects"`
-		ExcludeReporter bool               `json:"exclude_reporter"`
-		ExcludeAssignee bool               `json:"exclude_assignee"`
-	}
-	var req Request
-	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	}
-	if req.Threshold < 0 || req.Threshold > 99999 {
-		return echo.NewHTTPError(http.StatusBadRequest, "閾値は0～99999の範囲で指定してください")
-	}
-	var statusID, nextStatusID *uuid.UUID
-	if req.StatusID != nil && *req.StatusID != "" {
-		parsed, err := uuid.Parse(*req.StatusID)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid status_id")
-		}
-		statusID = &parsed
-	}
-	if req.NextStatusID != nil && *req.NextStatusID != "" {
-		parsed, err := uuid.Parse(*req.NextStatusID)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid next_status_id")
-		}
-		nextStatusID = &parsed
-	}
-	var aos []service.ApprovalObjectInput
-	if req.ApprovalObjects != nil {
-		aos = make([]service.ApprovalObjectInput, 0, len(req.ApprovalObjects))
-		for _, ao := range req.ApprovalObjects {
-			var userID *uuid.UUID
-			if ao.UserID != nil && *ao.UserID != "" {
-				parsed, err := uuid.Parse(*ao.UserID)
-				if err != nil {
-					continue
-				}
-				userID = &parsed
-			}
-			points := ao.Points
-			if points < 1 {
-				points = 1
-			}
-			aos = append(aos, service.ApprovalObjectInput{
-				Type:            ao.Type,
-				RoleID:          ao.RoleID,
-				RoleOperator:    ao.RoleOperator,
-				UserID:          userID,
-				Points:          points,
-				ExcludeReporter: ao.ExcludeReporter,
-				ExcludeAssignee: ao.ExcludeAssignee,
-			})
-		}
-	}
-	input := service.UpdateStepInput{
-		StatusID:        statusID,
-		NextStatusID:    nextStatusID,
-		Description:     req.Description,
-		Threshold:       req.Threshold,
-		ApprovalObjects: aos,
-		ExcludeReporter: req.ExcludeReporter,
-		ExcludeAssignee: req.ExcludeAssignee,
-	}
-	step, err := h.workflowService.UpdateStep(uint(stepID), input)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"data": step})
-}
-
-// DELETE /api/v1/workflows/:id/steps/:stepId
-func (h *WorkflowHandler) DeleteStep(c echo.Context) error {
-	orgScope, isSuperAdmin, authErr := requireClaims(c)
-	if authErr != nil {
-		return authErr
-	}
-	stepID, err := strconv.ParseUint(c.Param("stepId"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid step id")
-	}
-	if !isSuperAdmin {
-		current, err := h.workflowService.GetStep(uint(stepID))
-		if err != nil || orgScope == nil || current.OrganizationID != *orgScope {
-			return echo.NewHTTPError(http.StatusNotFound, "step not found")
-		}
-	}
-	if err := h.workflowService.DeleteStep(uint(stepID)); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.NoContent(http.StatusNoContent)

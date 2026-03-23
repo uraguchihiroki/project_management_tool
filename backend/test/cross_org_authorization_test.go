@@ -50,16 +50,7 @@ func TestCrossOrganizationAuthorization(t *testing.T) {
 		t.Fatalf("create owner2: %v", err)
 	}
 
-	// 各組織にステータス作成
-	_, _ = ts.req(t, http.MethodPost, fmt.Sprintf("/api/v1/organizations/%s/statuses", org1ID), map[string]interface{}{
-		"name": "org1-status", "color": "#3B82F6", "type": "issue", "order": 1,
-	})
-	_, org2StatusResp := ts.req(t, http.MethodPost, fmt.Sprintf("/api/v1/organizations/%s/statuses", org2ID), map[string]interface{}{
-		"name": "org2-status", "color": "#EF4444", "type": "issue", "order": 1,
-	})
-	org2StatusID := mustGetString(t, org2StatusResp, "data", "id")
-
-	// 各組織にプロジェクト作成
+	// 各組織にプロジェクト作成（プロジェクト作成時に Issue 用ワークフロー・ステータスが付く）
 	_, _ = ts.req(t, http.MethodPost, "/api/v1/projects", map[string]interface{}{
 		"key":             "ORG1",
 		"name":            "Project Org1",
@@ -73,8 +64,9 @@ func TestCrossOrganizationAuthorization(t *testing.T) {
 		"organization_id": org2ID,
 	})
 	org2ProjectID := mustGetString(t, org2ProjectResp, "data", "id")
+	org2StatusID := getFirstStatusID(t, ts, org2ProjectID)
 
-	// org2 に issue 作成
+	// org2 に issue 作成（ステータスはプロジェクトのデフォルトワークフローに属するものを使う）
 	_, issueResp := ts.req(t, http.MethodPost, fmt.Sprintf("/api/v1/projects/%s/issues", org2ProjectID), map[string]interface{}{
 		"title":       "Issue Org2",
 		"status_id":   org2StatusID,

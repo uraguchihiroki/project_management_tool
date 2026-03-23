@@ -1,14 +1,13 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getProjects, createProject } from '@/lib/api'
+import { getProjects, createProject, resolveApiBaseURL } from '@/lib/api'
 import { useState } from 'react'
 import Link from 'next/link'
 import { Plus, FolderKanban, ChevronRight } from 'lucide-react'
 import type { Project } from '@/types'
 import { SortableDndProvider, SortableList, DragHandle } from '@/components/SortableList'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
 import { useRequireAdmin, useAuth } from '@/context/AuthContext'
 import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 
@@ -44,9 +43,10 @@ export default function AdminProjectsPage() {
   const [reorderPending, setReorderPending] = useState(false)
   const reorderMutation = useMutation({
     mutationFn: async (ids: string[]) => {
+      const base = resolveApiBaseURL()
       const url = currentOrg?.id
-        ? `${API}/projects/reorder?org_id=${currentOrg.id}`
-        : `${API}/projects/reorder`
+        ? `${base}/projects/reorder?org_id=${currentOrg.id}`
+        : `${base}/projects/reorder`
       const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

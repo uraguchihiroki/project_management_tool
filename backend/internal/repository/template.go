@@ -27,19 +27,19 @@ func NewTemplateRepository(db *gorm.DB) TemplateRepository {
 
 func (r *templateRepository) FindAll() ([]model.IssueTemplate, error) {
 	var templates []model.IssueTemplate
-	err := r.db.Preload("Project").Preload("Workflow").Order("created_at DESC").Find(&templates).Error
+	err := r.db.Preload("Project").Order("created_at DESC").Find(&templates).Error
 	return templates, err
 }
 
 func (r *templateRepository) FindByProjectID(projectID uuid.UUID) ([]model.IssueTemplate, error) {
 	var templates []model.IssueTemplate
-	err := r.db.Preload("Workflow").Where("project_id = ?", projectID).Order("display_order ASC").Find(&templates).Error
+	err := r.db.Where("project_id = ?", projectID).Order("display_order ASC").Find(&templates).Error
 	return templates, err
 }
 
 func (r *templateRepository) FindByID(id uint) (*model.IssueTemplate, error) {
 	var template model.IssueTemplate
-	err := r.db.Preload("Project").Preload("Workflow").First(&template, id).Error
+	err := r.db.Preload("Project").First(&template, id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,6 @@ func (r *templateRepository) Update(template *model.IssueTemplate) error {
 		"description":      template.Description,
 		"body":             template.Body,
 		"default_priority": template.DefaultPriority,
-		"workflow_id":      template.WorkflowID,
 	}
 	if template.Key != "" {
 		updates["key"] = template.Key

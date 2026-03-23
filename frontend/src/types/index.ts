@@ -55,6 +55,7 @@ export interface Status {
   id: string
   project_id?: string
   organization_id?: string
+  workflow_id?: number
   name: string
   color: string
   order: number
@@ -90,6 +91,31 @@ export interface IssueTemplate {
   created_at: string
 }
 
+/** 組織スコープのグループ（Issue への紐付け・通知等） */
+export interface Group {
+  id: string
+  organization_id: string
+  name: string
+  kind?: string
+  display_order: number
+  created_at: string
+}
+
+/** issue_events の1行（インプリント） */
+export interface IssueEvent {
+  id: string
+  organization_id: string
+  issue_id: string
+  actor_id: string
+  actor?: User
+  event_type: string
+  occurred_at: string
+  from_status_id?: string
+  to_status_id?: string
+  assignee_id_at_occurred?: string
+  payload?: Record<string, unknown>
+}
+
 export interface Issue {
   id: string
   number: number
@@ -108,6 +134,7 @@ export interface Issue {
   template_id?: number
   workflow_id?: number
   comments?: Comment[]
+  groups?: Group[]
   created_at: string
   updated_at: string
 }
@@ -154,6 +181,7 @@ export interface WorkflowStep {
 
 export interface Workflow {
   id: number
+  organization_id: string
   name: string
   description: string
   steps?: WorkflowStep[]

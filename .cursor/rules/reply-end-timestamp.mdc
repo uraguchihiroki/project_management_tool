@@ -1,0 +1,26 @@
+---
+description: 最優先：ユーザー向け最終メッセージ末尾に JST の日付と時刻を1行付ける。
+alwaysApply: true
+---
+
+# 返信末尾の日時（最優先）
+
+## 必須（他ルールと矛盾したらこちらを優先）
+
+- **このターンでユーザーに見える返信テキストが1文字でもあるなら、必ず最後の行**に次を付ける:  
+  `（応答日時: YYYY-MM-DD HH:MM JST）`
+- **次もすべて必須**: Plan の提示、説明、手順、箇条書き、コードブロック付きの返信、エラー説明。
+- **日付**: `user_info` の `Today's date` があればそれを使う。
+- **時刻**: コンテキストに無いときは、ターミナルで  
+  `TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M %Z'`  
+  を **1 回** 実行してよい（WSL bash 想定）。
+
+## 省略してよい例外（これ以外は付ける）
+
+- **ユーザー向けの自然文・見出し・箇条書きが一切無い**ターンのみ（ツール呼び出しだけで本文ゼロ）。
+- 「はい」「OK」**だけ**の1語返信は、付けてもよいが**省略可**。
+
+## 全プロジェクト・詳細
+
+- Windows 版 Cursor で **全リポジトリ**に同じく: [docs/cursor-user-rules-reply-timestamp.md](../../docs/cursor-user-rules-reply-timestamp.md) の **User Rules** 手順。
+- 例・補足: [.cursor/skills/reply-end-timestamp/SKILL.md](../skills/reply-end-timestamp/SKILL.md)

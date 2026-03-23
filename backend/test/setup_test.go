@@ -17,8 +17,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	"github.com/uraguchihiroki/project_management_tool/internal/auth"
+	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
@@ -59,18 +59,20 @@ func newTestServer(t *testing.T) *testServer {
 		&model.OrganizationUserDepartment{},
 		&model.Project{},
 		&model.Status{},
+		&model.WorkflowTransition{},
 		&model.Issue{},
 		&model.Comment{},
 		&model.Workflow{},
-		&model.WorkflowStep{},
-		&model.ApprovalObject{},
 		&model.IssueTemplate{},
-		&model.IssueApproval{},
+		&model.IssueEvent{},
+		&model.Group{},
+		&model.UserGroup{},
+		&model.IssueGroup{},
+		&model.TransitionAlertRule{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 
-	// テスト用固定組織（FRS）をシード
 	frsOrg := model.Organization{
 		ID:        uuid.MustParse(testOrgID),
 		Key:       testOrgID,
@@ -79,85 +81,59 @@ func newTestServer(t *testing.T) *testServer {
 	}
 	db.Create(&frsOrg)
 
-	// 組織用デフォルトステータス（プロジェクト未割当Issue用）
 	statusRepo := repository.NewStatusRepository(db)
-	stsStartID := uuid.MustParse("30000000-0000-0000-0000-000000000001")
-	stsGoalID := uuid.MustParse("30000000-0000-0000-0000-000000000002")
-	for _, ds := range []struct {
-		ID    uuid.UUID
-		Name  string
-		Color string
-		Order int
-		Key   string
-	}{
-		{stsStartID, "sts_start", "#9CA3AF", 0, "sts_start"},
-		{stsGoalID, "sts_goal", "#9CA3AF", 99, "sts_goal"},
-		{uuid.New(), "未着手", "#6B7280", 1, ""},
-		{uuid.New(), "進行中", "#3B82F6", 2, ""},
-		{uuid.New(), "完了", "#10B981", 3, ""},
-	} {
-		orgID := &frsOrg.ID
-		if ds.Key != "" {
-			orgID = nil // sts_start, sts_goal はグローバル（全会社共通）
-		}
-		key := "sts-" + ds.ID.String()
-		if ds.Key != "" {
-			key = ds.Key
-		}
-		s := &model.Status{
-			ID:             ds.ID,
-			Key:            key,
-			ProjectID:      nil,
-			OrganizationID: orgID,
-			Name:           ds.Name,
-			Color:          ds.Color,
-			Order:          ds.Order,
-			Type:           "issue",
-		}
-		if ds.Key != "" {
-			s.StatusKey = ds.Key
-		}
-		statusRepo.Create(s)
+	workflowRepo := repository.NewWorkflowRepository(db)
+	transitionRepo := repository.NewWorkflowTransitionRepository(db)
+	if _, _, err := service.CreateWorkflowWithIssueStatuses(workflowRepo, statusRepo, transitionRepo, frsOrg.ID, "組織Issue"); err != nil {
+		t.Fatalf("seed 組織Issue workflow: %v", err)
+	}
+	if _, _, err := service.CreateWorkflowWithProjectStatuses(workflowRepo, statusRepo, transitionRepo, frsOrg.ID, "組織Project"); err != nil {
+		t.Fatalf("seed 組織Project workflow: %v", err)
 	}
 
 	userRepo := repository.NewUserRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
+	issueEventRepo := repository.NewIssueEventRepository(db)
+	groupRepo := repository.NewGroupRepository(db)
+	userGroupRepo := repository.NewUserGroupRepository(db)
+	issueGroupRepo := repository.NewIssueGroupRepository(db)
+	alertRuleRepo := repository.NewTransitionAlertRuleRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
-	workflowRepo := repository.NewWorkflowRepository(db)
 	templateRepo := repository.NewTemplateRepository(db)
-	approvalRepo := repository.NewApprovalRepository(db)
 	orgRepo := repository.NewOrganizationRepository(db)
 	superAdminRepo := repository.NewSuperAdminRepository(db)
 	departmentRepo := repository.NewDepartmentRepository(db)
 
 	userSvc := service.NewUserService(userRepo, orgRepo)
-	projectSvc := service.NewProjectService(projectRepo, statusRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo)
+	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
-	issueSvc := service.NewIssueService(issueRepo, projectRepo)
+	alertEval := &service.TransitionAlertEvaluator{Rules: alertRuleRepo, UG: userGroupRepo}
+	issueSvc := service.NewIssueService(issueRepo, projectRepo, statusRepo, workflowRepo, transitionRepo, issueEventRepo, groupRepo, issueGroupRepo, alertEval)
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
-	workflowSvc := service.NewWorkflowService(workflowRepo, statusRepo)
+	workflowSvc := service.NewWorkflowService(workflowRepo)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
-	approvalSvc := service.NewApprovalService(approvalRepo, workflowRepo, issueRepo, roleRepo)
-	statusSvc := service.NewStatusService(statusRepo)
+	statusSvc := service.NewStatusService(statusRepo, workflowRepo, transitionRepo)
+	groupSvc := service.NewGroupService(groupRepo, userGroupRepo)
 
 	userH := handler.NewUserHandler(userSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
-	issueH := handler.NewIssueHandler(issueSvc, approvalSvc, projectSvc)
+	issueH := handler.NewIssueHandler(issueSvc, projectSvc)
 	commentH := handler.NewCommentHandler(commentSvc)
 	roleH := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowH := handler.NewWorkflowHandler(workflowSvc)
 	templateH := handler.NewTemplateHandler(templateSvc, projectSvc)
-	approvalH := handler.NewApprovalHandler(approvalSvc)
 	orgH := handler.NewOrganizationHandler(orgSvc)
 	superAdminH := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
 	departmentH := handler.NewDepartmentHandler(departmentSvc)
-	statusH := handler.NewStatusHandler(statusSvc)
+	statusH := handler.NewStatusHandler(statusSvc, workflowSvc)
+	issueEventH := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
+	groupH := handler.NewGroupHandler(groupSvc)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -179,6 +155,7 @@ func newTestServer(t *testing.T) *testServer {
 	public.POST("/admin/login", userH.AdminLogin)
 	public.POST("/super-admin/login", superAdminH.Login)
 	api.POST("/admin/switch-organization", userH.SwitchOrganization)
+	api.GET("/users/:id/groups", groupH.ListByUser)
 	api.GET("/users/:id", userH.Get)
 	api.PUT("/users/:id/admin", userH.SetAdmin)
 	api.GET("/users/:id/roles", roleH.GetUserRoles)
@@ -192,13 +169,10 @@ func newTestServer(t *testing.T) *testServer {
 	api.POST("/workflows", workflowH.Create)
 	api.PUT("/workflows/reorder", workflowH.Reorder)
 	api.GET("/workflows/:id", workflowH.Get)
+	api.GET("/workflows/:id/statuses", statusH.ListByWorkflow)
+	api.POST("/workflows/:id/statuses", statusH.CreateForWorkflow)
 	api.PUT("/workflows/:id", workflowH.Update)
 	api.DELETE("/workflows/:id", workflowH.Delete)
-	api.POST("/workflows/:id/steps", workflowH.AddStep)
-	api.GET("/workflows/:id/steps/:stepId", workflowH.GetStep)
-	api.PUT("/workflows/:id/steps/reorder", workflowH.ReorderSteps)
-	api.PUT("/workflows/:id/steps/:stepId", workflowH.UpdateStep)
-	api.DELETE("/workflows/:id/steps/:stepId", workflowH.DeleteStep)
 	api.GET("/templates", templateH.List)
 	api.POST("/templates", templateH.Create)
 	api.GET("/templates/:id", templateH.Get)
@@ -206,10 +180,6 @@ func newTestServer(t *testing.T) *testServer {
 	api.DELETE("/templates/:id", templateH.Delete)
 	api.GET("/projects/:projectId/templates", templateH.ListByProject)
 	api.PUT("/projects/:projectId/templates/reorder", templateH.Reorder)
-	api.GET("/issues/:issueId/approvals", approvalH.List)
-	api.POST("/approvals/:id/approve", approvalH.Approve)
-	api.POST("/issues/:issueId/steps/:stepId/approve", approvalH.ApproveStep)
-	api.POST("/approvals/:id/reject", approvalH.Reject)
 	api.GET("/organizations", orgH.List)
 	api.POST("/organizations", orgH.Create)
 	api.GET("/users/:id/organizations", orgH.ListByUser)
@@ -237,6 +207,13 @@ func newTestServer(t *testing.T) *testServer {
 	api.GET("/projects/:id", projectH.Get)
 	api.PUT("/projects/:id", projectH.Update)
 	api.DELETE("/projects/:id", projectH.Delete)
+	api.GET("/organizations/:orgId/groups", groupH.List)
+	api.POST("/organizations/:orgId/groups", groupH.Create)
+	api.GET("/groups/:id/members", groupH.ListMembers)
+	api.PUT("/groups/:id/members", groupH.ReplaceMembers)
+	api.GET("/groups/:id", groupH.Get)
+	api.PUT("/groups/:id", groupH.Update)
+	api.DELETE("/groups/:id", groupH.Delete)
 	api.GET("/projects/:projectId/issues", issueH.List)
 	api.POST("/projects/:projectId/issues", issueH.Create)
 	api.GET("/organizations/:orgId/issues", issueH.ListByOrg)
@@ -244,9 +221,13 @@ func newTestServer(t *testing.T) *testServer {
 	api.GET("/organizations/:orgId/issues/:number", issueH.GetByOrgAndNumber)
 	api.PUT("/organizations/:orgId/issues/:number", issueH.UpdateByOrgAndNumber)
 	api.DELETE("/organizations/:orgId/issues/:number", issueH.DeleteByOrgAndNumber)
+	api.GET("/projects/:projectId/issues/:number/groups", issueH.ListIssueGroups)
+	api.PUT("/projects/:projectId/issues/:number/groups", issueH.PutIssueGroups)
 	api.GET("/projects/:projectId/issues/:number", issueH.Get)
 	api.PUT("/projects/:projectId/issues/:number", issueH.Update)
 	api.DELETE("/projects/:projectId/issues/:number", issueH.Delete)
+	api.GET("/organizations/:orgId/issue-events", issueEventH.ListByOrganization)
+	api.GET("/issues/:issueId/events", issueEventH.ListByIssue)
 	api.GET("/issues/:issueId/comments", commentH.List)
 	api.POST("/issues/:issueId/comments", commentH.Create)
 	api.PUT("/issues/:issueId/comments/:id", commentH.Update)

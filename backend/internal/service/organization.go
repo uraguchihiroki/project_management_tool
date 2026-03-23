@@ -86,12 +86,19 @@ func (s *organizationService) GetUserOrganizations(userID uuid.UUID) ([]model.Or
 	if err != nil {
 		return nil, err
 	}
+	// ログイン直後の JWT user_id の所属を必ず候補に含める（Preload 失敗・ゼロ値でも organization_id は信頼できる）
+	seen := make(map[uuid.UUID]struct{})
+	orgs := make([]model.Organization, 0, 4)
+	if u.OrganizationID != uuid.Nil {
+		if org, oerr := s.orgRepo.FindByID(u.OrganizationID); oerr == nil && org != nil && org.ID != uuid.Nil {
+			seen[org.ID] = struct{}{}
+			orgs = append(orgs, *org)
+		}
+	}
 	rows, err := s.userRepo.FindAllByEmail(u.Email)
 	if err != nil {
 		return nil, err
 	}
-	orgs := make([]model.Organization, 0, len(rows))
-	seen := make(map[uuid.UUID]struct{})
 	for _, usr := range rows {
 		if usr.Organization.ID == uuid.Nil {
 			continue

@@ -1,5 +1,17 @@
 # API仕様
 
+**方針**: Issue 管理を主目的とする。**ワークフロー／承認**用エンドポイントは、設計上の正規 API からは **除外**（コードに残る場合はレガシー扱いで移行予定）。以下の一覧はその方針に合わせて記載する。
+
+### 仕様の三本柱（.sdd README の **5 → 6 → 7**）
+
+| 順 | ドキュメント | 内容 |
+|----|--------------|------|
+| **5** | [db-schema.md](db-schema.md) | **インプリント**（`issue_events` の追記行）、**イベントログ**、**Group** と **Issue↔Group / User↔Group** 多対多 |
+| **6** | 本ドキュメント（api-spec） | 一覧・フィルタ・**イベント取得**など **クエリしやすい** API 契約 |
+| **7** | [transition-permissions.md](transition-permissions.md) | **許可される遷移（形）**、**遷移アラート**、**監査の意味**（運用・通知・ログの分担） |
+
+---
+
 ## ベースURL
 
 ```
@@ -11,6 +23,12 @@ http://localhost:8080/api/v1
 - `POST /users`、`POST /admin/login`、`POST /super-admin/login` を除く API は `Authorization: Bearer <JWT>` が必要（`POST /admin/switch-organization` は要 JWT）。
 - スーパーアドミン以外は、JWT の `organization_id` に一致するデータのみ返却する。
 - 他組織の `org_id` / `project_id` / `issue_id` 等を指定した場合は、`403` または `404` を返す。
+
+### テナント境界のパターン
+
+- **組織の壁はサーバが張る。** フロントだけで一覧を会社 ID で絞って表示しても、テナント分離の代わりにはならない。
+- **親子リソース**（例: ワークフロー配下のステータス）: パスの親 ID について「JWT の組織に属するか」を先に検証し、通ったあとは子を **親 ID**（例: `workflow_id`）で列挙する。詳細は [tenant-invariants.md](tenant-invariants.md) の (B)。
+- **スーパーアドミン**で「選択中の1組織」だけを出す画面では、クエリに `org_id`（または仕様で定めた同等パラメータ）を付け、**サーバが**その組織の行だけ返す。全件取得してクライアントだけで絞るのはセキュリティの代わりにならない。
 
 ---
 
@@ -38,21 +56,6 @@ http://localhost:8080/api/v1
 | PUT | /roles/:id | 役職更新 |
 | DELETE | /roles/:id | 役職削除 |
 
-### Workflows（ワークフロー）
-
-| Method | Path | 説明 |
-|--------|------|------|
-| GET | /workflows | ワークフロー一覧取得（組織スコープ。ステップ未追加の行も含む） |
-| POST | /workflows | ワークフロー作成。スーパーアドミンは body に `organization_id` 必須。それ以外は JWT の組織スコープで作成（body の organization_id は無視可） |
-| GET | /workflows/:id | ワークフロー詳細取得 |
-| PUT | /workflows/:id | ワークフロー更新 |
-| DELETE | /workflows/:id | ワークフロー削除 |
-| POST | /workflows/:id/steps | ステップ追加（初回は sts_start + user + sts_goal を自動作成） |
-| PUT | /workflows/:id/steps/:stepId | ステップ更新（next_status_id は無視。承認後ステータスは ReorderSteps でのみ更新） |
-| PUT | /workflows/:id/steps/reorder | ステップ並び替え。ユーザーステップ ID の並び順のみ受け取り、承認後ステータスを確定 |
-| DELETE | /workflows/:id/steps/:stepId | ステップ削除 |
-| GET | /projects/:projectId/workflows | プロジェクトのワークフロー一覧 |
-
 ### Templates（Issueテンプレート）
 
 | Method | Path | 説明 |
@@ -64,14 +67,6 @@ http://localhost:8080/api/v1
 | DELETE | /templates/:id | テンプレート削除 |
 | GET | /projects/:projectId/templates | プロジェクトのテンプレート一覧 |
 
-### Approvals（承認）
-
-| Method | Path | 説明 |
-|--------|------|------|
-| GET | /issues/:issueId/approvals | Issue の承認一覧取得 |
-| POST | /approvals/:id/approve | 承認 |
-| POST | /approvals/:id/reject | 却下 |
-
 ### Organizations（組織）
 
 | Method | Path | 説明 |
@@ -81,6 +76,27 @@ http://localhost:8080/api/v1
 | GET | /users/:id/organizations | ユーザーの所属組織（1ユーザー＝1組織のため1件） |
 | POST | /organizations/:orgId/users | 組織にユーザーを追加（既存ユーザーの name/email で新規ユーザーを作成） |
 | GET | /organizations/:orgId/statuses | 組織のステータス一覧。`?type=issue` で Issue 用にフィルタ。`?exclude_system=1` で sts_start/sts_goal を除外 |
+| POST | /organizations/:orgId/statuses | 組織の「組織Issue」「組織Project」固定ワークフローへステータス追加 |
+
+### Workflows（組織スコープのワークフロー）
+
+| Method | Path | 説明 |
+|--------|------|------|
+| GET | /workflows | ワークフロー一覧。**非スーパーアドミン**: JWT の `organization_id` のワークフローのみ。クエリ `org_id` を付ける場合は JWT と同一 UUID 必須（不一致は 403）。**スーパーアドミン**: `org_id` 省略時は全組織分、`org_id` 指定時はその組織のみ。無効な UUID は 400。 |
+| POST | /workflows | 作成（body: `organization_id`, `name`, `description`） |
+| PUT | /workflows/reorder | 表示順更新（body: `ids`） |
+| GET | /workflows/:id | 詳細取得（他組織の ID は 404） |
+| GET | /workflows/:id/statuses | **当該ワークフローに紐づく Status 一覧**（`order` 昇順）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。列挙は `workflow_id = :id`。**同一レスポンス内の重複行は DB 欠陥**であり、API でマージして隠してテナント合格にしてはならない（[tenant-invariants.md](tenant-invariants.md)）。 |
+| POST | /workflows/:id/statuses | **ステータス追加**。上記と同様に親ワークフローの組織を先に検証。body: `name`（必須）, `color`（省略時 `#6B7280`）, `type`（`issue` \| `project`、省略時 `issue`）, `order`（`0` または省略時は同一 WF 内の最大 `order` + 1）。作成後、当該 WF の **許可遷移を全ペア再シード**（Issue のステータス変更と整合） |
+| PUT | /workflows/:id | 名前・説明の更新 |
+| DELETE | /workflows/:id | 削除 |
+
+### Statuses（個別更新・削除）
+
+| Method | Path | 説明 |
+|--------|------|------|
+| PUT | /statuses/:id | 更新 |
+| DELETE | /statuses/:id | 削除 |
 
 ### Super Admin
 
@@ -111,15 +127,43 @@ http://localhost:8080/api/v1
 
 > **Note:** プロジェクト詳細取得（GET /projects/:id）のレスポンスに `statuses` が含まれる。ステータスはプロジェクト作成時に自動生成され、専用の CRUD API はない。
 
+### Groups（グループ）
+
+組織内の **Group**（開示・共同文脈・通知の宛先・タグ的用途）。**Issue 文脈を主**とし、HR ディレクトリと完全一致させる必要はない（同期は `kind` 等で表現可能）。
+
+| Method | Path | 説明 |
+|--------|------|------|
+| GET | /organizations/:orgId/groups | グループ一覧（`?kind=` でフィルタ可） |
+| POST | /organizations/:orgId/groups | グループ作成 |
+| GET | /groups/:id | グループ詳細 |
+| PUT | /groups/:id | グループ更新 |
+| DELETE | /groups/:id | グループ削除 |
+| GET | /groups/:id/members | メンバー（User）一覧 |
+| PUT | /groups/:id/members | メンバー一括置換または差分（実装で確定） |
+| GET | /users/:id/groups | ユーザーが所属するグループ一覧 |
+
 ### Issues（チケット）
 
 | Method | Path | 説明 |
 |--------|------|------|
-| GET | /projects/:projectId/issues | Issue一覧取得 |
-| POST | /projects/:projectId/issues | Issue作成 |
-| GET | /projects/:projectId/issues/:number | Issue詳細取得 |
-| PUT | /projects/:projectId/issues/:number | Issue更新 |
+| GET | /projects/:projectId/issues | Issue一覧取得。**クエリ例**: `group_id`（Group に紐づく Issue のみ）、`status_id`、`assignee_id`、期間は **`updated_at` またはイベント API** と整合させる（一覧は軽量を優先） |
+| POST | /projects/:projectId/issues | Issue作成（body に `group_ids` 任意） |
+| GET | /projects/:projectId/issues/:number | Issue詳細取得（**groups** を含めてもよい） |
+| PUT | /projects/:projectId/issues/:number | Issue更新（ステータス・担当変更時はサーバが **issue_events** に追記する想定） |
 | DELETE | /projects/:projectId/issues/:number | Issue削除 |
+| GET | /projects/:projectId/issues/:number/groups | Issue に付いた Group 一覧 |
+| PUT | /projects/:projectId/issues/:number/groups | Issue ↔ Group の紐付け更新（多対多） |
+
+### Issue events（インプリント・イベントログ・監査向け）
+
+**追記のみ**の **インプリント**列を読む API（[db-schema.md](db-schema.md) の `issue_events` と対応。各行＝1 事実）。
+
+| Method | Path | 説明 |
+|--------|------|------|
+| GET | /issues/:issueId/events | 当該 Issue の **インプリント**の時系列（`occurred_at` 昇順） |
+| GET | /organizations/:orgId/issue-events | 組織横断。**クエリ例**: `event_type`、`from_occurred_at`、`to_occurred_at`（発生時刻の範囲。DB は `TIMESTAMPTZ`）、`actor_id`、`issue_id`。**監査**: 「完了遷移で `actor_id` = `assignee_id_at_occurred`」等はクライアントまたはバックエンドのレポートで集計 |
+
+> **Note:** レスポンスの時刻は **ISO 8601（タイムゾーン付き）** とし、インプリントの `occurred_at`（DB `TIMESTAMPTZ`）と一致させる。
 
 ### Comments（コメント）
 
@@ -196,30 +240,6 @@ POST /api/v1/projects
   "description": "説明",
   "owner_id": "user-uuid",
   "organization_id": "org-uuid"  // 必須
-}
-```
-
-### ステップ並び替え（承認後ステータス確定）
-
-```json
-PUT /api/v1/workflows/:id/steps/reorder
-
-{
-  "ids": [3, 1, 2]  // ユーザーステップ ID の並び順のみ。sts_start/sts_goal は含まない
-}
-```
-
-レスポンス: 204 No Content。並び順に応じて各ステップの `next_status_id` が自動更新される。
-
-### ワークフロー作成
-
-```json
-POST /api/v1/workflows
-
-{
-  "organization_id": "org-uuid",  // 必須
-  "name": "承認フロー",
-  "description": "説明"
 }
 ```
 

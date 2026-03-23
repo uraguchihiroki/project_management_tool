@@ -85,7 +85,6 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       assignee_id: form.assignee_id || undefined,
       reporter_id: currentUser.id,
       template_id: selectedTemplate?.id,
-      workflow_id: selectedTemplate?.workflow_id,
     })
   }
 
@@ -213,12 +212,6 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       </button>
                     ))}
                   </div>
-                  {selectedTemplate?.workflow_id && (
-                    <p className="text-xs text-blue-500 mt-1.5 flex items-center gap-1">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400" />
-                      承認フロー「{selectedTemplate.workflow?.name ?? `ID:${selectedTemplate.workflow_id}`}」が適用されます
-                    </p>
-                  )}
                 </div>
               )}
               <div>

@@ -101,15 +101,37 @@ func (h *UserHandler) AdminLogin(c echo.Context) error {
 	}
 	user, err := h.userService.FindByEmail(req.Email)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusUnauthorized, "メールアドレスが見つかりません")
+		}
+		// DB 障害などを 401 にしない（フロントが「未登録」と誤認しないよう明示）
+		return echo.NewHTTPError(http.StatusInternalServerError, "ユーザー検索に失敗しました: "+err.Error())
+	}
+	if user == nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "メールアドレスが見つかりません")
 	}
 	token, err := auth.GenerateUserToken(user.ID, user.OrganizationID, user.IsAdmin)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to issue token")
+		return echo.NewHTTPError(http.StatusInternalServerError, "トークン発行に失敗しました: "+err.Error())
+	}
+	// ネストした関連の JSON 変換トラブルを避けるためログイン応答はフラットな map のみ
+	userOut := map[string]interface{}{
+		"id":              user.ID.String(),
+		"key":             user.Key,
+		"organization_id": user.OrganizationID.String(),
+		"name":            user.Name,
+		"email":           user.Email,
+		"is_admin":        user.IsAdmin,
+		"is_org_admin":    user.IsOrgAdmin,
+		"joined_at":       user.JoinedAt,
+		"created_at":      user.CreatedAt,
+	}
+	if user.AvatarURL != nil {
+		userOut["avatar_url"] = *user.AvatarURL
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"data": map[string]interface{}{
-			"user":  user,
+			"user":  userOut,
 			"token": token,
 		},
 	})

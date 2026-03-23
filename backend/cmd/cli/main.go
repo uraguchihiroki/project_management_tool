@@ -78,6 +78,8 @@ func main() {
 		log.Fatalf("failed to connect database: %v", err)
 	}
 
+	db.SetupJoinTable(&model.User{}, "Roles", &model.UserRole{})
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
@@ -87,13 +89,16 @@ func main() {
 		&model.OrganizationUserDepartment{},
 		&model.Project{},
 		&model.Status{},
+		&model.WorkflowTransition{},
 		&model.Issue{},
 		&model.Comment{},
 		&model.Workflow{},
-		&model.WorkflowStep{},
-		&model.ApprovalObject{},
 		&model.IssueTemplate{},
-		&model.IssueApproval{},
+		&model.IssueEvent{},
+		&model.Group{},
+		&model.UserGroup{},
+		&model.IssueGroup{},
+		&model.TransitionAlertRule{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
 	}
@@ -104,7 +109,9 @@ func main() {
 	projectRepo := repository.NewProjectRepository(db)
 	departmentRepo := repository.NewDepartmentRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo)
+	workflowRepo := repository.NewWorkflowRepository(db)
+	transitionRepo := repository.NewWorkflowTransitionRepository(db)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo)
 
 	var seedErr error
 	if *seedAll {

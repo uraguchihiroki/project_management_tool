@@ -23,7 +23,7 @@ async function getDebugUserAndOrg() {
   }
 }
 
-test('admin/roles: no hydration / tbody nesting errors', async ({ page }) => {
+test('admin/users: no hydration / tbody nesting errors', async ({ page }) => {
   const { user, org } = await getDebugUserAndOrg()
 
   const consoleErrors: string[] = []
@@ -55,7 +55,7 @@ test('admin/roles: no hydration / tbody nesting errors', async ({ page }) => {
     { userData: user, orgData: org }
   )
 
-  await page.goto('/admin/roles', { waitUntil: 'networkidle' })
+  await page.goto('/admin/users', { waitUntil: 'networkidle' })
   // Dev overlay が出ていても、少なくともDOMネスト違反/ hydration は出ないこと
   await page.waitForTimeout(1500)
 

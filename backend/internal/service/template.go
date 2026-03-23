@@ -13,8 +13,8 @@ type TemplateService interface {
 	ListAll() ([]model.IssueTemplate, error)
 	ListByProject(projectID uuid.UUID) ([]model.IssueTemplate, error)
 	GetTemplate(id uint) (*model.IssueTemplate, error)
-	CreateTemplate(projectID uuid.UUID, name, description, body, defaultPriority string, workflowID *uint) (*model.IssueTemplate, error)
-	UpdateTemplate(id uint, name, description, body, defaultPriority string, workflowID *uint) (*model.IssueTemplate, error)
+	CreateTemplate(projectID uuid.UUID, name, description, body, defaultPriority string) (*model.IssueTemplate, error)
+	UpdateTemplate(id uint, name, description, body, defaultPriority string) (*model.IssueTemplate, error)
 	DeleteTemplate(id uint) error
 	Reorder(projectID uuid.UUID, ids []uint) error
 }
@@ -40,7 +40,7 @@ func (s *templateService) GetTemplate(id uint) (*model.IssueTemplate, error) {
 	return s.templateRepo.FindByID(id)
 }
 
-func (s *templateService) CreateTemplate(projectID uuid.UUID, name, description, body, defaultPriority string, workflowID *uint) (*model.IssueTemplate, error) {
+func (s *templateService) CreateTemplate(projectID uuid.UUID, name, description, body, defaultPriority string) (*model.IssueTemplate, error) {
 	project, err := s.projectRepo.FindByID(projectID)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,6 @@ func (s *templateService) CreateTemplate(projectID uuid.UUID, name, description,
 		Description:     description,
 		Body:            body,
 		DefaultPriority: defaultPriority,
-		WorkflowID:      workflowID,
 		Order:           maxOrder + 1,
 		CreatedAt:       time.Now(),
 	}
@@ -75,7 +74,7 @@ func (s *templateService) CreateTemplate(projectID uuid.UUID, name, description,
 	return s.templateRepo.FindByID(template.ID)
 }
 
-func (s *templateService) UpdateTemplate(id uint, name, description, body, defaultPriority string, workflowID *uint) (*model.IssueTemplate, error) {
+func (s *templateService) UpdateTemplate(id uint, name, description, body, defaultPriority string) (*model.IssueTemplate, error) {
 	if defaultPriority == "" {
 		defaultPriority = "medium"
 	}
@@ -87,7 +86,6 @@ func (s *templateService) UpdateTemplate(id uint, name, description, body, defau
 	tmpl.Description = description
 	tmpl.Body = body
 	tmpl.DefaultPriority = defaultPriority
-	tmpl.WorkflowID = workflowID
 	if err := s.templateRepo.Update(tmpl); err != nil {
 		return nil, err
 	}

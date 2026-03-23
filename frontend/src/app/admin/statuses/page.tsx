@@ -6,11 +6,10 @@ import { Plus, Pencil, Trash2, X, Check } from 'lucide-react'
 import type { Status } from '@/types'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
+import { resolveApiBaseURL } from '@/lib/api'
 
 async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
-  const res = await fetch(`${API}/organizations/${orgId}/statuses?exclude_system=1`)
+  const res = await fetch(`${resolveApiBaseURL()}/organizations/${orgId}/statuses?exclude_system=1`)
   const json = await res.json()
   const data: Status[] = json.data ?? []
   return data.filter((s) => !s.project_id && s.organization_id)
@@ -33,7 +32,7 @@ export default function StatusesPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof form) => {
-      const res = await fetch(`${API}/organizations/${currentOrg!.id}/statuses`, {
+      const res = await fetch(`${resolveApiBaseURL()}/organizations/${currentOrg!.id}/statuses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -60,7 +59,7 @@ export default function StatusesPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: { name: string; color: string; order: number } }) => {
-      const res = await fetch(`${API}/statuses/${id}`, {
+      const res = await fetch(`${resolveApiBaseURL()}/statuses/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -82,7 +81,7 @@ export default function StatusesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`${API}/statuses/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${resolveApiBaseURL()}/statuses/${id}`, { method: 'DELETE' })
       if (!res.ok) {
         const json = await res.json()
         throw new Error(json.message ?? '削除に失敗しました')

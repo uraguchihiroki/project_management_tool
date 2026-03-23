@@ -4,9 +4,11 @@
 
 > **設計原則**: 開発はローカル、運用はGCP等のクラウド。詳細は [principles.md](principles.md) を参照。
 
-Jira / Redmine ライクなチケットベースのプロジェクト管理ツール。  
+**Issue 管理**を主目的とする。Jira / Redmine ライクなチケット・カンバンを扱う。  
 Go 製 REST API + Next.js フロントエンド + PostgreSQL の3層構成。  
 マルチテナント対応（組織ごとにデータを分離）。
+
+**ステータス遷移の権限**（誰が Close 等を行えるか）は、稟議・承認ワークフローとは別概念として [transition-permissions.md](transition-permissions.md) で整理する。
 
 ---
 
@@ -49,10 +51,20 @@ graph TD
 - スーパーアドミン以外に対しては、管理画面を含む全ページで「所属組織データのみ」をバックエンドが返すことを原則とする。
 - 認証は JWT を使用し、フロントエンドではトークンをメモリ（State/Context）で扱う。リロード時のセッション維持とログアウト対策として `sessionStorage` を併用する（マルチセッション維持）。
 
+### 不変条件（正本）
+
+詳細は **[tenant-invariants.md](tenant-invariants.md)** を参照。
+
+- **テナントの壁はサーバ**（フロントの表示用フィルタは代わりにならない）。
+- **非スーパーアドミン**は JWT の `organization_id` だけが正。
+- **親子 API**（例: ワークフロー配下のステータス）は、親が自社に属するか確認してから、子を親 ID で列挙する。
+- **スーパーアドミン**の一覧は `org_id` なしで全件になり得る。単一社の画面ではクエリで `org_id` を付け、**サーバが**その会社だけ返す。
+
 ### 現行実装との整合メモ
 
 - 上記はシステム全体の必須方針（ターゲット仕様）。
-- 現行実装では、主要な管理系 API（projects/statuses/departments/users/admin-users/issues/templates/workflows など）で JWT 前提の組織スコープ制御を適用している。
+- 現行実装では、主要な管理系 API（projects/statuses/departments/users/admin-users/issues/templates 等）で JWT 前提の組織スコープ制御を適用している。
+- **GET /workflows** は非スーパーアドミンで JWT 組織にフィルタ済み。スーパーアドミン向けにクエリ `org_id` で組織絞り込み可能（管理画面の「選択中組織」と整合）。テナント境界のブラックボックステストは [backend/test/TENANT_TEST_MATRIX.md](../backend/test/TENANT_TEST_MATRIX.md) で追跡する。
 - 方針に対して適用漏れの可能性があるエンドポイントは、同方針に合わせて継続的に補完する。
 
 ---
@@ -78,6 +90,8 @@ project_management_tool/
 ├── .sdd/                        # 設計ドキュメント
 │   ├── README.md                # ナビゲーション
 │   ├── architecture.md         # このファイル
+│   ├── tenant-invariants.md    # テナント不変条件（正本）
+│   ├── transition-permissions.md # ステータス遷移の権限（候補比較）
 │   ├── layer-responsibility.md # レイヤー責務定義
 │   ├── db-schema.md            # DB設計
 │   ├── api-spec.md             # API仕様
