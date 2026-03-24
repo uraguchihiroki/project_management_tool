@@ -53,63 +53,6 @@ func CreateWorkflowWithIssueStatuses(
 			Name:       ds.Name,
 			Color:      ds.Color,
 			Order:      ds.Order,
-			Type:       "issue",
-		}
-		if err := statusRepo.Create(st); err != nil {
-			return 0, nil, err
-		}
-		ids = append(ids, sid)
-	}
-	if err := transitionRepo.SeedAllPairs(wf.ID, ids); err != nil {
-		return 0, nil, err
-	}
-	return wf.ID, ids, nil
-}
-
-// CreateWorkflowWithProjectStatuses は組織のプロジェクトライフサイクル用ワークフローとステータス・全ペア遷移を作成する
-func CreateWorkflowWithProjectStatuses(
-	workflowRepo repository.WorkflowRepository,
-	statusRepo repository.StatusRepository,
-	transitionRepo repository.WorkflowTransitionRepository,
-	orgID uuid.UUID,
-	workflowName string,
-) (uint, []uuid.UUID, error) {
-	maxOrder, err := workflowRepo.GetMaxOrder()
-	if err != nil {
-		return 0, nil, err
-	}
-	wf := &model.Workflow{
-		Key:            keygen.UUIDKey(uuid.New()),
-		OrganizationID: orgID,
-		Name:           workflowName,
-		Description:    "",
-		Order:          maxOrder + 1,
-		CreatedAt:      time.Now(),
-	}
-	if err := workflowRepo.Create(wf); err != nil {
-		return 0, nil, err
-	}
-
-	defaultStatuses := []struct {
-		Name  string
-		Color string
-		Order int
-	}{
-		{"計画中", "#6B7280", 1},
-		{"進行中", "#3B82F6", 2},
-		{"完了", "#10B981", 3},
-	}
-	ids := make([]uuid.UUID, 0, len(defaultStatuses))
-	for _, ds := range defaultStatuses {
-		sid := uuid.New()
-		st := &model.Status{
-			ID:         sid,
-			Key:        "sts-" + sid.String(),
-			WorkflowID: wf.ID,
-			Name:       ds.Name,
-			Color:      ds.Color,
-			Order:      ds.Order,
-			Type:       "project",
 		}
 		if err := statusRepo.Create(st); err != nil {
 			return 0, nil, err

@@ -6,7 +6,7 @@
 
 ## 概要
 
-組織のステータス（Issue用・プロジェクト用）を管理。カンバンの列として使用。**許可される遷移（形）**・**遷移アラート**は [transition-permissions.md](../transition-permissions.md) で決定（TBD。フォーム項目は合意後に追記）。
+組織の「組織Issue」ワークフローに紐づく **Issue 用**ステータスを管理（カンバンの列）。プロジェクト進行は別途 **`GET /projects/:id/project-statuses`**。Issue の**許可遷移**・**遷移アラート**は [transition-permissions.md](../transition-permissions.md) を参照。
 
 ## 遷移元・遷移先
 
@@ -16,7 +16,7 @@
 
 - 見出し「ステータス管理」、説明
 - ステータス追加ボタン
-- ステータス追加/編集フォーム（ステータス名、色、タイプ）
+- ステータス追加/編集フォーム（ステータス名、色、並び順）
 - ステータス一覧テーブル（sts_start, sts_goal は表示しない）
 
 ## 備考

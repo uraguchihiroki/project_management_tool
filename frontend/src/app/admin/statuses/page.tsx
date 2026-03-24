@@ -11,8 +11,7 @@ import { resolveApiBaseURL } from '@/lib/api'
 async function fetchOrgStatuses(orgId: string): Promise<Status[]> {
   const res = await fetch(`${resolveApiBaseURL()}/organizations/${orgId}/statuses?exclude_system=1`)
   const json = await res.json()
-  const data: Status[] = json.data ?? []
-  return data.filter((s) => !s.project_id && s.organization_id)
+  return (json.data ?? []) as Status[]
 }
 
 export default function StatusesPage() {
@@ -27,7 +26,7 @@ export default function StatusesPage() {
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', color: '#6B7280', type: 'issue' as 'issue' | 'project', order: 1 })
+  const [form, setForm] = useState({ name: '', color: '#6B7280', order: 1 })
   const [error, setError] = useState('')
 
   const createMutation = useMutation({
@@ -38,7 +37,6 @@ export default function StatusesPage() {
         body: JSON.stringify({
           name: data.name,
           color: data.color,
-          type: data.type,
           order: data.order,
         }),
       })
@@ -51,7 +49,7 @@ export default function StatusesPage() {
       queryClient.invalidateQueries({ queryKey: ['org-statuses-admin'] })
       queryClient.invalidateQueries({ queryKey: ['org-statuses'] })
       setShowForm(false)
-      setForm({ name: '', color: '#6B7280', type: 'issue', order: 1 })
+      setForm({ name: '', color: '#6B7280', order: 1 })
       setError('')
     },
     onError: (e: Error) => setError(e.message),
@@ -73,7 +71,7 @@ export default function StatusesPage() {
       queryClient.invalidateQueries({ queryKey: ['org-statuses-admin'] })
       queryClient.invalidateQueries({ queryKey: ['org-statuses'] })
       setEditingId(null)
-      setForm({ name: '', color: '#6B7280', type: 'issue', order: 1 })
+      setForm({ name: '', color: '#6B7280', order: 1 })
       setError('')
     },
     onError: (e: Error) => setError(e.message),
@@ -100,7 +98,6 @@ export default function StatusesPage() {
     setForm({
       name: status.name,
       color: status.color,
-      type: (status.type as 'issue' | 'project') || 'issue',
       order: status.order,
     })
     setShowForm(false)
@@ -146,14 +143,14 @@ export default function StatusesPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">ステータス管理</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            組織のステータス（Issue用・プロジェクト用）を管理します
+            組織の「組織Issue」ワークフローに紐づく Issue 用ステータスを管理します（プロジェクト進行は各プロジェクトの project_statuses）
           </p>
         </div>
         {!showForm && !editingId && (
           <button
             onClick={() => {
               setShowForm(true)
-              setForm({ name: '', color: '#6B7280', type: 'issue', order: statuses.length + 1 })
+              setForm({ name: '', color: '#6B7280', order: statuses.length + 1 })
               setError('')
             }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -200,30 +197,15 @@ export default function StatusesPage() {
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              {!editingId && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">タイプ</label>
-                  <select
-                    value={form.type}
-                    onChange={(e) => setForm({ ...form, type: e.target.value as 'issue' | 'project' })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="issue">Issue</option>
-                    <option value="project">プロジェクト</option>
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">並び順</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={form.order}
-                  onChange={(e) => setForm({ ...form, order: parseInt(e.target.value) || 1 })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">並び順</label>
+              <input
+                type="number"
+                min={1}
+                value={form.order}
+                onChange={(e) => setForm({ ...form, order: parseInt(e.target.value) || 1 })}
+                className="w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
             {error && <p className="text-sm text-red-500">{error}</p>}
             <div className="flex gap-2">
@@ -264,7 +246,6 @@ export default function StatusesPage() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">ステータス名</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-24">タイプ</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-20">色</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide w-16">順</th>
                 <th className="px-4 py-3 w-20"></th>
@@ -275,11 +256,6 @@ export default function StatusesPage() {
                 <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
                     <span className="font-medium text-gray-900 text-sm">{s.name}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-gray-600">
-                      {s.type === 'project' ? 'プロジェクト' : 'Issue'}
-                    </span>
                   </td>
                   <td className="px-4 py-3">
                     <span

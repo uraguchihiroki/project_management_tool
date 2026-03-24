@@ -102,7 +102,6 @@ func TestWorkflowStatuses_DuplicateInsertRejectedByDB(t *testing.T) {
 		Name:       "未着手",
 		Color:      "#6B7280",
 		Order:      1,
-		Type:       "issue",
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -113,9 +112,8 @@ func TestWorkflowStatuses_DuplicateInsertRejectedByDB(t *testing.T) {
 		Name:       "未着手",
 		Color:      "#6B7280",
 		Order:      1,
-		Type:       "issue",
 	}).Error
 	if err == nil {
-		t.Fatal("2件目の同一 (name,type,order) は UNIQUE で失敗すべき")
+		t.Fatal("2件目の同一 (name,order) は UNIQUE で失敗すべき")
 	}
 }

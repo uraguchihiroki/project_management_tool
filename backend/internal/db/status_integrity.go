@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const statusUniqueIndexName = "idx_statuses_wf_name_type_order_active"
+const statusUniqueIndexName = "idx_statuses_wf_name_order_active"
 
 // MigrateStatusDedupeAndUniqueIndex は (1) 同一 workflow 内の重複 statuses を参照先を付け替えて1行にまとめ、
 // (2) 有効行のみ対象とする部分ユニークインデックスを作成する。サーバ起動・テストの AutoMigrate 後に1回呼ぶ。冪等。
@@ -38,7 +38,7 @@ func dedupeStatuses(tx *gorm.DB) error {
 
 	groups := make(map[string][]model.Status)
 	for _, s := range all {
-		key := fmt.Sprintf("%d|%s|%s|%d", s.WorkflowID, s.Name, s.Type, s.Order)
+		key := fmt.Sprintf("%d|%s|%d", s.WorkflowID, s.Name, s.Order)
 		groups[key] = append(groups[key], s)
 	}
 
@@ -181,10 +181,10 @@ func ensureStatusPartialUniqueIndex(tx *gorm.DB) error {
 	var stmt string
 	switch dialect {
 	case "postgres", "sqlite":
-		// 論理削除されていない行のみユニーク（同一 workflow で name + type + order）
+		// 論理削除されていない行のみユニーク（同一 workflow で name + order）
 		stmt = fmt.Sprintf(`
 			CREATE UNIQUE INDEX IF NOT EXISTS %s
-			ON statuses (workflow_id, name, type, "order")
+			ON statuses (workflow_id, name, "order")
 			WHERE deleted_at IS NULL
 		`, statusUniqueIndexName)
 	default:

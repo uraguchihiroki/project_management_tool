@@ -59,7 +59,6 @@ func (h *StatusHandler) CreateForWorkflow(c echo.Context) error {
 	type Request struct {
 		Name  string `json:"name"`
 		Color string `json:"color"`
-		Type  string `json:"type"`
 		Order int    `json:"order"`
 	}
 	var req Request
@@ -69,7 +68,7 @@ func (h *StatusHandler) CreateForWorkflow(c echo.Context) error {
 	if req.Color == "" {
 		req.Color = "#6B7280"
 	}
-	status, err := h.statusService.CreateForWorkflow(wfID, req.Name, req.Color, req.Type, req.Order)
+	status, err := h.statusService.CreateForWorkflow(wfID, req.Name, req.Color, req.Order)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
@@ -83,10 +82,9 @@ func (h *StatusHandler) Create(c echo.Context) error {
 		return authErr
 	}
 	type Request struct {
-		Name        string `json:"name"`
-		Color       string `json:"color"`
-		Type        string `json:"type"`
-		Order       int    `json:"order"`
+		Name  string `json:"name"`
+		Color string `json:"color"`
+		Order int    `json:"order"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -95,7 +93,7 @@ func (h *StatusHandler) Create(c echo.Context) error {
 	if req.Color == "" {
 		req.Color = "#6B7280"
 	}
-	status, err := h.statusService.Create(orgID, req.Name, req.Color, req.Type, req.Order)
+	status, err := h.statusService.Create(orgID, req.Name, req.Color, req.Order)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}

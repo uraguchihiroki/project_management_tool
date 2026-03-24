@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,10 +20,11 @@ type CreateProjectInput struct {
 }
 
 type UpdateProjectInput struct {
-	Name        *string
-	Description *string
-	StartDate   *time.Time
-	EndDate     *time.Time
+	Name            *string
+	Description     *string
+	StartDate       *time.Time
+	EndDate         *time.Time
+	ProjectStatusID *uuid.UUID
 }
 
 type ProjectService interface {
@@ -33,6 +35,7 @@ type ProjectService interface {
 	Delete(id uuid.UUID) error
 	Reorder(orgID *uuid.UUID, ids []uuid.UUID) error
 	ListStatusesByOrg(orgID uuid.UUID, statusType string, excludeSystem bool) ([]model.Status, error)
+	ListProjectStatuses(projectID uuid.UUID) ([]model.ProjectStatus, error)
 }
 
 type projectService struct {
@@ -40,6 +43,8 @@ type projectService struct {
 	statusRepo     repository.StatusRepository
 	workflowRepo   repository.WorkflowRepository
 	transitionRepo repository.WorkflowTransitionRepository
+	psRepo         repository.ProjectStatusRepository
+	pstRepo        repository.ProjectStatusTransitionRepository
 }
 
 func NewProjectService(
@@ -47,12 +52,16 @@ func NewProjectService(
 	statusRepo repository.StatusRepository,
 	workflowRepo repository.WorkflowRepository,
 	transitionRepo repository.WorkflowTransitionRepository,
+	psRepo repository.ProjectStatusRepository,
+	pstRepo repository.ProjectStatusTransitionRepository,
 ) ProjectService {
 	return &projectService{
 		projectRepo:    projectRepo,
 		statusRepo:     statusRepo,
 		workflowRepo:   workflowRepo,
 		transitionRepo: transitionRepo,
+		psRepo:         psRepo,
+		pstRepo:        pstRepo,
 	}
 }
 
@@ -106,6 +115,13 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 		return nil, err
 	}
 	project.DefaultWorkflowID = &wfID
+
+	firstPS, err := SeedDefaultProjectStatuses(s.psRepo, s.pstRepo, project.ID)
+	if err != nil {
+		return nil, err
+	}
+	project.ProjectStatusID = &firstPS
+
 	if err := s.projectRepo.Update(project); err != nil {
 		return nil, err
 	}
@@ -130,6 +146,23 @@ func (s *projectService) Update(id uuid.UUID, input UpdateProjectInput) (*model.
 	if input.EndDate != nil {
 		project.EndDate = input.EndDate
 	}
+	if input.ProjectStatusID != nil {
+		newID := *input.ProjectStatusID
+		cur := project.ProjectStatusID
+		if cur == nil || *cur != newID {
+			ps, err := s.psRepo.FindByID(newID)
+			if err != nil {
+				return nil, fmt.Errorf("project status not found")
+			}
+			if ps.ProjectID != id {
+				return nil, fmt.Errorf("project status does not belong to this project")
+			}
+			if cur != nil && !s.pstRepo.Exists(id, *cur, newID) {
+				return nil, fmt.Errorf("transition not allowed")
+			}
+			project.ProjectStatusID = &newID
+		}
+	}
 	if err := s.projectRepo.Update(project); err != nil {
 		return nil, err
 	}
@@ -145,8 +178,16 @@ func (s *projectService) Reorder(orgID *uuid.UUID, ids []uuid.UUID) error {
 }
 
 func (s *projectService) ListStatusesByOrg(orgID uuid.UUID, statusType string, excludeSystem bool) ([]model.Status, error) {
+	// プロジェクト進行は project_statuses を参照（組織横断の Issue 用 statuses のみ返す）
+	if statusType == "project" {
+		return []model.Status{}, nil
+	}
 	if excludeSystem {
 		return s.statusRepo.FindByOrganizationIDAndTypeExcludeSystem(orgID, statusType)
 	}
 	return s.statusRepo.FindByOrganizationIDAndType(orgID, statusType)
+}
+
+func (s *projectService) ListProjectStatuses(projectID uuid.UUID) ([]model.ProjectStatus, error) {
+	return s.psRepo.FindByProjectID(projectID)
 }

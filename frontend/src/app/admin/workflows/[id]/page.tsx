@@ -45,7 +45,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const [statusForm, setStatusForm] = useState({
     name: '',
     color: '#6B7280',
-    type: 'issue' as 'issue' | 'project',
     order: '',
   })
 
@@ -84,13 +83,12 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       return createWorkflowStatus(id, {
         name: statusForm.name.trim(),
         color: statusForm.color || '#6B7280',
-        type: statusForm.type,
         ...(order !== undefined ? { order } : {}),
       })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'statuses'] })
-      setStatusForm({ name: '', color: '#6B7280', type: 'issue', order: '' })
+      setStatusForm({ name: '', color: '#6B7280', order: '' })
       setShowAddStatus(false)
       setError('')
     },
@@ -263,22 +261,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   className="h-10 w-14 rounded border cursor-pointer"
                 />
               </div>
-              <div className="flex-1 min-w-[140px]">
-                <label className="block text-sm font-medium text-gray-700 mb-1">種別</label>
-                <select
-                  value={statusForm.type}
-                  onChange={(e) =>
-                    setStatusForm((f) => ({
-                      ...f,
-                      type: e.target.value as 'issue' | 'project',
-                    }))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 bg-white"
-                >
-                  <option value="issue">issue</option>
-                  <option value="project">project</option>
-                </select>
-              </div>
               <div className="flex-1 min-w-[100px]">
                 <label className="block text-sm font-medium text-gray-700 mb-1">表示順（任意）</label>
                 <input
@@ -304,7 +286,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                 type="button"
                 onClick={() => {
                   setShowAddStatus(false)
-                  setStatusForm({ name: '', color: '#6B7280', type: 'issue', order: '' })
+                  setStatusForm({ name: '', color: '#6B7280', order: '' })
                 }}
                 className="px-3 py-1.5 text-sm border rounded-lg"
               >
@@ -328,7 +310,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   <th className="px-3 py-2 font-medium">順</th>
                   <th className="px-3 py-2 font-medium">名前</th>
                   <th className="px-3 py-2 font-medium">色</th>
-                  <th className="px-3 py-2 font-medium">種別</th>
                 </tr>
               </thead>
               <tbody>
@@ -344,7 +325,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       />
                       <span className="ml-2 text-gray-600 font-mono text-xs">{s.color}</span>
                     </td>
-                    <td className="px-3 py-2 text-gray-700">{s.type ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

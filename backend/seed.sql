@@ -105,36 +105,9 @@ ALTER TABLE issues ALTER COLUMN project_id DROP NOT NULL;
 ALTER TABLE statuses ADD COLUMN IF NOT EXISTS organization_id UUID;
 ALTER TABLE statuses ALTER COLUMN project_id DROP NOT NULL;
 
--- 13a. Status: add type column (issue | project)
-ALTER TABLE statuses ADD COLUMN IF NOT EXISTS type VARCHAR(20) NOT NULL DEFAULT 'issue';
-UPDATE statuses SET type = 'issue' WHERE type IS NULL OR type = '';
-UPDATE statuses SET type = 'issue' WHERE type NOT IN ('issue', 'project');
-
--- 13b. ワークフロー用・プロジェクト用ステータスのSeed（FRS組織、固定UUID）
--- Issue用: ワークフロー承認後ステータス、Issueのカンバン列
-INSERT INTO statuses (id, project_id, organization_id, name, color, "order", type)
-VALUES
-  ('10000000-0000-0000-0000-000000000001', NULL, '00000000-0000-0000-0000-000000000001', E'new\u672a\u7740\u624b', '#6B7280', 1, 'issue'),
-  ('10000000-0000-0000-0000-000000000002', NULL, '00000000-0000-0000-0000-000000000001', E'new\u9032\u884c\u4e2d', '#3B82F6', 2, 'issue'),
-  ('10000000-0000-0000-0000-000000000003', NULL, '00000000-0000-0000-0000-000000000001', E'new\u30ec\u30d3\u30e5\u30fc\u4e2d', '#F59E0B', 3, 'issue'),
-  ('10000000-0000-0000-0000-000000000004', NULL, '00000000-0000-0000-0000-000000000001', E'new\u5b8c\u4e86', '#10B981', 4, 'issue')
-ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
-  color = EXCLUDED.color,
-  "order" = EXCLUDED."order",
-  type = EXCLUDED.type;
-
--- Project用: プロジェクトのライフサイクル（計画中, 進行中, 完了）
-INSERT INTO statuses (id, project_id, organization_id, name, color, "order", type)
-VALUES
-  ('20000000-0000-0000-0000-000000000001', NULL, '00000000-0000-0000-0000-000000000001', E'new\u8a08\u753b\u4e2d', '#6B7280', 1, 'project'),
-  ('20000000-0000-0000-0000-000000000002', NULL, '00000000-0000-0000-0000-000000000001', E'new\u9032\u884c\u4e2d', '#3B82F6', 2, 'project'),
-  ('20000000-0000-0000-0000-000000000003', NULL, '00000000-0000-0000-0000-000000000001', E'new\u5b8c\u4e86', '#10B981', 3, 'project')
-ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
-  color = EXCLUDED.color,
-  "order" = EXCLUDED."order",
-  type = EXCLUDED.type;
+-- 13a–13b. 廃止: statuses は Issue 専用（workflow_id）。プロジェクト進行は project_statuses。
+-- 旧 type 列はサーバ起動時 MigrateIssueProjectStatusSplitPre で DROP。
+-- 組織横断の Issue 列・project_statuses の初期値は API 経由のシード（組織作成・プロジェクト作成）を正とする。
 
 -- 13. WorkflowStep: Phase 5 承認対象拡張
 ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS approver_type VARCHAR(20) DEFAULT 'role';
@@ -193,10 +166,10 @@ ALTER TABLE statuses ADD COLUMN IF NOT EXISTS status_key VARCHAR(50);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_statuses_status_key ON statuses(status_key) WHERE status_key IS NOT NULL AND status_key != '';
 
 -- sts_start, sts_goal システムステータス（全会社共通・グローバル）
-INSERT INTO statuses (id, project_id, organization_id, name, color, "order", type, status_key)
+INSERT INTO statuses (id, project_id, organization_id, name, color, "order", status_key)
 VALUES
-  ('30000000-0000-0000-0000-000000000001', NULL, NULL, 'sts_start', '#9CA3AF', 0, 'issue', 'sts_start'),
-  ('30000000-0000-0000-0000-000000000002', NULL, NULL, 'sts_goal', '#9CA3AF', 99, 'issue', 'sts_goal')
+  ('30000000-0000-0000-0000-000000000001', NULL, NULL, 'sts_start', '#9CA3AF', 0, 'sts_start'),
+  ('30000000-0000-0000-0000-000000000002', NULL, NULL, 'sts_goal', '#9CA3AF', 99, 'sts_goal')
 ON CONFLICT (id) DO UPDATE SET status_key = EXCLUDED.status_key, name = EXCLUDED.name, organization_id = NULL;
 
 UPDATE statuses SET organization_id = NULL WHERE status_key IN ('sts_start','sts_goal');

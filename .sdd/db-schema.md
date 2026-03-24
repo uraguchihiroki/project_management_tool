@@ -136,15 +136,36 @@ projects
 ├── description (nullable)
 ├── owner_id (FK → users.id)
 ├── organization_id (FK → organizations.id, NOT NULL)
+├── default_workflow_id (FK → workflows.id, nullable) — Issue 用ワークフロー
+├── project_status_id (FK → project_statuses.id, nullable) — 現在のプロジェクト進行
 └── created_at
 
-statuses
+statuses（Issue 専用。常に workflow_id 必須。Workflow / workflow_transitions と組み合わせて Issue のカンバン列と遷移を表す）
+
 ├── id (PK)
 ├── key (VARCHAR(255), NOT NULL)
-├── project_id (FK → projects.id)
+├── workflow_id (FK → workflows.id, NOT NULL)
 ├── name
 ├── color (HEX)
-└── order
+├── order
+├── status_key (nullable) — 例: sts_start, sts_goal
+└── deleted_at
+
+project_statuses（プロジェクト進行。Workflow は使用しない）
+
+├── id (PK)
+├── key (VARCHAR(255), NOT NULL)
+├── project_id (FK → projects.id, NOT NULL)
+├── name, color, order
+├── status_key (nullable)
+└── deleted_at
+
+project_status_transitions（同一プロジェクト内の許可遷移 from → to）
+
+├── id (PK, auto)
+├── project_id (FK → projects.id, NOT NULL)
+├── from_project_status_id, to_project_status_id
+└── created_at
 
 issues
 ├── id (PK)
@@ -284,25 +305,49 @@ issue_templates
 | description | TEXT | nullable | 説明 |
 | owner_id | UUID | FK | オーナーユーザー |
 | organization_id | UUID | FK, NOT NULL | 所属組織 |
+| default_workflow_id | BIGINT | FK → workflows.id, nullable | Issue 用デフォルトワークフロー |
+| project_status_id | UUID | FK → project_statuses.id, nullable | 現在のプロジェクト進行 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
 > **Note:** (organization_id, key) でユニークインデックス。
 
-### statuses
+### statuses（Issue 専用）
 
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | UUID | PK | ステータスID |
-| key | VARCHAR(255) | NOT NULL | API/URL 用識別子（status_key があれば流用、なければ id） |
-| project_id | UUID | FK, nullable | 所属プロジェクト（組織用は NULL） |
-| organization_id | UUID | FK, nullable | 所属組織 |
+| key | VARCHAR(255) | NOT NULL | API/URL 用識別子 |
+| workflow_id | BIGINT | FK → workflows.id, NOT NULL | 所属ワークフロー |
 | name | VARCHAR(50) | NOT NULL | ステータス名 |
 | color | VARCHAR(7) | NOT NULL | HEXカラー (#RRGGBB) |
 | order | INTEGER | NOT NULL | 表示順 |
-| type | VARCHAR(20) | NOT NULL | issue / project |
-| status_key | VARCHAR(50) | nullable, UNIQUE | システム用: sts_start, sts_goal。NULL=ユーザー定義 |
+| status_key | VARCHAR(50) | nullable | システム用: sts_start, sts_goal。NULL=ユーザー定義 |
 
-> **実装メモ・重複防止**: 同一 `workflow_id` で `(name, type, order)` は **論理削除されていない行のみ**一意（部分ユニークインデックス `idx_statuses_wf_name_type_order_active`）。既存 DB の重複はサーバ起動時マイグレーション `MigrateStatusDedupeAndUniqueIndex`（`internal/db/status_integrity.go`）で参照付け替えのうえ除去する。
+> **重複防止**: 同一 `workflow_id` で `(name, order)` は **論理削除されていない行のみ**一意（部分ユニークインデックス `idx_statuses_wf_name_order_active`）。起動時 `MigrateStatusDedupeAndUniqueIndex`（`internal/db/status_integrity.go`）。旧 `type` 列は `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）で除去する。
+
+### project_statuses
+
+| カラム | 型 | 制約 | 説明 |
+|-------|-----|------|------|
+| id | UUID | PK | |
+| key | VARCHAR(255) | NOT NULL | |
+| project_id | UUID | FK → projects.id, NOT NULL | |
+| name | VARCHAR(50) | NOT NULL | |
+| color | VARCHAR(7) | NOT NULL | |
+| order | INTEGER | NOT NULL | |
+| status_key | VARCHAR(50) | nullable | |
+| deleted_at | TIMESTAMP | nullable | 論理削除 |
+
+### project_status_transitions
+
+| カラム | 型 | 制約 | 説明 |
+|-------|-----|------|------|
+| id | SERIAL | PK | |
+| key | VARCHAR(255) | NOT NULL | |
+| project_id | UUID | FK → projects.id, NOT NULL | |
+| from_project_status_id | UUID | NOT NULL | |
+| to_project_status_id | UUID | NOT NULL | |
+| created_at | TIMESTAMP | NOT NULL | |
 
 ### issues
 

@@ -146,10 +146,11 @@ func (h *ProjectHandler) Update(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "project not found")
 	}
 	type Request struct {
-		Name        *string `json:"name"`
-		Description *string `json:"description"`
-		StartDate   string  `json:"start_date"`
-		EndDate     string  `json:"end_date"`
+		Name              *string `json:"name"`
+		Description       *string `json:"description"`
+		StartDate         string  `json:"start_date"`
+		EndDate           string  `json:"end_date"`
+		ProjectStatusID   *string `json:"project_status_id"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -169,12 +170,19 @@ func (h *ProjectHandler) Update(c echo.Context) error {
 			endDate = &t
 		}
 	}
-	project, err := h.projectService.Update(id, service.UpdateProjectInput{
-		Name:        req.Name,
-		Description: req.Description,
-		StartDate:   startDate,
-		EndDate:     endDate,
-	})
+	var in service.UpdateProjectInput
+	in.Name = req.Name
+	in.Description = req.Description
+	in.StartDate = startDate
+	in.EndDate = endDate
+	if req.ProjectStatusID != nil && *req.ProjectStatusID != "" {
+		psid, err := uuid.Parse(*req.ProjectStatusID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid project_status_id")
+		}
+		in.ProjectStatusID = &psid
+	}
+	project, err := h.projectService.Update(id, in)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "project not found")
 	}
@@ -239,6 +247,30 @@ func (h *ProjectHandler) Delete(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"message": "deleted"})
+}
+
+// GET /api/v1/projects/:id/project-statuses
+func (h *ProjectHandler) ListProjectStatuses(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
+	}
+	existing, err := h.projectService.Get(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	}
+	if !isSuperAdmin && (orgScope == nil || existing.OrganizationID != *orgScope) {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	}
+	rows, err := h.projectService.ListProjectStatuses(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": rows})
 }
 
 // GET /api/v1/organizations/:orgId/statuses

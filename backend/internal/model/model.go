@@ -102,12 +102,36 @@ type Project struct {
 	StartDate      *time.Time     `json:"start_date,omitempty"`
 	EndDate        *time.Time     `json:"end_date,omitempty"`
 	DefaultWorkflowID *uint          `gorm:"index" json:"default_workflow_id,omitempty"`
-	Statuses          []Status       `gorm:"-" json:"statuses,omitempty"` // API 応答用（default_workflow の列）
+	ProjectStatusID   *uuid.UUID     `gorm:"type:uuid;index" json:"project_status_id,omitempty"`
+	ProjectStatus     *ProjectStatus `gorm:"foreignKey:ProjectStatusID" json:"project_status,omitempty"`
+	Statuses          []Status       `gorm:"-" json:"statuses,omitempty"` // API 応答用（default_workflow の Issue 列）
 	CreatedAt         time.Time      `json:"created_at"`
 	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// Status は常に1ワークフローに属し、ワークフロー間で共有しない
+// ProjectStatus はプロジェクト進行用（Workflow は使わない）
+type ProjectStatus struct {
+	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key       string         `gorm:"size:255;not null" json:"key"`
+	ProjectID uuid.UUID      `gorm:"type:uuid;not null;index" json:"project_id"`
+	Name      string         `gorm:"size:50;not null" json:"name"`
+	Color     string         `gorm:"size:7;not null" json:"color"`
+	Order     int            `gorm:"not null" json:"order"`
+	StatusKey string         `gorm:"size:50;index" json:"status_key,omitempty"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// ProjectStatusTransition は同一プロジェクト内の許可遷移（from → to）。Workflow は使用しない。
+type ProjectStatusTransition struct {
+	ID                  uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	Key                 string    `gorm:"size:255;not null" json:"key"`
+	ProjectID           uuid.UUID `gorm:"type:uuid;not null;index" json:"project_id"`
+	FromProjectStatusID uuid.UUID `gorm:"type:uuid;not null" json:"from_project_status_id"`
+	ToProjectStatusID   uuid.UUID `gorm:"type:uuid;not null" json:"to_project_status_id"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+// Status は常に1ワークフローに属し、ワークフロー間で共有しない（Issue 専用）
 type Status struct {
 	ID         uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
 	Key        string    `gorm:"size:255;not null" json:"key"`
@@ -116,8 +140,7 @@ type Status struct {
 	Name       string    `gorm:"size:50;not null" json:"name"`
 	Color      string    `gorm:"size:7;not null" json:"color"`
 	Order      int       `gorm:"not null" json:"order"`
-	Type       string    `gorm:"size:20;not null;default:'issue'" json:"type"` // issue | project
-	StatusKey  string    `gorm:"size:50;index" json:"status_key,omitempty"`    // sts_start, sts_goal。空=ユーザー定義
+	StatusKey  string    `gorm:"size:50;index" json:"status_key,omitempty"` // sts_start, sts_goal。空=ユーザー定義
 	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
 }
 

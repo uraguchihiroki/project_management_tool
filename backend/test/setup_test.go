@@ -51,6 +51,10 @@ func newTestServer(t *testing.T) *testServer {
 
 	db.SetupJoinTable(&model.User{}, "Roles", &model.UserRole{})
 
+	if err := appdb.MigrateIssueProjectStatusSplitPre(db); err != nil {
+		t.Fatalf("failed migrate issue/project status split (pre): %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
@@ -59,11 +63,13 @@ func newTestServer(t *testing.T) *testServer {
 		&model.Department{},
 		&model.OrganizationUserDepartment{},
 		&model.Project{},
+		&model.Workflow{},
 		&model.Status{},
 		&model.WorkflowTransition{},
+		&model.ProjectStatus{},
+		&model.ProjectStatusTransition{},
 		&model.Issue{},
 		&model.Comment{},
-		&model.Workflow{},
 		&model.IssueTemplate{},
 		&model.IssueEvent{},
 		&model.Group{},
@@ -72,6 +78,10 @@ func newTestServer(t *testing.T) *testServer {
 		&model.TransitionAlertRule{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
+	}
+
+	if err := appdb.MigrateProjectStatusSeed(db); err != nil {
+		t.Fatalf("failed migrate project status seed: %v", err)
 	}
 
 	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
@@ -92,9 +102,6 @@ func newTestServer(t *testing.T) *testServer {
 	if _, _, err := service.CreateWorkflowWithIssueStatuses(workflowRepo, statusRepo, transitionRepo, frsOrg.ID, "組織Issue"); err != nil {
 		t.Fatalf("seed 組織Issue workflow: %v", err)
 	}
-	if _, _, err := service.CreateWorkflowWithProjectStatuses(workflowRepo, statusRepo, transitionRepo, frsOrg.ID, "組織Project"); err != nil {
-		t.Fatalf("seed 組織Project workflow: %v", err)
-	}
 
 	userRepo := repository.NewUserRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
@@ -111,9 +118,12 @@ func newTestServer(t *testing.T) *testServer {
 	superAdminRepo := repository.NewSuperAdminRepository(db)
 	departmentRepo := repository.NewDepartmentRepository(db)
 
+	projectStatusRepo := repository.NewProjectStatusRepository(db)
+	projectStatusTransitionRepo := repository.NewProjectStatusTransitionRepository(db)
+
 	userSvc := service.NewUserService(userRepo, orgRepo)
-	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo)
+	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
@@ -203,6 +213,7 @@ func newTestServer(t *testing.T) *testServer {
 	api.PUT("/admin/users/:id", userH.UpdateUser)
 	api.DELETE("/admin/users/:id", userH.RemoveFromOrg)
 	api.GET("/projects", projectH.List)
+	api.GET("/projects/:id/project-statuses", projectH.ListProjectStatuses)
 	api.GET("/organizations/:orgId/statuses", projectH.ListStatusesByOrg)
 	api.POST("/organizations/:orgId/statuses", statusH.Create)
 	api.PUT("/statuses/:id", statusH.Update)

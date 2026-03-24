@@ -37,6 +37,16 @@ export interface User {
   created_at: string
 }
 
+/** プロジェクト進行（Workflow 不使用） */
+export interface ProjectStatus {
+  id: string
+  project_id: string
+  name: string
+  color: string
+  order: number
+  status_key?: string
+}
+
 export interface Project {
   id: string
   key: string
@@ -47,10 +57,14 @@ export interface Project {
   organization_id?: string
   start_date?: string
   end_date?: string
+  /** Issue 用（default_workflow の列） */
   statuses?: Status[]
+  project_status_id?: string
+  project_status?: ProjectStatus
   created_at: string
 }
 
+/** Issue 用（ワークフローに紐づく） */
 export interface Status {
   id: string
   project_id?: string
@@ -59,7 +73,6 @@ export interface Status {
   name: string
   color: string
   order: number
-  type?: 'issue' | 'project'
   status_key?: string // sts_start, sts_goal。空=ユーザー定義
 }
 

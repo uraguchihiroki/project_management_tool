@@ -43,7 +43,7 @@ echo "=== Project Management Tool 起動 ==="
 
 # 1. Docker (PostgreSQL) 起動
 echo "[1/3] PostgreSQL 起動..."
-docker compose up -d db
+docker compose up -d --remove-orphans db
 
 echo "  -> DB の起動を待機中..."
 sleep 5

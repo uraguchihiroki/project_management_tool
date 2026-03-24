@@ -44,10 +44,7 @@
 - **期間**を持つ
   - 開始日（start_date）
   - 終了日（end_date）
-- **ライフサイクルステータス**を持つ（Issue の statuses とは別概念）
-  - 用途: クエリのキー、表示上のフラグ
-  - 値: `none` | `planning` | `active` | `completed`
-  - 表示例: なし / 計画中 / 実行中 / 完了
+- **ライフサイクル（プロジェクト進行）**は Issue の `statuses` / Workflow とは別。**`project_statuses`** テーブルと **`projects.project_status_id`**（現在の進行）で表現する（Workflow は使わない）。`project_status_transitions` で許可遷移を保持。
 
 > **Note:** プロジェクトは Issue のグルーピング用属性。プロジェクトテーブルは必要で、会社がマスタとして持つ。
 
