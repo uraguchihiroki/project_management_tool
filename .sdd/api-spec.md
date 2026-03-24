@@ -98,6 +98,8 @@ http://localhost:8080/api/v1
 | PUT | /statuses/:id | 更新 |
 | DELETE | /statuses/:id | 削除 |
 
+> **UI導線:** 管理画面では `/admin/statuses` はレガシー導線として `/admin/workflows` へリダイレクトし、実際の編集は `/admin/workflows/:id` の **共通ダイアログ（新規/編集）** で行う。
+
 ### Super Admin
 
 | Method | Path | 説明 |
@@ -123,6 +125,7 @@ http://localhost:8080/api/v1
 | POST | /projects | プロジェクト作成 |
 | GET | /projects/:id | プロジェクト詳細取得 |
 | GET | /projects/:id/project-statuses | 当該プロジェクトの **進行用** `project_statuses` 一覧（JWT の組織と一致しないプロジェクトは 404） |
+| PUT | /projects/:id/project-statuses/:statusId | 進行ステータス更新。body: `name`, `color`（#RRGGBB）, `order`。当該行がこのプロジェクトに属することを検証。`status_key` が sts_start / sts_goal の行は変更不可 |
 | PUT | /projects/:id | プロジェクト更新（任意: `project_status_id` で進行変更。許可遷移は `project_status_transitions` で検証） |
 | DELETE | /projects/:id | プロジェクト削除 |
 

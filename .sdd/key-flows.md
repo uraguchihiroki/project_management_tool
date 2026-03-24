@@ -77,14 +77,6 @@ flowchart TD
 
 ---
 
-## プロジェクト進行（project_statuses）
-
-- **Workflow は Issue のみ**に使用する。開発プロジェクトのライフサイクル（計画中 / 進行中 / 完了など）は **`project_statuses`** と **`project_status_transitions`**（同一プロジェクト内の許可遷移）で表現する。
-- **`projects.project_status_id`** が現在の進行を指す。変更は `PUT /projects/:id` の `project_status_id`、またはアプリ層で遷移ルールを検証する。
-- 一覧は **`GET /projects/:id/project-statuses`**。組織横断の `GET /organizations/:orgId/statuses` は Issue 用 `statuses` のみ（`?type=project` は空配列）。
-
----
-
 ## ステータス遷移の権限（Issue 管理）
 
 **稟議・承認ワークフロー（誰が許可したかの証跡）とは別**に、「**誰が Issue のステータス（カンバンの列）を変更してよいか**」を制御する。詳細・候補案・未決事項は [transition-permissions.md](transition-permissions.md) を参照（**採用案は TBD**）。
@@ -111,4 +103,4 @@ flowchart TD
 | プロジェクト一覧 | /projects | プロジェクト一覧 |
 | プロジェクト詳細 | /projects/[id] | プロジェクト内 Issue 一覧 |
 | Issue 詳細 | /projects/[id]/issues/[number] | Issue 詳細・コメント・ステータス変更 |
-| 管理画面 | /admin | ユーザー・グループ・ステータス・プロジェクト・ワークフロー・テンプレート等（管理メニューは実装に合わせる） |
+| 管理画面 | /admin | ユーザー・グループ・プロジェクト・ワークフロー・テンプレート等（Issue ステータス編集はワークフロー詳細の共通ダイアログに集約） |

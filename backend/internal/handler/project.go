@@ -273,6 +273,46 @@ func (h *ProjectHandler) ListProjectStatuses(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": rows})
 }
 
+// PUT /api/v1/projects/:id/project-statuses/:statusId
+func (h *ProjectHandler) UpdateProjectStatus(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
+	projectID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
+	}
+	statusID, err := uuid.Parse(c.Param("statusId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid status id")
+	}
+	existing, err := h.projectService.Get(projectID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	}
+	if !isSuperAdmin && (orgScope == nil || existing.OrganizationID != *orgScope) {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	}
+	type reqBody struct {
+		Name  string `json:"name"`
+		Color string `json:"color"`
+		Order int    `json:"order"`
+	}
+	var body reqBody
+	if err := c.Bind(&body); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if body.Color == "" {
+		body.Color = "#6B7280"
+	}
+	status, err := h.projectService.UpdateProjectStatus(projectID, statusID, body.Name, body.Color, body.Order)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": status})
+}
+
 // GET /api/v1/organizations/:orgId/statuses
 func (h *ProjectHandler) ListStatusesByOrg(c echo.Context) error {
 	orgID, _, authErr := requireOrgParam(c, "orgId")

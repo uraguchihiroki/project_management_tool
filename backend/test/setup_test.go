@@ -214,6 +214,7 @@ func newTestServer(t *testing.T) *testServer {
 	api.DELETE("/admin/users/:id", userH.RemoveFromOrg)
 	api.GET("/projects", projectH.List)
 	api.GET("/projects/:id/project-statuses", projectH.ListProjectStatuses)
+	api.PUT("/projects/:id/project-statuses/:statusId", projectH.UpdateProjectStatus)
 	api.GET("/organizations/:orgId/statuses", projectH.ListStatusesByOrg)
 	api.POST("/organizations/:orgId/statuses", statusH.Create)
 	api.PUT("/statuses/:id", statusH.Update)

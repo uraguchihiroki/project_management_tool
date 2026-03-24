@@ -5,16 +5,20 @@ import { use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
+import type { Status } from '@/types'
 import {
   createWorkflowStatus,
   deleteWorkflowApi,
   getWorkflow,
   getWorkflowStatuses,
+  updateStatus,
   updateWorkflowMeta,
 } from '@/lib/api'
+
+type StatusDialogMode = 'create' | 'edit'
 
 export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -29,8 +33,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     enabled: authFetch && !!id && !!currentOrg?.id,
   })
 
-  const orgMatches =
-    !!workflow && !!currentOrg && workflow.organization_id === currentOrg.id
+  const orgMatches = !!workflow && !!currentOrg && workflow.organization_id === currentOrg.id
 
   const { data: statuses = [], isLoading: statusesLoading } = useQuery({
     queryKey: ['workflow', currentOrg?.id, id, 'statuses'],
@@ -41,12 +44,16 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ name: '', description: '' })
   const [error, setError] = useState('')
-  const [showAddStatus, setShowAddStatus] = useState(false)
-  const [statusForm, setStatusForm] = useState({
+
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false)
+  const [statusDialogMode, setStatusDialogMode] = useState<StatusDialogMode>('create')
+  const [statusDialogStatusId, setStatusDialogStatusId] = useState<string | null>(null)
+  const [statusDialogForm, setStatusDialogForm] = useState({
     name: '',
     color: '#6B7280',
     order: '',
   })
+  const [statusDialogError, setStatusDialogError] = useState('')
 
   useEffect(() => {
     if (workflow) {
@@ -75,25 +82,93 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   })
 
   const addStatusMutation = useMutation({
-    mutationFn: () => {
-      const orderStr = statusForm.order.trim()
-      const orderParsed = orderStr === '' ? NaN : parseInt(orderStr, 10)
-      const order =
-        !Number.isNaN(orderParsed) && orderParsed > 0 ? orderParsed : undefined
-      return createWorkflowStatus(id, {
-        name: statusForm.name.trim(),
-        color: statusForm.color || '#6B7280',
-        ...(order !== undefined ? { order } : {}),
-      })
-    },
+    mutationFn: (data: { name: string; color: string; order?: number }) => createWorkflowStatus(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'statuses'] })
-      setStatusForm({ name: '', color: '#6B7280', order: '' })
-      setShowAddStatus(false)
-      setError('')
+      setStatusDialogOpen(false)
+      setStatusDialogError('')
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => setStatusDialogError(e.message),
   })
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ statusId, data }: { statusId: string; data: { name: string; color: string; order: number } }) =>
+      updateStatus(statusId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'statuses'] })
+      setStatusDialogOpen(false)
+      setStatusDialogError('')
+    },
+    onError: (e: Error) => setStatusDialogError(e.message),
+  })
+
+  const openCreateStatusDialog = () => {
+    setStatusDialogMode('create')
+    setStatusDialogStatusId(null)
+    setStatusDialogForm({ name: '', color: '#6B7280', order: '' })
+    setStatusDialogError('')
+    setStatusDialogOpen(true)
+  }
+
+  const openEditStatusDialog = (status: Status) => {
+    setStatusDialogMode('edit')
+    setStatusDialogStatusId(status.id)
+    setStatusDialogForm({
+      name: status.name,
+      color: status.color,
+      order: String(status.order),
+    })
+    setStatusDialogError('')
+    setStatusDialogOpen(true)
+  }
+
+  const closeStatusDialog = () => {
+    if (addStatusMutation.isPending || updateStatusMutation.isPending) return
+    setStatusDialogOpen(false)
+    setStatusDialogError('')
+  }
+
+  const submitStatusDialog = () => {
+    const name = statusDialogForm.name.trim()
+    const color = statusDialogForm.color.trim()
+    const orderStr = statusDialogForm.order.trim()
+    const orderParsed = orderStr === '' ? NaN : parseInt(orderStr, 10)
+
+    if (!name) {
+      setStatusDialogError('ステータス名は必須です')
+      return
+    }
+    if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+      setStatusDialogError('色は#RRGGBB形式で指定してください')
+      return
+    }
+    if (orderStr !== '' && (Number.isNaN(orderParsed) || orderParsed <= 0)) {
+      setStatusDialogError('表示順は1以上の整数で指定してください')
+      return
+    }
+
+    if (statusDialogMode === 'create') {
+      addStatusMutation.mutate({
+        name,
+        color,
+        ...(orderStr !== '' ? { order: orderParsed } : {}),
+      })
+      return
+    }
+
+    if (!statusDialogStatusId) {
+      setStatusDialogError('編集対象のステータスが特定できません')
+      return
+    }
+    updateStatusMutation.mutate({
+      statusId: statusDialogStatusId,
+      data: {
+        name,
+        color,
+        order: Number.isNaN(orderParsed) ? 1 : orderParsed,
+      },
+    })
+  }
 
   if (!authFetch) {
     return <div className="p-8 text-gray-500">読み込み中...</div>
@@ -115,6 +190,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   }
 
   const orgMismatch = !orgMatches
+  const statusDialogTitle = statusDialogMode === 'create' ? 'ステータスを追加' : 'ステータスを編集'
+  const statusDialogSaving = addStatusMutation.isPending || updateStatusMutation.isPending
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -141,8 +218,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             <h1 className="text-2xl font-bold text-gray-900">{workflow.name}</h1>
             {!orgMismatch && currentOrg && (
               <p className="mt-1 text-sm text-gray-500">
-                選択中の組織:{' '}
-                <span className="font-medium text-gray-800">{currentOrg.name}</span>
+                選択中の組織: <span className="font-medium text-gray-800">{currentOrg.name}</span>
               </p>
             )}
             <p className="mt-2 text-gray-600 whitespace-pre-wrap">{workflow.description || '—'}</p>
@@ -222,10 +298,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           {!orgMismatch && (
             <button
               type="button"
-              onClick={() => {
-                setShowAddStatus((v) => !v)
-                setError('')
-              }}
+              onClick={openCreateStatusDialog}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               <Plus className="w-4 h-4" />
@@ -238,62 +311,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           <p className="text-sm text-gray-500">
             選択中の組織に属するワークフローのみ、ステータス一覧を表示・編集できます。
           </p>
-        )}
-
-        {!orgMismatch && showAddStatus && (
-          <div className="mb-6 p-4 rounded-lg border border-gray-200 bg-gray-50 space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">名前（必須）</label>
-              <input
-                value={statusForm.name}
-                onChange={(e) => setStatusForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 bg-white"
-                placeholder="例: レビュー待ち"
-              />
-            </div>
-            <div className="flex flex-wrap gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">色</label>
-                <input
-                  type="color"
-                  value={statusForm.color}
-                  onChange={(e) => setStatusForm((f) => ({ ...f, color: e.target.value }))}
-                  className="h-10 w-14 rounded border cursor-pointer"
-                />
-              </div>
-              <div className="flex-1 min-w-[100px]">
-                <label className="block text-sm font-medium text-gray-700 mb-1">表示順（任意）</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={statusForm.order}
-                  onChange={(e) => setStatusForm((f) => ({ ...f, order: e.target.value }))}
-                  placeholder="自動"
-                  className="w-full border rounded-lg px-3 py-2 bg-white"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                disabled={addStatusMutation.isPending || !statusForm.name.trim()}
-                onClick={() => addStatusMutation.mutate()}
-                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                追加する
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddStatus(false)
-                  setStatusForm({ name: '', color: '#6B7280', order: '' })
-                }}
-                className="px-3 py-1.5 text-sm border rounded-lg"
-              >
-                閉じる
-              </button>
-            </div>
-          </div>
         )}
 
         {!orgMismatch && statusesLoading && (
@@ -310,6 +327,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   <th className="px-3 py-2 font-medium">順</th>
                   <th className="px-3 py-2 font-medium">名前</th>
                   <th className="px-3 py-2 font-medium">色</th>
+                  <th className="px-3 py-2 font-medium w-20">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -325,6 +343,20 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       />
                       <span className="ml-2 text-gray-600 font-mono text-xs">{s.color}</span>
                     </td>
+                    <td className="px-3 py-2">
+                      {s.status_key === 'sts_start' || s.status_key === 'sts_goal' ? (
+                        <span className="text-xs text-gray-400">システム</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openEditStatusDialog(s)}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                          title="編集"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -338,6 +370,81 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
 
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
       </div>
+
+      {!orgMismatch && statusDialogOpen && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white rounded-xl shadow-xl border border-gray-200">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h3 className="text-base font-semibold text-gray-900">{statusDialogTitle}</h3>
+              <button
+                type="button"
+                onClick={closeStatusDialog}
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+                aria-label="閉じる"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">名前（必須）</label>
+                <input
+                  value={statusDialogForm.name}
+                  onChange={(e) => setStatusDialogForm((f) => ({ ...f, name: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="例: レビュー待ち"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">色</label>
+                  <input
+                    type="color"
+                    value={statusDialogForm.color}
+                    onChange={(e) => setStatusDialogForm((f) => ({ ...f, color: e.target.value }))}
+                    className="h-10 w-14 rounded border cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    表示順{statusDialogMode === 'create' ? '（任意）' : '（必須）'}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={statusDialogForm.order}
+                    onChange={(e) => setStatusDialogForm((f) => ({ ...f, order: e.target.value }))}
+                    placeholder={statusDialogMode === 'create' ? '自動' : '1'}
+                    className="w-full border rounded-lg px-3 py-2"
+                  />
+                </div>
+              </div>
+              {statusDialogError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                  {statusDialogError}
+                </p>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={closeStatusDialog}
+                className="px-3 py-1.5 text-sm border rounded-lg"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                disabled={statusDialogSaving}
+                onClick={submitStatusDialog}
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {statusDialogMode === 'create' ? '追加する' : '更新する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

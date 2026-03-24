@@ -2,12 +2,15 @@ package service
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
+
+var projectStatusColorRegex = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 type CreateProjectInput struct {
 	Key            string
@@ -36,6 +39,7 @@ type ProjectService interface {
 	Reorder(orgID *uuid.UUID, ids []uuid.UUID) error
 	ListStatusesByOrg(orgID uuid.UUID, statusType string, excludeSystem bool) ([]model.Status, error)
 	ListProjectStatuses(projectID uuid.UUID) ([]model.ProjectStatus, error)
+	UpdateProjectStatus(projectID, statusID uuid.UUID, name, color string, order int) (*model.ProjectStatus, error)
 }
 
 type projectService struct {
@@ -190,4 +194,33 @@ func (s *projectService) ListStatusesByOrg(orgID uuid.UUID, statusType string, e
 
 func (s *projectService) ListProjectStatuses(projectID uuid.UUID) ([]model.ProjectStatus, error) {
 	return s.psRepo.FindByProjectID(projectID)
+}
+
+func (s *projectService) UpdateProjectStatus(projectID, statusID uuid.UUID, name, color string, order int) (*model.ProjectStatus, error) {
+	if name == "" {
+		return nil, fmt.Errorf("ステータス名は必須です")
+	}
+	if len(name) > 50 {
+		return nil, fmt.Errorf("ステータス名は50文字以内で指定してください")
+	}
+	if color == "" || !projectStatusColorRegex.MatchString(color) {
+		return nil, fmt.Errorf("色は#RRGGBB形式で指定してください")
+	}
+	ps, err := s.psRepo.FindByID(statusID)
+	if err != nil {
+		return nil, fmt.Errorf("project status not found")
+	}
+	if ps.ProjectID != projectID {
+		return nil, fmt.Errorf("project status does not belong to this project")
+	}
+	if ps.StatusKey == "sts_start" || ps.StatusKey == "sts_goal" {
+		return nil, fmt.Errorf("システムステータスは変更できません")
+	}
+	ps.Name = name
+	ps.Color = color
+	ps.Order = order
+	if err := s.psRepo.Update(ps); err != nil {
+		return nil, err
+	}
+	return s.psRepo.FindByID(statusID)
 }

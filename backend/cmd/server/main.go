@@ -215,6 +215,7 @@ func main() {
 
 	api.GET("/projects", projectHandler.List)
 	api.GET("/projects/:id/project-statuses", projectHandler.ListProjectStatuses)
+	api.PUT("/projects/:id/project-statuses/:statusId", projectHandler.UpdateProjectStatus)
 	api.GET("/organizations/:orgId/statuses", projectHandler.ListStatusesByOrg)
 	api.POST("/organizations/:orgId/statuses", statusHandler.Create)
 	api.PUT("/statuses/:id", statusHandler.Update)

@@ -223,6 +223,15 @@ export const deleteProject = (id: string) =>
 export const getProjectStatuses = (projectId: string) =>
   api.get<ListResponse<ProjectStatus>>(`/projects/${projectId}/project-statuses`).then((r) => r.data.data)
 
+export const updateProjectStatus = (
+  projectId: string,
+  statusId: string,
+  data: { name: string; color: string; order: number }
+) =>
+  api
+    .put<ApiResponse<ProjectStatus>>(`/projects/${projectId}/project-statuses/${statusId}`, data)
+    .then((r) => r.data.data)
+
 // Issues
 export const getIssues = (projectId: string, opts?: { group_id?: string }) =>
   api
@@ -342,6 +351,11 @@ export const createWorkflowStatus = (
   data: { name: string; color?: string; order?: number }
 ) =>
   api.post<ApiResponse<Status>>(`/workflows/${workflowId}/statuses`, data).then((r) => r.data.data)
+
+export const updateStatus = (
+  id: string,
+  data: { name: string; color: string; order: number }
+) => api.put<ApiResponse<Status>>(`/statuses/${id}`, data).then((r) => r.data.data)
 
 // Comments
 export const getComments = (issueId: string) =>
