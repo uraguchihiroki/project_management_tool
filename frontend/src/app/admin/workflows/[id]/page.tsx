@@ -11,6 +11,7 @@ import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 import type { Status } from '@/types'
 import {
   createWorkflowStatus,
+  deleteStatus,
   deleteWorkflowApi,
   getWorkflow,
   getWorkflowStatuses,
@@ -100,6 +101,16 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       setStatusDialogError('')
     },
     onError: (e: Error) => setStatusDialogError(e.message),
+  })
+
+  const deleteStatusMutation = useMutation({
+    mutationFn: (statusId: string) => deleteStatus(statusId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'statuses'] })
+      setStatusDialogError('')
+      setError('')
+    },
+    onError: (e: Error) => setError(e.message),
   })
 
   const openCreateStatusDialog = () => {
@@ -327,7 +338,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   <th className="px-3 py-2 font-medium">順</th>
                   <th className="px-3 py-2 font-medium">名前</th>
                   <th className="px-3 py-2 font-medium">色</th>
-                  <th className="px-3 py-2 font-medium w-20">操作</th>
+                  <th className="px-3 py-2 font-medium w-28">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -347,14 +358,29 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       {s.status_key === 'sts_start' || s.status_key === 'sts_goal' ? (
                         <span className="text-xs text-gray-400">システム</span>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => openEditStatusDialog(s)}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                          title="編集"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEditStatusDialog(s)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            title="編集"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deleteStatusMutation.isPending}
+                            onClick={() => {
+                              if (confirm(`「${s.name}」を本当に削除しますか？`)) {
+                                deleteStatusMutation.mutate(s.id)
+                              }
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                            title="削除"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>

@@ -357,6 +357,9 @@ export const updateStatus = (
   data: { name: string; color: string; order: number }
 ) => api.put<ApiResponse<Status>>(`/statuses/${id}`, data).then((r) => r.data.data)
 
+export const deleteStatus = (id: string) =>
+  api.delete(`/statuses/${id}`).then(() => undefined)
+
 // Comments
 export const getComments = (issueId: string) =>
   api.get<ListResponse<Comment>>(`/issues/${issueId}/comments`).then((r) => r.data.data)
