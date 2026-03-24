@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	appdb "github.com/uraguchihiroki/project_management_tool/internal/db"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
@@ -80,6 +81,10 @@ func main() {
 
 	db.SetupJoinTable(&model.User{}, "Roles", &model.UserRole{})
 
+	if err := appdb.PrepareStatusesWorkflowColumn(db); err != nil {
+		log.Fatalf("failed to prepare statuses.workflow_id (legacy DB): %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
@@ -101,6 +106,10 @@ func main() {
 		&model.TransitionAlertRule{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
+	}
+
+	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
+		log.Fatalf("failed to migrate status dedupe / unique index: %v", err)
 	}
 
 	orgRepo := repository.NewOrganizationRepository(db)

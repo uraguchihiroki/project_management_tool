@@ -19,7 +19,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const currentUser = useRequireAdmin()
   const pathname = usePathname()
 
-  if (!currentUser) return null
+  // currentUser は AuthContext の useLayoutEffect で sessionStorage から復元されるまで null。
+  // ここで return null すると初回ペイントが真っ白になり「何も表示されない」ように見える。
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-2 text-gray-600">
+        <span className="text-sm">読み込み中…</span>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

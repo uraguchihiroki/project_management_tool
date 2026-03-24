@@ -141,6 +141,12 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         <div className="flex justify-between items-start gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{workflow.name}</h1>
+            {!orgMismatch && currentOrg && (
+              <p className="mt-1 text-sm text-gray-500">
+                選択中の組織:{' '}
+                <span className="font-medium text-gray-800">{currentOrg.name}</span>
+              </p>
+            )}
             <p className="mt-2 text-gray-600 whitespace-pre-wrap">{workflow.description || '—'}</p>
           </div>
           <div className="flex gap-2">

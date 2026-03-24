@@ -31,7 +31,7 @@
 | POST | /workflows | **done** | `workflow_tenant_test.go`（body の他 org ID は無視して JWT org に作成）ほか |
 | PUT | /workflows/reorder | **done** | `workflow_tenant_test.go`（他 org ID 混在は 403） |
 | GET | /workflows/:id | **done** | `workflow_tenant_test.go`（他 org 404） |
-| GET | /workflows/:id/statuses | **done** | `workflow_status_test.go`（別組織 404、重複行は API でマージしない） |
+| GET | /workflows/:id/statuses | **done** | `workflow_status_test.go`（別組織 404、重複は DB ユニークで防止） |
 | POST | /workflows/:id/statuses | **done** | 同上 |
 | PUT | /workflows/:id | **done** | `workflow_tenant_test.go`（他 org 404） |
 | DELETE | /workflows/:id | **done** | 同上 |
@@ -111,4 +111,4 @@
 | 論点 | 正しい理解 | テスト・根拠 |
 |------|------------|--------------|
 | `GET /workflows`（スーパーアドミン） | `org_id` なしでは全組織分を返し得る。管理画面で「選択中の1社」だけ見せるときは **`org_id` をクエリで付け、サーバがその組織だけ返す**（フロントだけで絞らない）。非スーパーアドミンは JWT の org のみ。 | [workflow_tenant_test.go](workflow_tenant_test.go) |
-| `GET/POST /workflows/:id/statuses` | テナント境界は **親ワークフローが JWT の組織に属するか**の検証。通過後の列挙は **`workflow_id = :id`**。一覧の重複は **DB 欠陥**の話であり、「org での再フィルタが足りない」という筋の問題と混同しない。 | [workflow_status_test.go](workflow_status_test.go)（別組織 404 等）、重複行の扱いは [tenant-invariants.md](../../.sdd/tenant-invariants.md) (B)(C) |
+| `GET/POST /workflows/:id/statuses` | テナント境界は **親ワークフローが JWT の組織に属するか**の検証。通過後の列挙は **`workflow_id = :id`**。同一 `(name,type,order)` の重複は **マイグレーション + 部分ユニーク**で防ぐ（「org での再フィルタが足りない」という筋の問題と混同しない）。 | [workflow_status_test.go](workflow_status_test.go)（別組織 404、重複 INSERT は UNIQUE） |

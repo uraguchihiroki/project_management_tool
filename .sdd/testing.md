@@ -204,6 +204,8 @@ npm run test:e2e:server -- e2e/login.spec.ts
 
 **E2E の認証**: ログイン画面を通さないテストは `frontend/e2e/helpers.ts` の `setupAuth` が `POST /admin/login` と `POST /admin/switch-organization` で JWT を取得し、`sessionStorage` に `authToken` / `currentUser` / `currentOrg` を入れる。
 
+**注意（`addInitScript`）**: `page.addInitScript(() => sessionStorage.clear())` は **ページを開くたび**（`goto` のたび）に実行される。ログイン後に別 URL（例: `/admin/projects`）へ `goto` するテストでは、**ログイン直後に session が消えてログイン画面のまま**になり「何も表示されない」ように見える。初回だけ `evaluate` で clear して `reload` するか、`setupAuth` を使う（[`login-admin-dashboard.spec.ts`](../frontend/e2e/login-admin-dashboard.spec.ts) 参照）。
+
 ---
 
 ## テストファイル一覧とカバー範囲

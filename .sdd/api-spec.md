@@ -86,7 +86,7 @@ http://localhost:8080/api/v1
 | POST | /workflows | 作成（body: `organization_id`, `name`, `description`） |
 | PUT | /workflows/reorder | 表示順更新（body: `ids`） |
 | GET | /workflows/:id | 詳細取得（他組織の ID は 404） |
-| GET | /workflows/:id/statuses | **当該ワークフローに紐づく Status 一覧**（`order` 昇順）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。列挙は `workflow_id = :id`。**同一レスポンス内の重複行は DB 欠陥**であり、API でマージして隠してテナント合格にしてはならない（[tenant-invariants.md](tenant-invariants.md)）。 |
+| GET | /workflows/:id/statuses | **当該ワークフローに紐づく Status 一覧**（`order` 昇順）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。列挙は `workflow_id = :id`。同一 `(name,type,order)` の重複は **DB 制約・マイグレーションで防ぐ**（[tenant-invariants.md](tenant-invariants.md)、[db-schema.md](db-schema.md)）。 |
 | POST | /workflows/:id/statuses | **ステータス追加**。上記と同様に親ワークフローの組織を先に検証。body: `name`（必須）, `color`（省略時 `#6B7280`）, `type`（`issue` \| `project`、省略時 `issue`）, `order`（`0` または省略時は同一 WF 内の最大 `order` + 1）。作成後、当該 WF の **許可遷移を全ペア再シード**（Issue のステータス変更と整合） |
 | PUT | /workflows/:id | 名前・説明の更新 |
 | DELETE | /workflows/:id | 削除 |

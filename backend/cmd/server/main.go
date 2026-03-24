@@ -58,6 +58,10 @@ func main() {
 		log.Fatalf("failed to migrate: %v", err)
 	}
 
+	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
+		log.Fatalf("failed to migrate status dedupe / unique index: %v", err)
+	}
+
 	userRepo := repository.NewUserRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
 	statusRepo := repository.NewStatusRepository(db)

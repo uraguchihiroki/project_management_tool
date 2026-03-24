@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/auth"
+	appdb "github.com/uraguchihiroki/project_management_tool/internal/db"
 	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
@@ -71,6 +72,10 @@ func newTestServer(t *testing.T) *testServer {
 		&model.TransitionAlertRule{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
+	}
+
+	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
+		t.Fatalf("failed to migrate status dedupe / unique index: %v", err)
 	}
 
 	frsOrg := model.Organization{

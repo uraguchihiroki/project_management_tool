@@ -7,7 +7,9 @@ import { ensureLoginableUser, E2E_LOGIN_EMAIL } from './helpers'
  */
 test.describe('ログイン→管理画面', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
+    // addInitScript で毎回 clear すると、後続の goto('/admin/...') のたびに session が消えてログイン画面に戻る
+    await page.goto('/login', { waitUntil: 'load' })
+    await page.evaluate(() => {
       try {
         sessionStorage.clear()
         localStorage.clear()
@@ -15,7 +17,7 @@ test.describe('ログイン→管理画面', () => {
         /* ignore */
       }
     })
-    await page.goto('/login', { waitUntil: 'load' })
+    await page.reload({ waitUntil: 'load' })
     await expect(page.getByRole('heading', { name: 'ログイン' })).toBeVisible()
   })
 
@@ -46,8 +48,12 @@ test.describe('ログイン→管理画面', () => {
 
     await expect(page).toHaveURL(/\/projects|\/select-org/, { timeout: 25_000 })
 
-    await page.goto('/admin/projects', { waitUntil: 'load' })
-    await expect(page.getByText('管理画面', { exact: false })).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByRole('link', { name: 'プロジェクト管理' })).toBeVisible()
+    // レイアウトは currentUser 復元まで「読み込み中…」のため、ヘッダー「管理画面」よりサイドバーを待つ
+    await page.goto('/admin/projects', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('link', { name: 'プロジェクト管理' })).toBeVisible({ timeout: 25_000 })
+    await expect(page.getByText('管理画面', { exact: false })).toBeVisible({ timeout: 10_000 })
+
+    await page.goto('/admin/workflows', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: /ワークフロー/ })).toBeVisible({ timeout: 25_000 })
   })
 })

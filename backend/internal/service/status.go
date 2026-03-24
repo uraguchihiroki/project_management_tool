@@ -63,6 +63,15 @@ func (s *statusService) Create(orgID uuid.UUID, name, color, statusType string, 
 	if err != nil {
 		return nil, fmt.Errorf("ワークフロー %s が見つかりません（組織シードを実行してください）: %w", wfName, err)
 	}
+	existingOrg, err := s.statusRepo.FindByWorkflowID(wf.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, st := range existingOrg {
+		if st.Name == name && st.Type == statusType && st.Order == order {
+			return nil, fmt.Errorf("同一ワークフローに同じ表示順・名前・種別のステータスが既にあります")
+		}
+	}
 	statusID := uuid.New()
 	key := "sts-" + statusID.String()
 	status := &model.Status{
@@ -112,6 +121,11 @@ func (s *statusService) CreateForWorkflow(workflowID uint, name, color, statusTy
 			}
 		}
 		order = maxO + 1
+	}
+	for _, st := range existing {
+		if st.Name == name && st.Type == statusType && st.Order == order {
+			return nil, fmt.Errorf("同一ワークフローに同じ表示順・名前・種別のステータスが既にあります")
+		}
 	}
 	statusID := uuid.New()
 	key := "sts-" + statusID.String()

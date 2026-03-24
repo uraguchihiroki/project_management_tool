@@ -58,6 +58,8 @@
 
 **これらのあと**で、Network・ログ、必要なら Handler / DB / プロキシを追う。常時ルールの詳細 → [`.cursor/rules/browser-first-investigation.mdc`](.cursor/rules/browser-first-investigation.mdc)。
 
+**認証・管理画面まわりを実装・修正したあと人に渡す前**（AI が自律してできる範囲）: **疎通込みで** `bash scripts/verify-login-e2e.sh` を実行する（DB 起動・`go run`・`npm run dev`・Playwright まで一括）。`npx playwright run-server` は **ブラウザ用**であり API ではない。手順・Windows 側サーバーとの組み合わせは [`.sdd/testing.md`](.sdd/testing.md)「Playwright Server」。
+
 **設計との矛盾**: ユーザーの説明や求める修正が、[`.sdd/tenant-invariants.md`](.sdd/tenant-invariants.md) や [`.sdd/api-spec.md`](.sdd/api-spec.md) と食い違うときは、**いきなりコードを書かず**不変条件を読み直し、必要ならユーザーに確認してから進める。
 
 ---

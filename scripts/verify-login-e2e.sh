@@ -88,7 +88,9 @@ fi
 echo "=== [3/4] Playwright（ログイン + 管理画面）==="
 export PLAYWRIGHT_API_URL="${PLAYWRIGHT_API_URL:-http://127.0.0.1:${PORT}/api/v1}"
 export PLAYWRIGHT_BASE_URL="${PLAYWRIGHT_BASE_URL:-http://127.0.0.1:3000}"
-# WS 未設定ならローカル Chromium
+# 必ず frontend で実行（カレントがズレると spec が見つからない／真っ白のみ等に見える）
+cd "$ROOT/frontend"
+# WS 未設定ならローカル Chromium。Windows で run-server 済みなら PLAYWRIGHT_WS_ENDPOINT を渡す
 npx playwright test e2e/login.spec.ts e2e/login-admin-dashboard.spec.ts --reporter=list
 
 echo "=== [4/4] 完了 ==="
