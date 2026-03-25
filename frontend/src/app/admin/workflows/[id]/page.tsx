@@ -154,7 +154,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const [statusDialogForm, setStatusDialogForm] = useState({
     name: '',
     color: '#6B7280',
-    order: '',
   })
   const [statusDialogError, setStatusDialogError] = useState('')
   const [transitionDrafts, setTransitionDrafts] = useState<
@@ -300,7 +299,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const openCreateStatusDialog = () => {
     setStatusDialogMode('create')
     setStatusDialogStatusId(null)
-    setStatusDialogForm({ name: '', color: '#6B7280', order: '' })
+    setStatusDialogForm({ name: '', color: '#6B7280' })
     setStatusDialogError('')
     setStatusDialogOpen(true)
   }
@@ -311,7 +310,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     setStatusDialogForm({
       name: status.name,
       color: status.color,
-      order: String(status.display_order),
     })
     setStatusDialogError('')
     setStatusDialogOpen(true)
@@ -326,8 +324,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const submitStatusDialog = () => {
     const name = statusDialogForm.name.trim()
     const color = statusDialogForm.color.trim()
-    const orderStr = statusDialogForm.order.trim()
-    const orderParsed = orderStr === '' ? NaN : parseInt(orderStr, 10)
 
     if (!name) {
       setStatusDialogError('ステータス名は必須です')
@@ -337,16 +333,11 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       setStatusDialogError('色は#RRGGBB形式で指定してください')
       return
     }
-    if (orderStr !== '' && (Number.isNaN(orderParsed) || orderParsed <= 0)) {
-      setStatusDialogError('表示順は1以上の整数で指定してください')
-      return
-    }
 
     if (statusDialogMode === 'create') {
       addStatusMutation.mutate({
         name,
         color,
-        ...(orderStr !== '' ? { display_order: orderParsed } : {}),
       })
       return
     }
@@ -355,12 +346,13 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       setStatusDialogError('編集対象のステータスが特定できません')
       return
     }
+    const preserveOrder = statuses.find((s) => s.id === statusDialogStatusId)?.display_order ?? 1
     updateStatusMutation.mutate({
       statusId: statusDialogStatusId,
       data: {
         name,
         color,
-        display_order: Number.isNaN(orderParsed) ? 1 : orderParsed,
+        display_order: preserveOrder,
       },
     })
   }
@@ -435,7 +427,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       const centerY = laid?.y ?? defaultY
       return {
         id: s.id,
-        name: `${s.display_order}. ${s.name}`,
+        name: s.name,
         color: s.color,
         x: Math.round(centerX - nodeWidth / 2),
         y: Math.round(centerY - nodeHeight / 2),
@@ -451,7 +443,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     const disconnectedStartX = connectedMaxX + 120
     const disconnectedNodes: TransitionDiagramNode[] = disconnectedStatuses.map((s, idx) => ({
       id: s.id,
-      name: `${s.display_order}. ${s.name}`,
+      name: s.name,
       color: s.color,
       x: disconnectedStartX,
       y: paddingY + idx * (nodeHeight + 22),
@@ -1187,9 +1179,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   </tr>
                   {visibleStatuses.map((s) => (
                     <tr key={s.id} className="border-b border-gray-100">
-                      <td className="py-2 pr-3">
-                        {s.display_order}. {s.name}
-                      </td>
+                      <td className="py-2 pr-3">{s.name}</td>
                       <td className="py-2 pr-3">
                         <input
                           type="radio"
@@ -1270,7 +1260,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       >
                         {visibleStatuses.map((s) => (
                           <option key={s.id} value={s.id}>
-                            {s.display_order}. {s.name}
+                            {s.name}
                           </option>
                         ))}
                       </select>
@@ -1293,7 +1283,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       >
                         {visibleStatuses.map((s) => (
                           <option key={s.id} value={s.id}>
-                            {s.display_order}. {s.name}
+                            {s.name}
                           </option>
                         ))}
                       </select>
@@ -1348,7 +1338,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   >
                     {visibleStatuses.map((st) => (
                       <option key={st.id} value={st.id}>
-                        {st.display_order}. {st.name}
+                        {st.name}
                       </option>
                     ))}
                   </select>
@@ -1371,7 +1361,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   >
                     {visibleStatuses.map((st) => (
                       <option key={st.id} value={st.id}>
-                        {st.display_order}. {st.name}
+                        {st.name}
                       </option>
                     ))}
                   </select>
@@ -1431,7 +1421,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                     >
                       {visibleStatuses.map((st) => (
                         <option key={st.id} value={st.id}>
-                          {st.display_order}. {st.name}
+                          {st.name}
                         </option>
                       ))}
                     </select>
@@ -1454,7 +1444,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                     >
                       {visibleStatuses.map((st) => (
                         <option key={st.id} value={st.id}>
-                          {st.display_order}. {st.name}
+                          {st.name}
                         </option>
                       ))}
                     </select>
@@ -1534,11 +1524,10 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                 statusesLoading
               }
             >
-              <table className="min-w-[720px] w-full text-sm">
+              <table className="min-w-[560px] w-full text-sm">
                 <thead className="bg-gray-50 text-left text-gray-600">
                   <tr>
                     <th className="w-10 px-2 py-2" aria-hidden />
-                    <th className="px-3 py-2 font-medium">順</th>
                     <th className="px-3 py-2 font-medium">名前</th>
                     <th className="px-3 py-2 font-medium">色</th>
                     <th className="px-3 py-2 font-medium w-28">操作</th>
@@ -1563,7 +1552,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       <td className="px-2 py-2 align-middle">
                         <DragHandle handleProps={props.handleProps} />
                       </td>
-                      <td className="px-3 py-2 text-gray-700">{s.display_order}</td>
                       <td className="px-3 py-2 font-medium text-gray-900">{s.name}</td>
                       <td className="px-3 py-2">
                         <span
@@ -1653,29 +1641,14 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   placeholder="例: レビュー待ち"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">色</label>
-                  <input
-                    type="color"
-                    value={statusDialogForm.color}
-                    onChange={(e) => setStatusDialogForm((f) => ({ ...f, color: e.target.value }))}
-                    className="h-10 w-14 rounded border cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    表示順{statusDialogMode === 'create' ? '（任意）' : '（必須）'}
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={statusDialogForm.order}
-                    onChange={(e) => setStatusDialogForm((f) => ({ ...f, order: e.target.value }))}
-                    placeholder={statusDialogMode === 'create' ? '自動' : '1'}
-                    className="w-full border rounded-lg px-3 py-2"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">色</label>
+                <input
+                  type="color"
+                  value={statusDialogForm.color}
+                  onChange={(e) => setStatusDialogForm((f) => ({ ...f, color: e.target.value }))}
+                  className="h-10 w-14 rounded border cursor-pointer"
+                />
               </div>
               {statusDialogError && (
                 <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
