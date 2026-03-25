@@ -94,15 +94,23 @@ func (r *departmentRepository) Delete(id uuid.UUID) error {
 }
 
 func (r *departmentRepository) AddUserToDepartment(orgID, userID, departmentID uuid.UUID) error {
-	key := fmt.Sprintf("%s-%s-%s", orgID.String(), userID.String(), departmentID.String())
+	var n int64
+	if err := r.db.Model(&model.OrganizationUserDepartment{}).
+		Where("organization_id = ? AND user_id = ? AND department_id = ?", orgID, userID, departmentID).
+		Count(&n).Error; err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
 	oud := &model.OrganizationUserDepartment{
+		ID:             uuid.New(),
 		OrganizationID: orgID,
 		UserID:         userID,
 		DepartmentID:   departmentID,
-		Key:            key,
+		Key:            fmt.Sprintf("%s-%s-%s", orgID.String(), userID.String(), departmentID.String()),
 	}
-	return r.db.Where("organization_id = ? AND user_id = ? AND department_id = ?", orgID, userID, departmentID).
-		FirstOrCreate(oud).Error
+	return r.db.Create(oud).Error
 }
 
 func (r *departmentRepository) RemoveUserFromDepartment(orgID, userID, departmentID uuid.UUID) error {
@@ -124,14 +132,32 @@ func (r *departmentRepository) FindUserDepartments(orgID, userID uuid.UUID) ([]m
 }
 
 func (r *departmentRepository) SetUserDepartments(orgID, userID uuid.UUID, departmentIDs []uuid.UUID) error {
-	if err := r.db.Where("organization_id = ? AND user_id = ?", orgID, userID).
-		Delete(&model.OrganizationUserDepartment{}).Error; err != nil {
-		return err
-	}
+	seen := map[uuid.UUID]struct{}{}
+	var uniq []uuid.UUID
 	for _, did := range departmentIDs {
-		if err := r.AddUserToDepartment(orgID, userID, did); err != nil {
+		if _, dup := seen[did]; dup {
+			continue
+		}
+		seen[did] = struct{}{}
+		uniq = append(uniq, did)
+	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("organization_id = ? AND user_id = ?", orgID, userID).
+			Delete(&model.OrganizationUserDepartment{}).Error; err != nil {
 			return err
 		}
-	}
-	return nil
+		for _, did := range uniq {
+			oud := &model.OrganizationUserDepartment{
+				ID:             uuid.New(),
+				OrganizationID: orgID,
+				UserID:         userID,
+				DepartmentID:   did,
+				Key:            fmt.Sprintf("%s-%s-%s", orgID.String(), userID.String(), did.String()),
+			}
+			if err := tx.Create(oud).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

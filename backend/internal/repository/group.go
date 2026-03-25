@@ -88,12 +88,17 @@ func NewUserGroupRepository(db *gorm.DB) UserGroupRepository {
 
 func (r *userGroupRepository) ReplaceMembers(groupID uuid.UUID, userIDs []uuid.UUID) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		// メンバー全差し替え: 複合 PK のため Unscoped（テナント一括オフボーディング時は通常の Delete で論理削除）
-		if err := tx.Unscoped().Delete(&model.UserGroup{}, "group_id = ?", groupID).Error; err != nil {
+		if err := tx.Where("group_id = ?", groupID).Delete(&model.UserGroup{}).Error; err != nil {
 			return err
 		}
+		seen := map[uuid.UUID]struct{}{}
 		for _, uid := range userIDs {
+			if _, dup := seen[uid]; dup {
+				continue
+			}
+			seen[uid] = struct{}{}
 			ug := model.UserGroup{
+				ID:      uuid.New(),
 				UserID:  uid,
 				GroupID: groupID,
 				Key:     keygen.UUIDKey(uuid.New()),
@@ -152,12 +157,17 @@ func NewIssueGroupRepository(db *gorm.DB) IssueGroupRepository {
 
 func (r *issueGroupRepository) ReplaceForIssue(issueID uuid.UUID, groupIDs []uuid.UUID) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		// Issue のグループ全差し替え: 複合 PK のため Unscoped
-		if err := tx.Unscoped().Delete(&model.IssueGroup{}, "issue_id = ?", issueID).Error; err != nil {
+		if err := tx.Where("issue_id = ?", issueID).Delete(&model.IssueGroup{}).Error; err != nil {
 			return err
 		}
+		seen := map[uuid.UUID]struct{}{}
 		for _, gid := range groupIDs {
+			if _, dup := seen[gid]; dup {
+				continue
+			}
+			seen[gid] = struct{}{}
 			ig := model.IssueGroup{
+				ID:      uuid.New(),
 				IssueID: issueID,
 				GroupID: gid,
 				Key:     keygen.UUIDKey(uuid.New()),

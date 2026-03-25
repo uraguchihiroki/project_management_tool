@@ -89,6 +89,10 @@ func main() {
 		log.Fatalf("failed to migrate issue/project status split (pre): %v", err)
 	}
 
+	if err := appdb.MigrateJunctionTablesSurrogatePK(db); err != nil {
+		log.Fatalf("failed to migrate junction tables surrogate PK: %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},

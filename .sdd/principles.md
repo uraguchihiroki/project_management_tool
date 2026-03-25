@@ -27,6 +27,7 @@
 
 **PostgreSQL 上の一意制約は各テーブルの主キー（PK）に限定する。** 組織名の一意、組織内メールの一意、プロジェクトキーの一意、同一ワークフロー内の (名前, 表示順) の一意など、業務上の「この組み合わせは1件だけ」は **DB の `UNIQUE` や部分ユニークインデックスでは表現せず、Service 層で検査・拒否する。**
 
+- **多対多の結合テーブル**（`user_roles` 等）は **複合主キーを使わず**、**単一列の代理 PK（UUID の `id`）** とする。`(user_id, role_id)` などの有効行としての一意は **Service / Repository** で保証する（[db-schema.md](db-schema.md)）。
 - 検索・JOIN 用に **非一意のインデックス** を張ることは許容する（パフォーマンス目的）。
 - 同時更新による競合は、必要に応じてトランザクションや行ロックで抑える（設計は [db-schema.md](db-schema.md)・[layer-responsibility.md](layer-responsibility.md) に沿う）。
 

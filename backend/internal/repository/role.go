@@ -91,22 +91,28 @@ func (r *roleRepository) Delete(id uint) error {
 }
 
 func (r *roleRepository) AssignRolesToUser(userID uuid.UUID, roleIDs []uint) error {
-	// 役割の全差し替え: ソフト削除だと (user_id,role_id) が残り再 Create と衝突するため Unscoped
-	if err := r.db.Unscoped().Where("user_id = ?", userID).Delete(&model.UserRole{}).Error; err != nil {
-		return err
-	}
-	for _, roleID := range roleIDs {
-		key := fmt.Sprintf("%s-%d", userID.String(), roleID)
-		ur := &model.UserRole{
-			UserID: userID,
-			RoleID: roleID,
-			Key:    key,
-		}
-		if err := r.db.Create(ur).Error; err != nil {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&model.UserRole{}).Error; err != nil {
 			return err
 		}
-	}
-	return nil
+		seen := map[uint]struct{}{}
+		for _, roleID := range roleIDs {
+			if _, dup := seen[roleID]; dup {
+				continue
+			}
+			seen[roleID] = struct{}{}
+			ur := &model.UserRole{
+				ID:     uuid.New(),
+				UserID: userID,
+				RoleID: roleID,
+				Key:    fmt.Sprintf("%s-%d", userID.String(), roleID),
+			}
+			if err := tx.Create(ur).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *roleRepository) FindRolesByUserID(userID uuid.UUID) ([]model.Role, error) {

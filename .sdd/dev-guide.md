@@ -124,7 +124,7 @@ go run ./cmd/cli org seed --org-id=<uuid> [--owner-id=<uuid>]
   - 起動時に `PrepareStatusesWorkflowColumn`（`internal/db/legacy_status_workflow.go`）が **AutoMigrate より前**に走り、NULL の `workflow_id` を埋めてから NOT NULL 化する。  
   - 複数テナントで孤立行が残る場合はログに従い手動修正が必要なことがある。
 - **ステータス重複の除去・再発防止**  
-  - `AutoMigrate` の前に `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）が旧 `statuses.type` と「組織Project」ワークフローを整理する。`AutoMigrate` の後に `MigrateDropLegacyBusinessUniqueIndexes` で旧業務 UNIQUE を除去し、`MigrateProjectStatusSeed` で `project_statuses` を欠けるプロジェクトへ投入し、その後に `MigrateStatusDedupe`（`internal/db/status_integrity.go`）が走る。既存の同一 `(workflow_id, name, display_order)` 重複を参照付け替えのうえ削除し、**非一意**の部分インデックス（任意）を付与する。業務一意は Service で保証する（[principles.md](principles.md)）。
+  - `AutoMigrate` の前に `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）が旧 `statuses.type` と「組織Project」ワークフローを整理する。続けて **`MigrateJunctionTablesSurrogatePK`**（`internal/db/migrate_junction_surrogate_pk.go`）が PostgreSQL 上の結合テーブル（`user_roles` 等）を **複合 PK → UUID 単独 PK** に移行する（SQLite はスキップ）。`AutoMigrate` の後に `MigrateDropLegacyBusinessUniqueIndexes` で旧業務 UNIQUE を除去し、`MigrateProjectStatusSeed` で `project_statuses` を欠けるプロジェクトへ投入し、その後に `MigrateStatusDedupe`（`internal/db/status_integrity.go`）が走る。既存の同一 `(workflow_id, name, display_order)` 重複を参照付け替えのうえ削除し、**非一意**の部分インデックス（任意）を付与する。業務一意は Service で保証する（[principles.md](principles.md)）。
 
 ---
 

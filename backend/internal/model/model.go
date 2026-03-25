@@ -44,9 +44,10 @@ type Department struct {
 }
 
 type OrganizationUserDepartment struct {
-	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;primaryKey" json:"organization_id"`
-	UserID         uuid.UUID      `gorm:"type:uuid;not null;primaryKey" json:"user_id"`
-	DepartmentID   uuid.UUID      `gorm:"type:uuid;not null;primaryKey" json:"department_id"`
+	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index:idx_oud_trip,priority:1" json:"organization_id"`
+	UserID         uuid.UUID      `gorm:"type:uuid;not null;index:idx_oud_trip,priority:2" json:"user_id"`
+	DepartmentID   uuid.UUID      `gorm:"type:uuid;not null;index:idx_oud_trip,priority:3" json:"department_id"`
 	Key            string         `gorm:"size:255;not null" json:"key"`
 	Department     Department     `gorm:"foreignKey:DepartmentID" json:"department,omitempty"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
@@ -69,8 +70,9 @@ type User struct {
 }
 
 type UserRole struct {
-	UserID    uuid.UUID      `gorm:"type:uuid;not null;primaryKey" json:"user_id"`
-	RoleID    uint           `gorm:"not null;primaryKey" json:"role_id"`
+	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	UserID    uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_roles_pair,priority:1" json:"user_id"`
+	RoleID    uint           `gorm:"not null;index:idx_user_roles_pair,priority:2" json:"role_id"`
 	Key       string         `gorm:"size:255;not null" json:"key"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
@@ -91,17 +93,17 @@ type Role struct {
 }
 
 type Project struct {
-	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	Key            string         `gorm:"size:10;not null;index:idx_project_org_key" json:"key"`
-	Name           string         `gorm:"size:200;not null" json:"name"`
-	Description    *string        `json:"description,omitempty"`
-	OwnerID        uuid.UUID      `gorm:"type:uuid;not null" json:"owner_id"`
-	Owner          User           `gorm:"foreignKey:OwnerID" json:"owner,omitempty"`
-	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index:idx_project_org_key" json:"organization_id"`
-	Organization   Organization   `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
-	Order          int            `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
-	StartDate      *time.Time     `json:"start_date,omitempty"`
-	EndDate        *time.Time     `json:"end_date,omitempty"`
+	ID                uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key               string         `gorm:"size:10;not null;index:idx_project_org_key" json:"key"`
+	Name              string         `gorm:"size:200;not null" json:"name"`
+	Description       *string        `json:"description,omitempty"`
+	OwnerID           uuid.UUID      `gorm:"type:uuid;not null" json:"owner_id"`
+	Owner             User           `gorm:"foreignKey:OwnerID" json:"owner,omitempty"`
+	OrganizationID    uuid.UUID      `gorm:"type:uuid;not null;index:idx_project_org_key" json:"organization_id"`
+	Organization      Organization   `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+	Order             int            `gorm:"column:display_order;not null;default:1" json:"-"` // 内部用、非表示
+	StartDate         *time.Time     `json:"start_date,omitempty"`
+	EndDate           *time.Time     `json:"end_date,omitempty"`
 	DefaultWorkflowID *uint          `gorm:"index" json:"default_workflow_id,omitempty"`
 	ProjectStatusID   *uuid.UUID     `gorm:"type:uuid;index" json:"project_status_id,omitempty"`
 	ProjectStatus     *ProjectStatus `gorm:"foreignKey:ProjectStatusID" json:"project_status,omitempty"`
@@ -135,27 +137,27 @@ type ProjectStatusTransition struct {
 
 // Status は常に1ワークフローに属し、ワークフロー間で共有しない（Issue 専用）
 type Status struct {
-	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	Key           string    `gorm:"size:255;not null" json:"key"`
-	WorkflowID    uint      `gorm:"not null;index" json:"workflow_id"`
-	Workflow      Workflow  `gorm:"foreignKey:WorkflowID" json:"workflow,omitempty"`
-	Name          string    `gorm:"size:50;not null" json:"name"`
-	Color         string    `gorm:"size:7;not null" json:"color"`
-	DisplayOrder  int       `gorm:"column:display_order;not null;default:1" json:"display_order"`
-	StatusKey     string    `gorm:"size:50;index" json:"status_key,omitempty"` // sts_start, sts_goal。空=ユーザー定義
-	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+	ID           uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key          string         `gorm:"size:255;not null" json:"key"`
+	WorkflowID   uint           `gorm:"not null;index" json:"workflow_id"`
+	Workflow     Workflow       `gorm:"foreignKey:WorkflowID" json:"workflow,omitempty"`
+	Name         string         `gorm:"size:50;not null" json:"name"`
+	Color        string         `gorm:"size:7;not null" json:"color"`
+	DisplayOrder int            `gorm:"column:display_order;not null;default:1" json:"display_order"`
+	StatusKey    string         `gorm:"size:50;index" json:"status_key,omitempty"` // sts_start, sts_goal。空=ユーザー定義
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // WorkflowTransition は同一ワークフロー内の許可遷移（from → to）
 type WorkflowTransition struct {
-	ID            uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	Key           string         `gorm:"size:255;not null" json:"key"`
-	WorkflowID    uint           `gorm:"not null;index" json:"workflow_id"`
-	FromStatusID  uuid.UUID      `gorm:"type:uuid;not null" json:"from_status_id"`
-	ToStatusID    uuid.UUID      `gorm:"type:uuid;not null" json:"to_status_id"`
-	DisplayOrder  int            `gorm:"column:display_order;not null;default:1" json:"display_order"`
-	CreatedAt     time.Time      `json:"created_at"`
-	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+	ID           uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Key          string         `gorm:"size:255;not null" json:"key"`
+	WorkflowID   uint           `gorm:"not null;index" json:"workflow_id"`
+	FromStatusID uuid.UUID      `gorm:"type:uuid;not null" json:"from_status_id"`
+	ToStatusID   uuid.UUID      `gorm:"type:uuid;not null" json:"to_status_id"`
+	DisplayOrder int            `gorm:"column:display_order;not null;default:1" json:"display_order"`
+	CreatedAt    time.Time      `json:"created_at"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // Group は組織スコープのグループ（開示・通知・タグ等）
@@ -172,8 +174,9 @@ type Group struct {
 
 // UserGroup はユーザー ↔ Group 多対多
 type UserGroup struct {
-	UserID    uuid.UUID      `gorm:"type:uuid;primaryKey" json:"user_id"`
-	GroupID   uuid.UUID      `gorm:"type:uuid;primaryKey" json:"group_id"`
+	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	UserID    uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_groups_pair,priority:1" json:"user_id"`
+	GroupID   uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_groups_pair,priority:2" json:"group_id"`
 	Key       string         `gorm:"size:255;not null" json:"key"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
@@ -182,8 +185,9 @@ func (UserGroup) TableName() string { return "user_groups" }
 
 // IssueGroup は Issue ↔ Group 多対多
 type IssueGroup struct {
-	IssueID   uuid.UUID      `gorm:"type:uuid;primaryKey" json:"issue_id"`
-	GroupID   uuid.UUID      `gorm:"type:uuid;primaryKey" json:"group_id"`
+	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	IssueID   uuid.UUID      `gorm:"type:uuid;not null;index:idx_issue_groups_pair,priority:1" json:"issue_id"`
+	GroupID   uuid.UUID      `gorm:"type:uuid;not null;index:idx_issue_groups_pair,priority:2" json:"group_id"`
 	Key       string         `gorm:"size:255;not null" json:"key"`
 	Role      *string        `gorm:"size:50" json:"role,omitempty"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
@@ -193,16 +197,16 @@ func (IssueGroup) TableName() string { return "issue_groups" }
 
 // TransitionAlertRule は遷移アラート条件（想定外 actor 検知用）
 type TransitionAlertRule struct {
-	ID                uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	Key               string         `gorm:"size:255;not null" json:"key"`
+	ID              uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	Key             string         `gorm:"size:255;not null" json:"key"`
 	OrganizationID  uuid.UUID      `gorm:"type:uuid;not null;index" json:"organization_id"`
-	Name              string         `gorm:"size:200;not null" json:"name"`
-	FromStatusID      *uuid.UUID     `gorm:"type:uuid" json:"from_status_id,omitempty"`
-	ToStatusID        uuid.UUID      `gorm:"type:uuid;not null;index" json:"to_status_id"`
-	ExpectedGroupID   *uuid.UUID     `gorm:"type:uuid" json:"expected_group_id,omitempty"`
-	NotifyGroupID     *uuid.UUID     `gorm:"type:uuid" json:"notify_group_id,omitempty"`
-	CreatedAt         time.Time      `json:"created_at"`
-	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
+	Name            string         `gorm:"size:200;not null" json:"name"`
+	FromStatusID    *uuid.UUID     `gorm:"type:uuid" json:"from_status_id,omitempty"`
+	ToStatusID      uuid.UUID      `gorm:"type:uuid;not null;index" json:"to_status_id"`
+	ExpectedGroupID *uuid.UUID     `gorm:"type:uuid" json:"expected_group_id,omitempty"`
+	NotifyGroupID   *uuid.UUID     `gorm:"type:uuid" json:"notify_group_id,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 type Issue struct {

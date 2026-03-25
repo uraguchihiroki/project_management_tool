@@ -29,11 +29,11 @@
 
 | 項目 | 内容 | 状態 |
 |------|------|------|
-| 論理削除まわりの残差 | **(1) 起動時マイグレーション** … サーバ起動時に [`internal/db`](../backend/internal/db) が実行する処理（レガシー列の除去・重複 statuses のマージ・旧業務 UNIQUE の DROP・任意の非一意インデックス作成など）は、**業務 API ではなく DB 移行・整合用**である。ここでは意図的に **生 `DELETE`** や **`Unscoped().Delete`** が使われる（[`cmd/server/main.go`](../backend/cmd/server/main.go) の起動順で呼ばれる）。業務上の一意は DB の UNIQUE ではなく Service で保証する（[principles.md](principles.md)）。 **(2) 多対多の全差し替え** … 例: `user_roles` の役割の付け替え、`user_groups` / `issue_groups` のメンバー・グループの付け替え、`SeedAllPairs` 系の再生成など、**複合主キー（例: user_id, role_id）で行を作り直す**都合で、ソフト削除のままだと **同じキーで再挿入できない**ため **`Unscoped` で行を消してから Create** する経路がある（DB に業務用 UNIQUE を張らない方針でも PK は残る）。詳細は [db-schema.md](db-schema.md) の論理削除ノート参照。 | open |
+| 論理削除まわりの残差 | **(1) 起動時マイグレーション** … サーバ起動時に [`internal/db`](../backend/internal/db) が実行する処理（レガシー列の除去・重複 statuses のマージ・旧業務 UNIQUE の DROP・任意の非一意インデックス作成・結合テーブルの代理 PK 移行など）は、**業務 API ではなく DB 移行・整合用**である。ここでは意図的に **生 `DELETE`** や **`Unscoped().Delete`** が使われる（[`cmd/server/main.go`](../backend/cmd/server/main.go) の起動順で呼ばれる）。業務上の一意は DB の UNIQUE ではなく Service で保証する（[principles.md](principles.md)）。 **(2) 遷移テーブル等の再シード** … `workflow_transitions` / `project_status_transitions` の **全作り直し**など、単一サロゲート PK でも同一ビジネスキーで再挿入がぶつかる経路では **`Unscoped` で物理削除してから Create** が残る。一方、**`user_roles` / `user_groups` / `issue_groups` / `organization_user_departments`** は **`id`（UUID）代理 PK**（`MigrateJunctionTablesSurrogatePK`）により、付け替えは **論理削除＋新行 Create** で行い、業務 Repository では **`Unscoped` に依存しない**。詳細は [db-schema.md](db-schema.md) の論理削除ノート参照。 | open |
 
 ## 棚卸しメモ（参考）
 
 | 観点 | メモ | 状態 |
 |------|------|------|
 | マイグレーション | `status_integrity` / `migrate_issue_project_status` の物理 DELETE は **移行専用**（業務の論理削除と別物）。 | done |
-| 結合テーブル | `AssignRolesToUser` / `ReplaceMembers` / `ReplaceForIssue` は **Unscoped 削除＋Create**（全差し替えのため）。 | done |
+| 結合テーブル | `AssignRolesToUser` / `ReplaceMembers` / `ReplaceForIssue` / 部署の `SetUserDepartments` は **論理削除＋新行 Create**（代理 PK により `Unscoped` 不要）。重複 ID は入力側で除去。 | done |

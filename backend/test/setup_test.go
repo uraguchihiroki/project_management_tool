@@ -55,6 +55,10 @@ func newTestServer(t *testing.T) *testServer {
 		t.Fatalf("failed migrate issue/project status split (pre): %v", err)
 	}
 
+	if err := appdb.MigrateJunctionTablesSurrogatePK(db); err != nil {
+		t.Fatalf("failed migrate junction tables surrogate PK: %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
