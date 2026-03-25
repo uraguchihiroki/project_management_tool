@@ -319,6 +319,31 @@ export const createWorkflow = (data: {
 export const updateWorkflowMeta = (id: string | number, data: { name: string; description: string }) =>
   api.put<ApiResponse<Workflow>>(`/workflows/${id}`, data).then((r) => r.data.data)
 
+/** 管理画面: ワークフロー名・説明・ステータス・許可遷移の一括保存（204 No Content） */
+export type WorkflowEditorStatusPayload = {
+  id?: string
+  client_id?: string
+  name: string
+  color: string
+  is_entry: boolean
+  is_terminal: boolean
+}
+
+export type WorkflowEditorTransitionPayload = {
+  from_ref: string
+  to_ref: string
+}
+
+export const saveWorkflowEditor = (
+  workflowId: string,
+  data: {
+    name: string
+    description: string
+    statuses: WorkflowEditorStatusPayload[]
+    transitions: WorkflowEditorTransitionPayload[]
+  }
+) => api.put(`/workflows/${workflowId}/editor`, data).then(() => undefined)
+
 export const deleteWorkflowApi = (id: string | number) => api.delete(`/workflows/${id}`)
 
 export const reorderWorkflowsApi = (ids: number[]) =>

@@ -90,6 +90,7 @@ http://localhost:8080/api/v1
 | POST | /workflows/:id/statuses | **Issue 用ステータス追加**。body: `name`（必須）, `color`（省略時 `#6B7280`）, `display_order`（`0` または省略時は同一 WF 内の最大 `display_order` + 1）。**許可遷移は自動では作らない**（`POST /workflows/:id/transitions` で都度追加） |
 | PUT | /workflows/:id/statuses/reorder | ステータス並び替え。body: `status_ids`（UUID の配列・全件・順序どおり `display_order` が 1..n に振り直される） |
 | PUT | /workflows/:id | 名前・説明の更新 |
+| PUT | /workflows/:id/editor | **管理画面用・一括保存**。body: `name`（必須）, `description`, `statuses`（配列）, `transitions`（配列）。**1 トランザクション**でワークフロー表示名・説明・当該 WF の全ステータス・全許可遷移を**置換**する。既存個別 API（`PUT /statuses/:id` 等）は従来どおり利用可。**検証（400）:** ステータス **2 件以上**；`is_entry` が**ちょうど 1 件**；`is_terminal` が **1 件以上**；同一行で `is_entry` と `is_terminal` の同時 true は不可；同一 WF 内で `(name, display_order)` の重複不可（`display_order` は配列順で 1..n）；`statuses[].id` と `statuses[].client_id` は各行で**どちらか一方のみ**（新規のみ `client_id`・既存のみ `id`）；`transitions[].from_ref` / `to_ref` は **既存ステータス UUID** または **新規行の `client_id`**（UUID 文字列）。`from`≠`to`、遷移 `(from,to)` の重複不可。リクエストに含まれない既存ステータスは**削除試行**（使用中の Issue がある・削除後に 2 未満になる等は 400）。**応答:** **204 No Content**（成功後クライアントは GET で再取得）。 |
 | DELETE | /workflows/:id | 削除 |
 | GET | /workflows/:id/transitions | 当該ワークフローの許可遷移一覧（`display_order` 昇順） |
 | PUT | /workflows/:id/transitions/reorder | 遷移行の並び替え。body: `transition_ids`（数値 ID の配列・当該 WF の全遷移を含む順列） |

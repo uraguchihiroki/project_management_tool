@@ -136,6 +136,7 @@ func main() {
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo)
+	workflowEditorSvc := service.NewWorkflowEditorService(db)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
 	statusSvc := service.NewStatusService(statusRepo, workflowRepo, transitionRepo)
 
@@ -145,6 +146,7 @@ func main() {
 	commentHandler := handler.NewCommentHandler(commentSvc)
 	roleHandler := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowHandler := handler.NewWorkflowHandler(workflowSvc)
+	workflowEditorHandler := handler.NewWorkflowEditorHandler(workflowEditorSvc, workflowSvc)
 	workflowTransitionHandler := handler.NewWorkflowTransitionHandler(workflowSvc, statusSvc, transitionRepo)
 	templateHandler := handler.NewTemplateHandler(templateSvc, projectSvc)
 	orgHandler := handler.NewOrganizationHandler(orgSvc)
@@ -210,6 +212,7 @@ func main() {
 	api.POST("/workflows", workflowHandler.Create)
 	api.PUT("/workflows/reorder", workflowHandler.Reorder)
 	api.GET("/workflows/:id", workflowHandler.Get)
+	api.PUT("/workflows/:id/editor", workflowEditorHandler.Put)
 	api.GET("/workflows/:id/statuses", statusHandler.ListByWorkflow)
 	api.POST("/workflows/:id/statuses", statusHandler.CreateForWorkflow)
 	api.PUT("/workflows/:id/statuses/reorder", statusHandler.ReorderForWorkflow)

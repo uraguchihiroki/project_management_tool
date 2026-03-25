@@ -170,6 +170,7 @@ func newTestServer(t *testing.T) *testServer {
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo)
+	workflowEditorSvc := service.NewWorkflowEditorService(db)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
 	statusSvc := service.NewStatusService(statusRepo, workflowRepo, transitionRepo)
 
@@ -179,6 +180,7 @@ func newTestServer(t *testing.T) *testServer {
 	commentH := handler.NewCommentHandler(commentSvc)
 	roleH := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowH := handler.NewWorkflowHandler(workflowSvc)
+	workflowEditorH := handler.NewWorkflowEditorHandler(workflowEditorSvc, workflowSvc)
 	workflowTransitionH := handler.NewWorkflowTransitionHandler(workflowSvc, statusSvc, transitionRepo)
 	templateH := handler.NewTemplateHandler(templateSvc, projectSvc)
 	orgH := handler.NewOrganizationHandler(orgSvc)
@@ -220,6 +222,7 @@ func newTestServer(t *testing.T) *testServer {
 	api.POST("/workflows", workflowH.Create)
 	api.PUT("/workflows/reorder", workflowH.Reorder)
 	api.GET("/workflows/:id", workflowH.Get)
+	api.PUT("/workflows/:id/editor", workflowEditorH.Put)
 	api.GET("/workflows/:id/statuses", statusH.ListByWorkflow)
 	api.POST("/workflows/:id/statuses", statusH.CreateForWorkflow)
 	api.PUT("/workflows/:id/statuses/reorder", statusH.ReorderForWorkflow)
