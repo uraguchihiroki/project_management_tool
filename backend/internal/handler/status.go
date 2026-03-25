@@ -57,9 +57,9 @@ func (h *StatusHandler) CreateForWorkflow(c echo.Context) error {
 		return err
 	}
 	type Request struct {
-		Name  string `json:"name"`
-		Color string `json:"color"`
-		Order int    `json:"order"`
+		Name          string `json:"name"`
+		Color         string `json:"color"`
+		DisplayOrder  int    `json:"display_order"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -68,7 +68,7 @@ func (h *StatusHandler) CreateForWorkflow(c echo.Context) error {
 	if req.Color == "" {
 		req.Color = "#6B7280"
 	}
-	status, err := h.statusService.CreateForWorkflow(wfID, req.Name, req.Color, req.Order)
+	status, err := h.statusService.CreateForWorkflow(wfID, req.Name, req.Color, req.DisplayOrder)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
@@ -82,9 +82,9 @@ func (h *StatusHandler) Create(c echo.Context) error {
 		return authErr
 	}
 	type Request struct {
-		Name  string `json:"name"`
-		Color string `json:"color"`
-		Order int    `json:"order"`
+		Name         string `json:"name"`
+		Color        string `json:"color"`
+		DisplayOrder int    `json:"display_order"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
@@ -93,7 +93,7 @@ func (h *StatusHandler) Create(c echo.Context) error {
 	if req.Color == "" {
 		req.Color = "#6B7280"
 	}
-	status, err := h.statusService.Create(orgID, req.Name, req.Color, req.Order)
+	status, err := h.statusService.Create(orgID, req.Name, req.Color, req.DisplayOrder)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
@@ -120,15 +120,15 @@ func (h *StatusHandler) Update(c echo.Context) error {
 		}
 	}
 	type Request struct {
-		Name  string `json:"name"`
-		Color string `json:"color"`
-		Order int    `json:"order"`
+		Name         string `json:"name"`
+		Color        string `json:"color"`
+		DisplayOrder int    `json:"display_order"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	status, err := h.statusService.Update(id, req.Name, req.Color, req.Order)
+	status, err := h.statusService.Update(id, req.Name, req.Color, req.DisplayOrder)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
@@ -155,6 +155,33 @@ func (h *StatusHandler) Delete(c echo.Context) error {
 		}
 	}
 	if err := h.statusService.Delete(id); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// PUT /api/v1/workflows/:id/statuses/reorder
+func (h *StatusHandler) ReorderForWorkflow(c echo.Context) error {
+	wfID, err := h.authorizeWorkflowAccess(c)
+	if err != nil {
+		return err
+	}
+	type Request struct {
+		StatusIDs []string `json:"status_ids"`
+	}
+	var req Request
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	ids := make([]uuid.UUID, 0, len(req.StatusIDs))
+	for _, s := range req.StatusIDs {
+		id, perr := uuid.Parse(s)
+		if perr != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid status id")
+		}
+		ids = append(ids, id)
+	}
+	if err := h.statusService.ReorderForWorkflow(wfID, ids); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	return c.NoContent(http.StatusNoContent)

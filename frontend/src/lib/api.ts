@@ -361,16 +361,31 @@ export const createWorkflowTransition = (
 export const deleteWorkflowTransition = (workflowId: string, transitionId: number) =>
   api.delete(`/workflows/${workflowId}/transitions/${transitionId}`).then(() => undefined)
 
+export const updateWorkflowTransition = (
+  workflowId: string,
+  transitionId: number,
+  data: { from_status_id: string; to_status_id: string }
+) =>
+  api
+    .put<ApiResponse<WorkflowTransition>>(`/workflows/${workflowId}/transitions/${transitionId}`, data)
+    .then((r) => r.data.data)
+
 export const createWorkflowStatus = (
   workflowId: string,
-  data: { name: string; color?: string; order?: number }
+  data: { name: string; color?: string; display_order?: number }
 ) =>
   api.post<ApiResponse<Status>>(`/workflows/${workflowId}/statuses`, data).then((r) => r.data.data)
 
 export const updateStatus = (
   id: string,
-  data: { name: string; color: string; order: number }
+  data: { name: string; color: string; display_order: number }
 ) => api.put<ApiResponse<Status>>(`/statuses/${id}`, data).then((r) => r.data.data)
+
+export const reorderWorkflowStatuses = (workflowId: string, statusIds: string[]) =>
+  api.put(`/workflows/${workflowId}/statuses/reorder`, { status_ids: statusIds }).then(() => undefined)
+
+export const reorderWorkflowTransitions = (workflowId: string, transitionIds: number[]) =>
+  api.put(`/workflows/${workflowId}/transitions/reorder`, { transition_ids: transitionIds }).then(() => undefined)
 
 export const deleteStatus = (id: string) =>
   api.delete(`/statuses/${id}`).then(() => undefined)

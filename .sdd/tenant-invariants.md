@@ -26,6 +26,7 @@ API の認可・データの所属関係で迷ったときの**正本**。平易
 
 - ステータス行の `workflow_id` が、別会社のワークフローを指しているような行は **DB が壊れている状態**とみなす。
 - 同一ワークフロー内（Issue 用 `statuses`）で `(name, order)` が重複する行はデータ欠陥。**起動時マイグレーション**（`MigrateStatusDedupeAndUniqueIndex`）で既存重複を付け替え・削除し、**部分ユニークインデックス**で再発を防ぐ。API は正しい DB から行をそのまま返す。
+- **Issue 用ワークフロー**では、論理削除されていない `statuses` の件数を **2 未満にしない**（削除 API で下限違反時は拒否）。詳細は [domain-model.md](domain-model.md) の「最低2つの遷移」と [db-schema.md](db-schema.md) の `statuses` 節。
 
 ---
 

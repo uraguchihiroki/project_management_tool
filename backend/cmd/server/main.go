@@ -68,6 +68,14 @@ func main() {
 		log.Fatalf("failed to migrate project status seed: %v", err)
 	}
 
+	if err := appdb.MigrateStatusOrderToDisplayOrder(db); err != nil {
+		log.Fatalf("failed migrate status order column: %v", err)
+	}
+
+	if err := appdb.MigrateWorkflowTransitionDisplayOrder(db); err != nil {
+		log.Fatalf("failed migrate workflow transition display_order: %v", err)
+	}
+
 	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
 		log.Fatalf("failed to migrate status dedupe / unique index: %v", err)
 	}
@@ -182,8 +190,11 @@ func main() {
 	api.GET("/workflows/:id", workflowHandler.Get)
 	api.GET("/workflows/:id/statuses", statusHandler.ListByWorkflow)
 	api.POST("/workflows/:id/statuses", statusHandler.CreateForWorkflow)
+	api.PUT("/workflows/:id/statuses/reorder", statusHandler.ReorderForWorkflow)
 	api.GET("/workflows/:id/transitions", workflowTransitionHandler.ListByWorkflow)
+	api.PUT("/workflows/:id/transitions/reorder", workflowTransitionHandler.ReorderForWorkflow)
 	api.POST("/workflows/:id/transitions", workflowTransitionHandler.CreateForWorkflow)
+	api.PUT("/workflows/:id/transitions/:transitionId", workflowTransitionHandler.Update)
 	api.DELETE("/workflows/:id/transitions/:transitionId", workflowTransitionHandler.Delete)
 	api.PUT("/workflows/:id", workflowHandler.Update)
 	api.DELETE("/workflows/:id", workflowHandler.Delete)

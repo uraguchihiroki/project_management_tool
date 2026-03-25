@@ -13,7 +13,7 @@ import (
 func CreateWorkflowWithIssueStatuses(
 	workflowRepo repository.WorkflowRepository,
 	statusRepo repository.StatusRepository,
-	_ repository.WorkflowTransitionRepository,
+	transitionRepo repository.WorkflowTransitionRepository,
 	orgID uuid.UUID,
 	workflowName string,
 ) (uint, []uuid.UUID, error) {
@@ -39,25 +39,27 @@ func CreateWorkflowWithIssueStatuses(
 		Order int
 	}{
 		{"未着手", "#6B7280", 1},
-		{"進行中", "#3B82F6", 2},
-		{"レビュー中", "#F59E0B", 3},
-		{"完了", "#10B981", 4},
+		{"進行", "#3B82F6", 2},
+		{"完了", "#10B981", 3},
 	}
 	ids := make([]uuid.UUID, 0, len(defaultStatuses))
 	for _, ds := range defaultStatuses {
 		sid := uuid.New()
 		st := &model.Status{
-			ID:         sid,
-			Key:        "sts-" + sid.String(),
-			WorkflowID: wf.ID,
-			Name:       ds.Name,
-			Color:      ds.Color,
-			Order:      ds.Order,
+			ID:           sid,
+			Key:          "sts-" + sid.String(),
+			WorkflowID:   wf.ID,
+			Name:         ds.Name,
+			Color:        ds.Color,
+			DisplayOrder: ds.Order,
 		}
 		if err := statusRepo.Create(st); err != nil {
 			return 0, nil, err
 		}
 		ids = append(ids, sid)
+	}
+	if err := transitionRepo.SeedAllPairs(wf.ID, ids); err != nil {
+		return 0, nil, err
 	}
 	return wf.ID, ids, nil
 }

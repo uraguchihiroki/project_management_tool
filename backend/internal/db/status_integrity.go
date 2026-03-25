@@ -38,7 +38,7 @@ func dedupeStatuses(tx *gorm.DB) error {
 
 	groups := make(map[string][]model.Status)
 	for _, s := range all {
-		key := fmt.Sprintf("%d|%s|%d", s.WorkflowID, s.Name, s.Order)
+		key := fmt.Sprintf("%d|%s|%d", s.WorkflowID, s.Name, s.DisplayOrder)
 		groups[key] = append(groups[key], s)
 	}
 
@@ -184,7 +184,7 @@ func ensureStatusPartialUniqueIndex(tx *gorm.DB) error {
 		// 論理削除されていない行のみユニーク（同一 workflow で name + order）
 		stmt = fmt.Sprintf(`
 			CREATE UNIQUE INDEX IF NOT EXISTS %s
-			ON statuses (workflow_id, name, "order")
+			ON statuses (workflow_id, name, display_order)
 			WHERE deleted_at IS NULL
 		`, statusUniqueIndexName)
 	default:

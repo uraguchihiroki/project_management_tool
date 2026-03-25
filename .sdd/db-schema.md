@@ -320,10 +320,12 @@ issue_templates
 | workflow_id | BIGINT | FK → workflows.id, NOT NULL | 所属ワークフロー |
 | name | VARCHAR(50) | NOT NULL | ステータス名 |
 | color | VARCHAR(7) | NOT NULL | HEXカラー (#RRGGBB) |
-| order | INTEGER | NOT NULL | 表示順 |
+| display_order | INTEGER | NOT NULL | 表示順 |
 | status_key | VARCHAR(50) | nullable | システム用: sts_start, sts_goal。NULL=ユーザー定義 |
 
-> **重複防止**: 同一 `workflow_id` で `(name, order)` は **論理削除されていない行のみ**一意（部分ユニークインデックス `idx_statuses_wf_name_order_active`）。起動時 `MigrateStatusDedupeAndUniqueIndex`（`internal/db/status_integrity.go`）。旧 `type` 列は `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）で除去する。
+> **重複防止**: 同一 `workflow_id` で `(name, display_order)` は **論理削除されていない行のみ**一意（部分ユニークインデックス `idx_statuses_wf_name_order_active`）。起動時 `MigrateStatusDedupeAndUniqueIndex`（`internal/db/status_integrity.go`）。旧 `type` 列は `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）で除去する。レガシー列名 `order` は `MigrateStatusOrderToDisplayOrder` で `display_order` に寄せる。
+>
+> **件数下限（Issue 用）**: 同一 `workflow_id` に紐づく有効な `statuses` は **少なくとも 2 行**を保つ（削除で 1 行以下になる操作は API で拒否）。運用上の意味・用語の正本は [domain-model.md](domain-model.md)。
 
 ### project_statuses
 

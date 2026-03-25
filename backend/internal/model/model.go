@@ -133,25 +133,26 @@ type ProjectStatusTransition struct {
 
 // Status は常に1ワークフローに属し、ワークフロー間で共有しない（Issue 専用）
 type Status struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	Key        string    `gorm:"size:255;not null" json:"key"`
-	WorkflowID uint      `gorm:"not null;index" json:"workflow_id"`
-	Workflow   Workflow  `gorm:"foreignKey:WorkflowID" json:"workflow,omitempty"`
-	Name       string    `gorm:"size:50;not null" json:"name"`
-	Color      string    `gorm:"size:7;not null" json:"color"`
-	Order      int       `gorm:"not null" json:"order"`
-	StatusKey  string    `gorm:"size:50;index" json:"status_key,omitempty"` // sts_start, sts_goal。空=ユーザー定義
-	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	Key           string    `gorm:"size:255;not null" json:"key"`
+	WorkflowID    uint      `gorm:"not null;index" json:"workflow_id"`
+	Workflow      Workflow  `gorm:"foreignKey:WorkflowID" json:"workflow,omitempty"`
+	Name          string    `gorm:"size:50;not null" json:"name"`
+	Color         string    `gorm:"size:7;not null" json:"color"`
+	DisplayOrder  int       `gorm:"column:display_order;not null;default:1" json:"display_order"`
+	StatusKey     string    `gorm:"size:50;index" json:"status_key,omitempty"` // sts_start, sts_goal。空=ユーザー定義
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // WorkflowTransition は同一ワークフロー内の許可遷移（from → to）
 type WorkflowTransition struct {
-	ID           uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	Key          string    `gorm:"size:255;not null" json:"key"`
-	WorkflowID   uint      `gorm:"not null;index" json:"workflow_id"`
-	FromStatusID uuid.UUID `gorm:"type:uuid;not null" json:"from_status_id"`
-	ToStatusID   uuid.UUID `gorm:"type:uuid;not null" json:"to_status_id"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID            uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	Key           string    `gorm:"size:255;not null" json:"key"`
+	WorkflowID    uint      `gorm:"not null;index" json:"workflow_id"`
+	FromStatusID  uuid.UUID `gorm:"type:uuid;not null" json:"from_status_id"`
+	ToStatusID    uuid.UUID `gorm:"type:uuid;not null" json:"to_status_id"`
+	DisplayOrder  int       `gorm:"column:display_order;not null;default:1" json:"display_order"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // Group は組織スコープのグループ（開示・通知・タグ等）

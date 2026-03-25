@@ -84,6 +84,14 @@ func newTestServer(t *testing.T) *testServer {
 		t.Fatalf("failed migrate project status seed: %v", err)
 	}
 
+	if err := appdb.MigrateStatusOrderToDisplayOrder(db); err != nil {
+		t.Fatalf("failed migrate status order column: %v", err)
+	}
+
+	if err := appdb.MigrateWorkflowTransitionDisplayOrder(db); err != nil {
+		t.Fatalf("failed migrate workflow transition display_order: %v", err)
+	}
+
 	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
 		t.Fatalf("failed to migrate status dedupe / unique index: %v", err)
 	}
@@ -187,8 +195,11 @@ func newTestServer(t *testing.T) *testServer {
 	api.GET("/workflows/:id", workflowH.Get)
 	api.GET("/workflows/:id/statuses", statusH.ListByWorkflow)
 	api.POST("/workflows/:id/statuses", statusH.CreateForWorkflow)
+	api.PUT("/workflows/:id/statuses/reorder", statusH.ReorderForWorkflow)
 	api.GET("/workflows/:id/transitions", workflowTransitionH.ListByWorkflow)
+	api.PUT("/workflows/:id/transitions/reorder", workflowTransitionH.ReorderForWorkflow)
 	api.POST("/workflows/:id/transitions", workflowTransitionH.CreateForWorkflow)
+	api.PUT("/workflows/:id/transitions/:transitionId", workflowTransitionH.Update)
 	api.DELETE("/workflows/:id/transitions/:transitionId", workflowTransitionH.Delete)
 	api.PUT("/workflows/:id", workflowH.Update)
 	api.DELETE("/workflows/:id", workflowH.Delete)

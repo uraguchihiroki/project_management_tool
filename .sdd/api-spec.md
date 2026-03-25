@@ -86,17 +86,23 @@ http://localhost:8080/api/v1
 | POST | /workflows | 作成（body: `organization_id`, `name`, `description`） |
 | PUT | /workflows/reorder | 表示順更新（body: `ids`） |
 | GET | /workflows/:id | 詳細取得（他組織の ID は 404） |
-| GET | /workflows/:id/statuses | **当該ワークフローに紐づく Issue 用 Status 一覧**（`order` 昇順）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。同一 `(name, order)` の重複は **DB 制約**で防ぐ（[tenant-invariants.md](tenant-invariants.md)、[db-schema.md](db-schema.md)）。 |
-| POST | /workflows/:id/statuses | **Issue 用ステータス追加**。body: `name`（必須）, `color`（省略時 `#6B7280`）, `order`（`0` または省略時は同一 WF 内の最大 `order` + 1）。作成後、当該 WF の **許可遷移を全ペア再シード** |
+| GET | /workflows/:id/statuses | **当該ワークフローに紐づく Issue 用 Status 一覧**（`display_order` 昇順）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。同一 `(name, display_order)` の重複は **DB 制約**で防ぐ（[tenant-invariants.md](tenant-invariants.md)、[db-schema.md](db-schema.md)）。 |
+| POST | /workflows/:id/statuses | **Issue 用ステータス追加**。body: `name`（必須）, `color`（省略時 `#6B7280`）, `display_order`（`0` または省略時は同一 WF 内の最大 `display_order` + 1）。作成後、当該 WF の **許可遷移を全ペア再シード** |
+| PUT | /workflows/:id/statuses/reorder | ステータス並び替え。body: `status_ids`（UUID の配列・全件・順序どおり `display_order` が 1..n に振り直される） |
 | PUT | /workflows/:id | 名前・説明の更新 |
 | DELETE | /workflows/:id | 削除 |
+| GET | /workflows/:id/transitions | 当該ワークフローの許可遷移一覧（`display_order` 昇順） |
+| PUT | /workflows/:id/transitions/reorder | 遷移行の並び替え。body: `transition_ids`（数値 ID の配列・当該 WF の全遷移を含む順列） |
+| POST | /workflows/:id/transitions | 遷移追加。body: `from_status_id`, `to_status_id`。同一ステータスへの遷移や既存と同じ `from→to` は **400** |
+| PUT | /workflows/:id/transitions/:transitionId | 遷移更新（同上の検証） |
+| DELETE | /workflows/:id/transitions/:transitionId | 遷移削除 |
 
 ### Statuses（個別更新・削除）
 
 | Method | Path | 説明 |
 |--------|------|------|
-| PUT | /statuses/:id | 更新 |
-| DELETE | /statuses/:id | 削除 |
+| PUT | /statuses/:id | 更新（body: `name`, `color`, `display_order`） |
+| DELETE | /statuses/:id | 削除。**許可遷移**（`workflow_transitions` の from/to）で参照中は **400**。削除後に当該ワークフロー内の有効ステータスが **2 未満**になる場合も **400**（メッセージで理由を返す） |
 
 > **UI導線:** 管理画面では `/admin/statuses` はレガシー導線として `/admin/workflows` へリダイレクトし、実際の編集は `/admin/workflows/:id` の **共通ダイアログ（新規/編集）** で行う。
 

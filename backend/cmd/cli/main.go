@@ -118,6 +118,14 @@ func main() {
 		log.Fatalf("failed to migrate project status seed: %v", err)
 	}
 
+	if err := appdb.MigrateStatusOrderToDisplayOrder(db); err != nil {
+		log.Fatalf("failed migrate status order column: %v", err)
+	}
+
+	if err := appdb.MigrateWorkflowTransitionDisplayOrder(db); err != nil {
+		log.Fatalf("failed migrate workflow transition display_order: %v", err)
+	}
+
 	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
 		log.Fatalf("failed to migrate status dedupe / unique index: %v", err)
 	}

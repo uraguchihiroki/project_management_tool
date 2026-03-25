@@ -72,7 +72,7 @@ export interface Status {
   workflow_id?: number
   name: string
   color: string
-  order: number
+  display_order: number
   status_key?: string // sts_start, sts_goal。空=ユーザー定義
 }
 
@@ -206,6 +206,7 @@ export interface WorkflowTransition {
   workflow_id: number
   from_status_id: string
   to_status_id: string
+  display_order: number
   created_at: string
 }
 
