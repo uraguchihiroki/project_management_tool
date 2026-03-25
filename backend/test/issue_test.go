@@ -168,6 +168,7 @@ func TestIssue_Update(t *testing.T) {
 	})
 
 	t.Run("正常系: ステータスを変更して永続化される", func(t *testing.T) {
+		ensureLinearIssueWorkflowTransitions(t, ts, projectID)
 		number := createTestIssue(t, ts, projectID, statusID, ownerID, "ステータス変更テスト")
 
 		// 全ステータス取得

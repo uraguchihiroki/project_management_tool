@@ -36,7 +36,7 @@
 
 > **Note:** 実装時は各テーブルに `deleted_at` を追加し、Repository 層で削除時は物理削除ではなく `UPDATE ... SET deleted_at = NOW()` とする。一覧取得・検索時は `deleted_at IS NULL` を条件に含める。
 
-**実装（Go / GORM）:** モデルに `gorm.DeletedAt` を付与し、業務経路の `Delete` は原則ソフト削除とする。**起動時マイグレーション**（`internal/db` の重複除去・レガシー除去など）では意図的に生 `DELETE` や **`Unscoped().Delete`** が残る（業務 API とは別ルール）。多対多の結合テーブル（`user_roles` 等）は **代理 PK（UUID）** により、付け替えは **既存有効行の論理削除のうえ新行 `Create`** とする。**`workflow_transitions` / `project_status_transitions`** も業務 Repository では同様に、当該スコープの **有効行をソフト削除したうえで** 必要な行を **`Create`** する（履歴として `deleted_at` 付き行が残りうる）。業務 API 経路では **`Unscoped` に依存しない**。
+**実装（Go / GORM）:** モデルに `gorm.DeletedAt` を付与し、業務経路の `Delete` は原則ソフト削除とする。**起動時マイグレーション**（`internal/db` の重複除去・レガシー除去など）では意図的に生 `DELETE` や **`Unscoped().Delete`** が残る（業務 API とは別ルール）。多対多の結合テーブル（`user_roles` 等）は **代理 PK（UUID）** により、付け替えは **既存有効行の論理削除のうえ新行 `Create`** とする。**`workflow_transitions` / `project_status_transitions`** の行は **ワークフロー／プロジェクト作成時には自動で作らない**（運用で API から追加）。**差し替え・再構築**する Repository 経路では、当該スコープの **有効行をソフト削除したうえで** 必要な行を **`Create`** してよい（履歴として `deleted_at` 付き行が残りうる）。業務 API 経路では **`Unscoped` に依存しない**。
 
 ---
 

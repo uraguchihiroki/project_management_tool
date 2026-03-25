@@ -37,4 +37,4 @@
 |------|------|------|
 | マイグレーション | `status_integrity` / `migrate_issue_project_status` の物理 DELETE は **移行専用**（業務の論理削除と別物）。 | done |
 | 結合テーブル | `AssignRolesToUser` / `ReplaceMembers` / `ReplaceForIssue` / 部署の `SetUserDepartments` は **論理削除＋新行 Create**（代理 PK により `Unscoped` 不要）。重複 ID は入力側で除去。 | done |
-| 許可遷移 | `SeedAllPairs`（`workflow_transitions` / `project_status_transitions`）は **当該スコープの有効行をソフト削除のうえ再作成**。業務経路で `Unscoped` は使わない。 | done |
+| 許可遷移 | 初期シード・ワークフロー／プロジェクト作成では **許可遷移を自動投入しない**（0 本スタート）。`POST .../transitions` 等で追加。ブラックボックステストで隣接ステータス間の線形遷移が要る場合は [`backend/test/workflow_transition_seed_test.go`](../backend/test/workflow_transition_seed_test.go) のヘルパーを使う。 | done |

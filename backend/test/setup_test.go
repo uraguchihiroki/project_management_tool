@@ -115,7 +115,7 @@ func newTestServer(t *testing.T) *testServer {
 	statusRepo := repository.NewStatusRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
 	transitionRepo := repository.NewWorkflowTransitionRepository(db)
-	if _, _, err := service.CreateWorkflowWithIssueStatuses(workflowRepo, statusRepo, transitionRepo, frsOrg.ID, "組織Issue"); err != nil {
+	if _, _, err := service.CreateWorkflowWithIssueStatuses(workflowRepo, statusRepo, frsOrg.ID, "組織Issue"); err != nil {
 		t.Fatalf("seed 組織Issue workflow: %v", err)
 	}
 
@@ -139,7 +139,7 @@ func newTestServer(t *testing.T) *testServer {
 
 	userSvc := service.NewUserService(userRepo, orgRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, projectStatusRepo)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)

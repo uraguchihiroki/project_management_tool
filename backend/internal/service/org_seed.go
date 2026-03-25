@@ -23,11 +23,9 @@ type orgSeedService struct {
 	roleRepo       repository.RoleRepository
 	projectRepo    repository.ProjectRepository
 	departmentRepo repository.DepartmentRepository
-	issueRepo      repository.IssueRepository
-	workflowRepo   repository.WorkflowRepository
-	transitionRepo repository.WorkflowTransitionRepository
-	psRepo         repository.ProjectStatusRepository
-	pstRepo        repository.ProjectStatusTransitionRepository
+	issueRepo    repository.IssueRepository
+	workflowRepo repository.WorkflowRepository
+	psRepo       repository.ProjectStatusRepository
 }
 
 func NewOrgSeedService(
@@ -38,9 +36,7 @@ func NewOrgSeedService(
 	departmentRepo repository.DepartmentRepository,
 	issueRepo repository.IssueRepository,
 	workflowRepo repository.WorkflowRepository,
-	transitionRepo repository.WorkflowTransitionRepository,
 	psRepo repository.ProjectStatusRepository,
-	pstRepo repository.ProjectStatusTransitionRepository,
 ) OrgSeedService {
 	return &orgSeedService{
 		orgRepo:        orgRepo,
@@ -50,9 +46,7 @@ func NewOrgSeedService(
 		departmentRepo: departmentRepo,
 		issueRepo:      issueRepo,
 		workflowRepo:   workflowRepo,
-		transitionRepo: transitionRepo,
 		psRepo:         psRepo,
-		pstRepo:        pstRepo,
 	}
 }
 
@@ -64,7 +58,7 @@ func (s *orgSeedService) ensureOrgIssueWorkflow(orgID uuid.UUID) error {
 	if err != gorm.ErrRecordNotFound {
 		return err
 	}
-	_, _, err = CreateWorkflowWithIssueStatuses(s.workflowRepo, s.statusRepo, s.transitionRepo, orgID, "組織Issue")
+	_, _, err = CreateWorkflowWithIssueStatuses(s.workflowRepo, s.statusRepo, orgID, "組織Issue")
 	return err
 }
 
@@ -73,7 +67,7 @@ func (s *orgSeedService) ensureProjectDefaultWorkflow(project *model.Project) er
 		return nil
 	}
 	wfID, _, err := CreateWorkflowWithIssueStatuses(
-		s.workflowRepo, s.statusRepo, s.transitionRepo,
+		s.workflowRepo, s.statusRepo,
 		project.OrganizationID,
 		project.Name+" - Issue",
 	)
@@ -88,7 +82,7 @@ func (s *orgSeedService) ensureProjectStatuses(project *model.Project) error {
 	if project.ProjectStatusID != nil {
 		return nil
 	}
-	firstID, err := SeedDefaultProjectStatuses(s.psRepo, s.pstRepo, project.ID)
+	firstID, err := SeedDefaultProjectStatuses(s.psRepo, project.ID)
 	if err != nil {
 		return err
 	}

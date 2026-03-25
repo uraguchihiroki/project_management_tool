@@ -145,10 +145,8 @@ func main() {
 	departmentRepo := repository.NewDepartmentRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
-	transitionRepo := repository.NewWorkflowTransitionRepository(db)
 	projectStatusRepo := repository.NewProjectStatusRepository(db)
-	projectStatusTransitionRepo := repository.NewProjectStatusTransitionRepository(db)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, projectStatusRepo)
 
 	var seedErr error
 	if *seedAll {

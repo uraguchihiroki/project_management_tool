@@ -110,7 +110,7 @@ func main() {
 
 	userSvc := service.NewUserService(userRepo, orgRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, projectStatusRepo)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)

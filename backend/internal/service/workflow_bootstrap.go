@@ -9,11 +9,10 @@ import (
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
-// CreateWorkflowWithIssueStatuses は組織スコープのワークフローと Issue 用デフォルトステータス列を作成する
+// CreateWorkflowWithIssueStatuses は組織スコープのワークフローと Issue 用デフォルトステータス列を作成する（許可遷移は作らない）
 func CreateWorkflowWithIssueStatuses(
 	workflowRepo repository.WorkflowRepository,
 	statusRepo repository.StatusRepository,
-	transitionRepo repository.WorkflowTransitionRepository,
 	orgID uuid.UUID,
 	workflowName string,
 ) (uint, []uuid.UUID, error) {
@@ -57,9 +56,6 @@ func CreateWorkflowWithIssueStatuses(
 			return 0, nil, err
 		}
 		ids = append(ids, sid)
-	}
-	if err := transitionRepo.SeedAllPairs(wf.ID, ids); err != nil {
-		return 0, nil, err
 	}
 	return wf.ID, ids, nil
 }

@@ -2,17 +2,13 @@ package repository
 
 import (
 	"database/sql"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
-	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"gorm.io/gorm"
 )
 
 type WorkflowTransitionRepository interface {
-	DeleteByWorkflowID(workflowID uint) error
-	SeedAllPairs(workflowID uint, statusIDs []uuid.UUID) error
 	Exists(workflowID uint, fromID, toID uuid.UUID) bool
 	ExistsOtherThan(workflowID uint, fromID, toID uuid.UUID, exceptTransitionID uint) bool
 	FindByWorkflowID(workflowID uint) ([]model.WorkflowTransition, error)
@@ -31,40 +27,6 @@ type workflowTransitionRepository struct {
 
 func NewWorkflowTransitionRepository(db *gorm.DB) WorkflowTransitionRepository {
 	return &workflowTransitionRepository{db: db}
-}
-
-func (r *workflowTransitionRepository) DeleteByWorkflowID(workflowID uint) error {
-	return r.db.Where("workflow_id = ?", workflowID).Delete(&model.WorkflowTransition{}).Error
-}
-
-// SeedAllPairs は同一ワークフロー内の各ステータス組み合わせに許可遷移を作成する（既存有効行はソフト削除のうえ再作成）
-func (r *workflowTransitionRepository) SeedAllPairs(workflowID uint, statusIDs []uuid.UUID) error {
-	if len(statusIDs) == 0 {
-		return nil
-	}
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("workflow_id = ?", workflowID).Delete(&model.WorkflowTransition{}).Error; err != nil {
-			return err
-		}
-		seq := 0
-		for _, from := range statusIDs {
-			for _, to := range statusIDs {
-				seq++
-				wt := &model.WorkflowTransition{
-					Key:          keygen.UUIDKey(uuid.New()),
-					WorkflowID:   workflowID,
-					FromStatusID: from,
-					ToStatusID:   to,
-					DisplayOrder: seq,
-					CreatedAt:    time.Now(),
-				}
-				if err := tx.Create(wt).Error; err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	})
 }
 
 func (r *workflowTransitionRepository) Exists(workflowID uint, fromID, toID uuid.UUID) bool {

@@ -121,13 +121,13 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 	}
 
 	wfName := input.Name + " - Issue"
-	wfID, _, err := CreateWorkflowWithIssueStatuses(s.workflowRepo, s.statusRepo, s.transitionRepo, input.OrganizationID, wfName)
+	wfID, _, err := CreateWorkflowWithIssueStatuses(s.workflowRepo, s.statusRepo, input.OrganizationID, wfName)
 	if err != nil {
 		return nil, err
 	}
 	project.DefaultWorkflowID = &wfID
 
-	firstPS, err := SeedDefaultProjectStatuses(s.psRepo, s.pstRepo, project.ID)
+	firstPS, err := SeedDefaultProjectStatuses(s.psRepo, project.ID)
 	if err != nil {
 		return nil, err
 	}
