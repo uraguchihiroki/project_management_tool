@@ -73,7 +73,9 @@ export interface Status {
   name: string
   color: string
   display_order: number
-  status_key?: string // sts_start, sts_goal。空=ユーザー定義
+  status_key?: string
+  is_entry?: boolean
+  is_terminal?: boolean
 }
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical'

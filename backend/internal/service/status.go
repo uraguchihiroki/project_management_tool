@@ -16,7 +16,7 @@ type StatusService interface {
 	Create(orgID uuid.UUID, name, color string, order int) (*model.Status, error)
 	ListByWorkflowID(workflowID uint) ([]model.Status, error)
 	CreateForWorkflow(workflowID uint, name, color string, order int) (*model.Status, error)
-	Update(id uuid.UUID, name, color string, order int) (*model.Status, error)
+	Update(id uuid.UUID, name, color string, order int, isEntry, isTerminal *bool) (*model.Status, error)
 	Delete(id uuid.UUID) error
 	ReorderForWorkflow(workflowID uint, orderedIDs []uuid.UUID) error
 }
@@ -134,13 +134,10 @@ func (s *statusService) CreateForWorkflow(workflowID uint, name, color string, o
 	return s.statusRepo.FindByID(statusID)
 }
 
-func (s *statusService) Update(id uuid.UUID, name, color string, order int) (*model.Status, error) {
+func (s *statusService) Update(id uuid.UUID, name, color string, order int, isEntry, isTerminal *bool) (*model.Status, error) {
 	status, err := s.statusRepo.FindByID(id)
 	if err != nil {
 		return nil, err
-	}
-	if status.StatusKey == "sts_start" || status.StatusKey == "sts_goal" {
-		return nil, fmt.Errorf("システムステータスは変更できません")
 	}
 	if name != "" {
 		if len(name) > 50 {
@@ -155,6 +152,15 @@ func (s *statusService) Update(id uuid.UUID, name, color string, order int) (*mo
 		status.Color = color
 	}
 	status.DisplayOrder = order
+	if isEntry != nil {
+		status.IsEntry = *isEntry
+	}
+	if isTerminal != nil {
+		status.IsTerminal = *isTerminal
+	}
+	if status.IsEntry && status.IsTerminal {
+		return nil, fmt.Errorf("開始ステータスと終了ステータスを同時に付けられません")
+	}
 	peers, err := s.statusRepo.FindByWorkflowID(status.WorkflowID)
 	if err != nil {
 		return nil, err
@@ -167,7 +173,7 @@ func (s *statusService) Update(id uuid.UUID, name, color string, order int) (*mo
 			return nil, fmt.Errorf("同一ワークフローに同じ表示順・名前のステータスが既にあります")
 		}
 	}
-	if err := s.statusRepo.Update(status); err != nil {
+	if err := s.statusRepo.PersistWithEntryExclusive(status); err != nil {
 		return nil, err
 	}
 	return s.statusRepo.FindByID(id)
@@ -177,9 +183,6 @@ func (s *statusService) Delete(id uuid.UUID) error {
 	status, err := s.statusRepo.FindByID(id)
 	if err != nil {
 		return err
-	}
-	if status.StatusKey == "sts_start" || status.StatusKey == "sts_goal" {
-		return fmt.Errorf("システムステータスは削除できません")
 	}
 	tref, err := s.transitionRepo.CountReferencingStatus(id)
 	if err != nil {

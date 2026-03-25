@@ -207,9 +207,6 @@ func (s *projectService) UpdateProjectStatus(projectID, statusID uuid.UUID, name
 	if ps.ProjectID != projectID {
 		return nil, fmt.Errorf("project status does not belong to this project")
 	}
-	if ps.StatusKey == "sts_start" || ps.StatusKey == "sts_goal" {
-		return nil, fmt.Errorf("システムステータスは変更できません")
-	}
 	ps.Name = name
 	ps.Color = color
 	ps.Order = order

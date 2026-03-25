@@ -361,7 +361,13 @@ export const createWorkflowStatus = (
 
 export const updateStatus = (
   id: string,
-  data: { name: string; color: string; display_order: number }
+  data: {
+    name?: string
+    color?: string
+    display_order: number
+    is_entry?: boolean
+    is_terminal?: boolean
+  }
 ) => api.put<ApiResponse<Status>>(`/statuses/${id}`, data).then((r) => r.data.data)
 
 export const reorderWorkflowStatuses = (workflowId: string, statusIds: string[]) =>

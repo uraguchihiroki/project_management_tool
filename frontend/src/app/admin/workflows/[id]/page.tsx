@@ -40,6 +40,8 @@ type TransitionDiagramNode = {
   color: string
   x: number
   y: number
+  isEntry: boolean
+  isTerminal: boolean
 }
 type TransitionDiagramEdge = {
   id: string
@@ -205,7 +207,13 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       data,
     }: {
       statusId: string
-      data: { name: string; color: string; display_order: number }
+      data: {
+        name?: string
+        color?: string
+        display_order: number
+        is_entry?: boolean
+        is_terminal?: boolean
+      }
     }) => updateStatus(statusId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'statuses'] })
@@ -213,6 +221,21 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       setStatusDialogError('')
     },
     onError: (e: Error) => setStatusDialogError(e.message),
+  })
+
+  const patchStatusMutation = useMutation({
+    mutationFn: (args: {
+      statusId: string
+      data: {
+        display_order: number
+        is_entry?: boolean
+        is_terminal?: boolean
+      }
+    }) => updateStatus(args.statusId, args.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'statuses'] })
+    },
+    onError: (e: Error) => setError(e.message),
   })
 
   const deleteStatusMutation = useMutation({
@@ -343,9 +366,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   }
 
   const statusesByOrder = [...statuses].sort((a, b) => a.display_order - b.display_order)
-  const visibleStatuses = statusesByOrder.filter(
-    (s) => s.status_key !== 'sts_start' && s.status_key !== 'sts_goal'
-  )
+  const visibleStatuses = statusesByOrder
   const transitionDiagram = useMemo(() => {
     const nodeWidth = 170
     const nodeHeight = 54
@@ -418,6 +439,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         color: s.color,
         x: Math.round(centerX - nodeWidth / 2),
         y: Math.round(centerY - nodeHeight / 2),
+        isEntry: s.is_entry === true,
+        isTerminal: s.is_terminal === true,
       }
     })
 
@@ -432,6 +455,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       color: s.color,
       x: disconnectedStartX,
       y: paddingY + idx * (nodeHeight + 22),
+      isEntry: s.is_entry === true,
+      isTerminal: s.is_terminal === true,
     }))
 
     const nodes = [...connectedNodes, ...disconnectedNodes]
@@ -535,6 +560,34 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     if (process.env.NODE_ENV !== 'development') return
     console.log('[WorkflowTransitionDiagram] draw payload', transitionDiagramDebugPayload)
   }, [transitionDiagramDebugPayload])
+
+  const applyEntryStatus = (targetId: string | null) => {
+    const cur = visibleStatuses.find((s) => s.is_entry)
+    if (targetId === null) {
+      if (cur) {
+        patchStatusMutation.mutate({
+          statusId: cur.id,
+          data: { display_order: cur.display_order, is_entry: false },
+        })
+      }
+      return
+    }
+    const tgt = visibleStatuses.find((s) => s.id === targetId)
+    if (!tgt) return
+    patchStatusMutation.mutate({
+      statusId: tgt.id,
+      data: { display_order: tgt.display_order, is_entry: true },
+    })
+  }
+
+  const toggleTerminalStatus = (st: Status) => {
+    patchStatusMutation.mutate({
+      statusId: st.id,
+      data: { display_order: st.display_order, is_terminal: !st.is_terminal },
+    })
+  }
+
+  const entryRadioName = `workflow-${id}-entry`
 
   const statusReferencedInTransition = (statusId: string) =>
     transitions.some((t) => t.from_status_id === statusId || t.to_status_id === statusId)
@@ -1058,6 +1111,30 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       >
                         {node.name}
                       </text>
+                      {node.isEntry && (
+                        <text
+                          x={node.x + transitionDiagram.nodeWidth - 8}
+                          y={node.y + 12}
+                          fontSize="9"
+                          fontWeight="700"
+                          fill="#0369A1"
+                          textAnchor="end"
+                        >
+                          START
+                        </text>
+                      )}
+                      {node.isTerminal && (
+                        <text
+                          x={node.x + transitionDiagram.nodeWidth - 8}
+                          y={node.y + (node.isEntry ? 24 : 12)}
+                          fontSize="9"
+                          fontWeight="700"
+                          fill="#15803D"
+                          textAnchor="end"
+                        >
+                          GOAL
+                        </text>
+                      )}
                     </g>
                   ))}
                 </svg>
@@ -1076,6 +1153,67 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                 )}
               </div>
             )}
+          </div>
+        )}
+        {!orgMismatch && !statusesLoading && visibleStatuses.length > 0 && (
+          <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50/60 p-4">
+            <h3 className="text-sm font-semibold text-gray-900">開始・終了ステータス</h3>
+            <p className="mt-1 text-xs text-gray-600">
+              開始は1件まで（ラジオ）。終了は複数選べます（チェック）。
+            </p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="min-w-[520px] w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left text-gray-600">
+                    <th className="py-2 pr-3 font-medium">ステータス</th>
+                    <th className="py-2 pr-3 font-medium">開始</th>
+                    <th className="py-2 font-medium">終了</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-gray-100">
+                    <td className="py-2 pr-3 text-gray-500">（なし）</td>
+                    <td className="py-2 pr-3">
+                      <input
+                        type="radio"
+                        name={entryRadioName}
+                        checked={!visibleStatuses.some((s) => s.is_entry)}
+                        onChange={() => applyEntryStatus(null)}
+                        disabled={patchStatusMutation.isPending}
+                        aria-label="開始ステータスを設定しない"
+                      />
+                    </td>
+                    <td className="py-2 text-gray-400">—</td>
+                  </tr>
+                  {visibleStatuses.map((s) => (
+                    <tr key={s.id} className="border-b border-gray-100">
+                      <td className="py-2 pr-3">
+                        {s.display_order}. {s.name}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <input
+                          type="radio"
+                          name={entryRadioName}
+                          checked={s.is_entry === true}
+                          onChange={() => applyEntryStatus(s.id)}
+                          disabled={patchStatusMutation.isPending}
+                          aria-label={`${s.name} を開始にする`}
+                        />
+                      </td>
+                      <td className="py-2">
+                        <input
+                          type="checkbox"
+                          checked={s.is_terminal === true}
+                          onChange={() => toggleTerminalStatus(s)}
+                          disabled={patchStatusMutation.isPending || s.is_entry === true}
+                          aria-label={`${s.name} を終了にする`}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
         {orgMismatch && (
@@ -1114,6 +1252,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                 renderItem={(t, props) => {
                   const row = getRowTransition(t)
                   const busy = transitionBusyId === t.id
+                  const fromSt = visibleStatuses.find((x) => x.id === row.from_status_id)
+                  const toSt = visibleStatuses.find((x) => x.id === row.to_status_id)
                   return (
                     <div
                       key={t.id}
@@ -1134,6 +1274,16 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                           </option>
                         ))}
                       </select>
+                      {fromSt?.is_entry && (
+                        <span className="text-[10px] font-semibold text-sky-700 border border-sky-200 rounded px-1 py-0.5">
+                          開始
+                        </span>
+                      )}
+                      {fromSt?.is_terminal && (
+                        <span className="text-[10px] font-semibold text-emerald-800 border border-emerald-200 rounded px-1 py-0.5">
+                          終了
+                        </span>
+                      )}
                       <span className="text-gray-500">→</span>
                       <select
                         value={row.to_status_id}
@@ -1147,6 +1297,16 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                           </option>
                         ))}
                       </select>
+                      {toSt?.is_entry && (
+                        <span className="text-[10px] font-semibold text-sky-700 border border-sky-200 rounded px-1 py-0.5">
+                          開始
+                        </span>
+                      )}
+                      {toSt?.is_terminal && (
+                        <span className="text-[10px] font-semibold text-emerald-800 border border-emerald-200 rounded px-1 py-0.5">
+                          終了
+                        </span>
+                      )}
                       {row.reason === 'same' && (
                         <span className="text-xs text-amber-700 border border-amber-300 rounded px-2 py-0.5">
                           無効（遷移前後が同一）
@@ -1173,6 +1333,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             </SortableDndProvider>
             {invalidTransitionStraps.map((s) => {
               const ir = invalidStrapReason(s)
+              const ifrom = visibleStatuses.find((x) => x.id === s.from_status_id)
+              const ito = visibleStatuses.find((x) => x.id === s.to_status_id)
               return (
                 <div
                   key={s.clientId}
@@ -1190,6 +1352,16 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       </option>
                     ))}
                   </select>
+                  {ifrom?.is_entry && (
+                    <span className="text-[10px] font-semibold text-sky-700 border border-sky-200 rounded px-1 py-0.5">
+                      開始
+                    </span>
+                  )}
+                  {ifrom?.is_terminal && (
+                    <span className="text-[10px] font-semibold text-emerald-800 border border-emerald-200 rounded px-1 py-0.5">
+                      終了
+                    </span>
+                  )}
                   <span className="text-gray-500">→</span>
                   <select
                     value={s.to_status_id}
@@ -1203,6 +1375,16 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       </option>
                     ))}
                   </select>
+                  {ito?.is_entry && (
+                    <span className="text-[10px] font-semibold text-sky-700 border border-sky-200 rounded px-1 py-0.5">
+                      開始
+                    </span>
+                  )}
+                  {ito?.is_terminal && (
+                    <span className="text-[10px] font-semibold text-emerald-800 border border-emerald-200 rounded px-1 py-0.5">
+                      終了
+                    </span>
+                  )}
                   {ir === 'same' && (
                     <span className="text-xs text-amber-700 border border-amber-300 rounded px-2 py-0.5">
                       無効（遷移前後が同一）
@@ -1234,6 +1416,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             <div className="space-y-2">
               {invalidTransitionStraps.map((s) => {
                 const ir = invalidStrapReason(s)
+                const ifrom = visibleStatuses.find((x) => x.id === s.from_status_id)
+                const ito = visibleStatuses.find((x) => x.id === s.to_status_id)
                 return (
                   <div
                     key={s.clientId}
@@ -1251,6 +1435,16 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                         </option>
                       ))}
                     </select>
+                    {ifrom?.is_entry && (
+                      <span className="text-[10px] font-semibold text-sky-700 border border-sky-200 rounded px-1 py-0.5">
+                        開始
+                      </span>
+                    )}
+                    {ifrom?.is_terminal && (
+                      <span className="text-[10px] font-semibold text-emerald-800 border border-emerald-200 rounded px-1 py-0.5">
+                        終了
+                      </span>
+                    )}
                     <span className="text-gray-500">→</span>
                     <select
                       value={s.to_status_id}
@@ -1264,6 +1458,16 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                         </option>
                       ))}
                     </select>
+                    {ito?.is_entry && (
+                      <span className="text-[10px] font-semibold text-sky-700 border border-sky-200 rounded px-1 py-0.5">
+                        開始
+                      </span>
+                    )}
+                    {ito?.is_terminal && (
+                      <span className="text-[10px] font-semibold text-emerald-800 border border-emerald-200 rounded px-1 py-0.5">
+                        終了
+                      </span>
+                    )}
                     {ir === 'same' && (
                       <span className="text-xs text-amber-700 border border-amber-300 rounded px-2 py-0.5">
                         無効（遷移前後が同一）

@@ -98,7 +98,7 @@ func PrepareStatusesWorkflowColumn(db *gorm.DB) error {
 		`).Error; err != nil {
 			return fmt.Errorf("legacy migrate: backfill workflow_id from issues: %w", err)
 		}
-		// organization_id が NULL の行（旧 sts_start 等）も Issue から辿れるなら紐づける
+		// workflow_id が NULL の行も Issue から辿れるなら紐づける
 		if err := db.Exec(`
 			UPDATE statuses s
 			SET workflow_id = sub.wfid

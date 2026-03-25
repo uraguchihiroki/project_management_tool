@@ -91,15 +91,6 @@ func pickCanonicalStatus(sts []model.Status) uuid.UUID {
 	if len(sts) == 1 {
 		return sts[0].ID
 	}
-	var keyed []model.Status
-	for _, s := range sts {
-		if s.StatusKey == "sts_start" || s.StatusKey == "sts_goal" {
-			keyed = append(keyed, s)
-		}
-	}
-	if len(keyed) == 1 {
-		return keyed[0].ID
-	}
 	sort.Slice(sts, func(i, j int) bool { return sts[i].ID.String() < sts[j].ID.String() })
 	return sts[0].ID
 }

@@ -149,7 +149,9 @@ type Status struct {
 	Name         string         `gorm:"size:50;not null" json:"name"`
 	Color        string         `gorm:"size:7;not null" json:"color"`
 	DisplayOrder int            `gorm:"column:display_order;not null;default:1" json:"display_order"`
-	StatusKey    string         `gorm:"size:50;index" json:"status_key,omitempty"` // sts_start, sts_goal。空=ユーザー定義
+	StatusKey    string         `gorm:"size:50;index" json:"status_key,omitempty"` // ユーザー定義 key（空可）
+	IsEntry      bool           `gorm:"not null;default:false" json:"is_entry"`
+	IsTerminal   bool           `gorm:"not null;default:false" json:"is_terminal"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 }
 

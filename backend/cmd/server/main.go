@@ -91,6 +91,12 @@ func main() {
 	if err := appdb.MigrateJunctionOrganizationID(db); err != nil {
 		log.Fatalf("failed migrate junction organization_id: %v", err)
 	}
+	if err := appdb.MigrateRemoveLegacyGlobalIssueStatuses(db); err != nil {
+		log.Fatalf("failed migrate remove legacy global issue statuses: %v", err)
+	}
+	if err := appdb.MigrateStatusEntryUniqueIndex(db); err != nil {
+		log.Fatalf("failed migrate status entry unique index: %v", err)
+	}
 	if err := appdb.MigrateDropGroupTables(db); err != nil {
 		log.Fatalf("failed migrate drop group tables: %v", err)
 	}

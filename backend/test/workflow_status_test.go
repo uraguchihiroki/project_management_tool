@@ -93,3 +93,79 @@ func TestWorkflowStatuses_DuplicateRejectedByService(t *testing.T) {
 	st2, _ := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/statuses", body)
 	assertStatus(t, st2, http.StatusBadRequest, "duplicate (name, display_order) should fail")
 }
+
+func TestWorkflowStatuses_EntryTerminalMarkers(t *testing.T) {
+	ts := newTestServer(t)
+	wfID := createTestWorkflow(t, ts, "entry-terminal-WF")
+
+	_, r1 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/statuses", map[string]interface{}{
+		"name": "Alpha", "color": "#111111",
+	})
+	id1 := mustGetString(t, r1, "data", "id")
+	do1 := int(mustGetFloat(t, r1, "data", "display_order"))
+	_, r2 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/statuses", map[string]interface{}{
+		"name": "Beta", "color": "#222222",
+	})
+	id2 := mustGetString(t, r2, "data", "id")
+	do2 := int(mustGetFloat(t, r2, "data", "display_order"))
+
+	t.Run("is_entry と is_terminal の同時指定は400", func(t *testing.T) {
+		st, _ := ts.req(t, "PUT", "/api/v1/statuses/"+id1, map[string]interface{}{
+			"display_order": do1,
+			"is_entry":      true,
+			"is_terminal":   true,
+		})
+		assertStatus(t, st, http.StatusBadRequest, "entry and terminal on same status")
+	})
+
+	t.Run("同一WFで開始は1件だけ保持される", func(t *testing.T) {
+		s1, _ := ts.req(t, "PUT", "/api/v1/statuses/"+id1, map[string]interface{}{
+			"display_order": do1,
+			"is_entry":      true,
+		})
+		assertStatus(t, s1, http.StatusOK, "set entry on Alpha")
+		s2, _ := ts.req(t, "PUT", "/api/v1/statuses/"+id2, map[string]interface{}{
+			"display_order": do2,
+			"is_entry":      true,
+		})
+		assertStatus(t, s2, http.StatusOK, "move entry to Beta")
+		_, list := ts.req(t, "GET", "/api/v1/workflows/"+wfID+"/statuses", nil)
+		arr := mustGetArray(t, list, "data")
+		var alphaEntry, betaEntry bool
+		for _, x := range arr {
+			m := x.(map[string]interface{})
+			id := m["id"].(string)
+			ie, ok := m["is_entry"].(bool)
+			if !ok {
+				t.Fatalf("is_entry missing or not bool for %v", m)
+			}
+			switch id {
+			case id1:
+				alphaEntry = ie
+			case id2:
+				betaEntry = ie
+			}
+		}
+		if alphaEntry || !betaEntry {
+			t.Fatalf("expected only Beta is_entry: alpha=%v beta=%v", alphaEntry, betaEntry)
+		}
+	})
+
+	t.Run("終了は複数立てられる", func(t *testing.T) {
+		_, r3 := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/statuses", map[string]interface{}{
+			"name": "Gamma", "color": "#333333",
+		})
+		id3 := mustGetString(t, r3, "data", "id")
+		do3 := int(mustGetFloat(t, r3, "data", "display_order"))
+		sa, _ := ts.req(t, "PUT", "/api/v1/statuses/"+id1, map[string]interface{}{
+			"display_order": do1,
+			"is_terminal":   true,
+		})
+		assertStatus(t, sa, http.StatusOK, "terminal Alpha")
+		sb, _ := ts.req(t, "PUT", "/api/v1/statuses/"+id3, map[string]interface{}{
+			"display_order": do3,
+			"is_terminal":   true,
+		})
+		assertStatus(t, sb, http.StatusOK, "terminal Gamma")
+	})
+}

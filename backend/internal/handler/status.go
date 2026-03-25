@@ -123,12 +123,14 @@ func (h *StatusHandler) Update(c echo.Context) error {
 		Name         string `json:"name"`
 		Color        string `json:"color"`
 		DisplayOrder int    `json:"display_order"`
+		IsEntry      *bool  `json:"is_entry"`
+		IsTerminal   *bool  `json:"is_terminal"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	status, err := h.statusService.Update(id, req.Name, req.Color, req.DisplayOrder)
+	status, err := h.statusService.Update(id, req.Name, req.Color, req.DisplayOrder, req.IsEntry, req.IsTerminal)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}

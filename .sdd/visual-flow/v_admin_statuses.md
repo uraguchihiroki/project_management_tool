@@ -16,7 +16,7 @@
 
 - `/admin/statuses` へアクセスすると `/admin/workflows` へリダイレクト
 - Issue ステータスの追加・編集は `/admin/workflows/[id]` の **同一ダイアログ** で実施（新規/編集を統一）
-- `sts_start` / `sts_goal` は編集不可
+- ワークフロー詳細では **開始（1件）・終了（複数）** をラジオ／チェックで設定し、遷移図に START / GOAL マークを表示する
 
 ## 備考
 

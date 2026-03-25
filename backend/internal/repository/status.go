@@ -18,6 +18,8 @@ type StatusRepository interface {
 	FindByStatusKeyInOrg(orgID uuid.UUID, key string) (*model.Status, error)
 	Create(status *model.Status) error
 	Update(status *model.Status) error
+	// PersistWithEntryExclusive は st を保存し、st.IsEntry が true のとき同一 workflow の他行の is_entry を false にする（単一トランザクション）。
+	PersistWithEntryExclusive(st *model.Status) error
 	Delete(id uuid.UUID) error
 	CountInUse(id uuid.UUID) (int64, error)
 	CountByWorkflowID(workflowID uint) (int64, error)
@@ -63,12 +65,7 @@ func (r *statusRepository) FindByOrganizationIDAndType(orgID uuid.UUID, statusTy
 }
 
 func (r *statusRepository) FindByOrganizationIDAndTypeExcludeSystem(orgID uuid.UUID, statusType string) ([]model.Status, error) {
-	var statuses []model.Status
-	q := r.db.Joins("JOIN workflows ON workflows.id = statuses.workflow_id").
-		Where("workflows.organization_id = ?", orgID).
-		Where("COALESCE(statuses.status_key, '') NOT IN ('sts_start','sts_goal')")
-	err := q.Order("statuses.display_order ASC, statuses.id ASC").Find(&statuses).Error
-	return statuses, err
+	return r.FindByOrganizationIDAndType(orgID, statusType)
 }
 
 func (r *statusRepository) FindByID(id uuid.UUID) (*model.Status, error) {
@@ -106,6 +103,19 @@ func (r *statusRepository) Create(status *model.Status) error {
 
 func (r *statusRepository) Update(status *model.Status) error {
 	return r.db.Save(status).Error
+}
+
+func (r *statusRepository) PersistWithEntryExclusive(st *model.Status) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if st.IsEntry {
+			if err := tx.Model(&model.Status{}).
+				Where("workflow_id = ? AND id <> ? AND deleted_at IS NULL", st.WorkflowID, st.ID).
+				Update("is_entry", false).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Save(st).Error
+	})
 }
 
 func (r *statusRepository) Delete(id uuid.UUID) error {

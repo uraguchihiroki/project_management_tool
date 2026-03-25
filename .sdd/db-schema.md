@@ -174,7 +174,9 @@ statuses（Issue 専用。常に workflow_id 必須。Workflow / workflow_transi
 ├── name
 ├── color (HEX)
 ├── order
-├── status_key (nullable) — 例: sts_start, sts_goal
+├── status_key (nullable) — 拡張用。任意のユーザーキー
+├── is_entry (BOOLEAN) — 当該ワークフローで「開始」として高々1件（部分一意インデックス・論理削除除外）
+├── is_terminal (BOOLEAN) — 「終了」として複数可
 └── deleted_at
 
 project_statuses（プロジェクト進行。Workflow は使用しない）
@@ -341,7 +343,9 @@ issue_templates
 | name | VARCHAR(50) | NOT NULL | ステータス名 |
 | color | VARCHAR(7) | NOT NULL | HEXカラー (#RRGGBB) |
 | display_order | INTEGER | NOT NULL | 表示順 |
-| status_key | VARCHAR(50) | nullable | システム用: sts_start, sts_goal。NULL=ユーザー定義 |
+| status_key | VARCHAR(50) | nullable | 拡張用の任意キー |
+| is_entry | BOOLEAN | NOT NULL, DEFAULT false | ワークフロー内で開始ステータス（高々1件・DB 部分一意） |
+| is_terminal | BOOLEAN | NOT NULL, DEFAULT false | 終了ステータス（複数可）。`is_entry` と同時 true は **Service で拒否**（DB CHECK は張らない） |
 
 > **重複防止**: 同一 `workflow_id` で、論理削除されていない行について `(name, display_order)` の一意は **Service** で保証する。起動時 `MigrateStatusDedupe`（`internal/db/status_integrity.go`）でレガシー重複行を畳む。旧 `type` 列は `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）で除去する。レガシー列名 `order` は `MigrateStatusOrderToDisplayOrder` で `display_order` に寄せる。必要に応じ **非一意** の複合インデックスで検索を補助してよい。
 >

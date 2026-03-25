@@ -107,6 +107,12 @@ func newTestServer(t *testing.T) *testServer {
 	if err := appdb.MigrateJunctionOrganizationID(db); err != nil {
 		t.Fatalf("failed migrate junction organization_id: %v", err)
 	}
+	if err := appdb.MigrateRemoveLegacyGlobalIssueStatuses(db); err != nil {
+		t.Fatalf("failed migrate remove legacy global issue statuses: %v", err)
+	}
+	if err := appdb.MigrateStatusEntryUniqueIndex(db); err != nil {
+		t.Fatalf("failed migrate status entry unique index: %v", err)
+	}
 	if err := appdb.MigrateDropGroupTables(db); err != nil {
 		t.Fatalf("failed migrate drop group tables: %v", err)
 	}
