@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/uraguchihiroki/project_management_tool/internal/model"
 )
 
 func TestGroup_CRUD_and_IssueGroupIDs(t *testing.T) {
@@ -32,6 +36,13 @@ func TestGroup_CRUD_and_IssueGroupIDs(t *testing.T) {
 		"user_ids": []string{ownerID},
 	})
 	assertStatus(t, st, http.StatusOK, "PUT group members")
+	var ug model.UserGroup
+	if err := ts.db.Where("group_id = ?", groupID).First(&ug).Error; err != nil {
+		t.Fatalf("load user_group: %v", err)
+	}
+	if ug.OrganizationID != uuid.MustParse(testOrgID) {
+		t.Fatalf("user_groups.organization_id = %s, want %s", ug.OrganizationID, testOrgID)
+	}
 
 	// Issue 作成時に group_ids
 	st, issueResp := ts.req(t, "POST", fmt.Sprintf("/api/v1/projects/%s/issues", projectID), map[string]interface{}{
@@ -41,6 +52,13 @@ func TestGroup_CRUD_and_IssueGroupIDs(t *testing.T) {
 		"group_ids":   []string{groupID},
 	})
 	assertStatus(t, st, http.StatusCreated, "create issue with groups")
+	var ig model.IssueGroup
+	if err := ts.db.Where("group_id = ?", groupID).First(&ig).Error; err != nil {
+		t.Fatalf("load issue_group: %v", err)
+	}
+	if ig.OrganizationID != uuid.MustParse(testOrgID) {
+		t.Fatalf("issue_groups.organization_id = %s, want %s", ig.OrganizationID, testOrgID)
+	}
 	num := mustGetFloat(t, issueResp, "data", "number")
 
 	st, getIssue := ts.req(t, "GET", fmt.Sprintf("/api/v1/projects/%s/issues/%d", projectID, int(num)), nil)
@@ -103,4 +121,25 @@ func TestGroup_Get_and_UserGroups(t *testing.T) {
 	if len(ugArr) != 1 {
 		t.Fatalf("want 1 user group, got %d", len(ugArr))
 	}
+
+	t.Run("他組織ユーザーはグループメンバーに追加できない", func(t *testing.T) {
+		_, orgResp := ts.req(t, "POST", "/api/v1/organizations", map[string]interface{}{"name": "別組織"})
+		otherOrgID := mustGetString(t, orgResp, "data", "id")
+		otherUserID := uuid.New()
+		if err := ts.db.Create(&model.User{
+			ID:             otherUserID,
+			Key:            otherUserID.String(),
+			OrganizationID: uuid.MustParse(otherOrgID),
+			Name:           "other-user",
+			Email:          "other-group-user@example.com",
+			JoinedAt:       time.Now(),
+			CreatedAt:      time.Now(),
+		}).Error; err != nil {
+			t.Fatalf("create other-org user: %v", err)
+		}
+		st, _ := ts.req(t, "PUT", "/api/v1/groups/"+groupID+"/members", map[string]interface{}{
+			"user_ids": []string{otherUserID.String()},
+		})
+		assertStatus(t, st, http.StatusBadRequest, "put members with cross-org user")
+	})
 }

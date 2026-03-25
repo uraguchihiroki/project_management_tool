@@ -137,6 +137,9 @@ func main() {
 	if err := appdb.MigrateStatusDedupe(db); err != nil {
 		log.Fatalf("failed to migrate status dedupe: %v", err)
 	}
+	if err := appdb.MigrateJunctionOrganizationID(db); err != nil {
+		log.Fatalf("failed migrate junction organization_id: %v", err)
+	}
 
 	orgRepo := repository.NewOrganizationRepository(db)
 	statusRepo := repository.NewStatusRepository(db)

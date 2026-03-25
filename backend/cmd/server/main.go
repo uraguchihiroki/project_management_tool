@@ -87,6 +87,9 @@ func main() {
 	if err := appdb.MigrateStatusDedupe(db); err != nil {
 		log.Fatalf("failed to migrate status dedupe: %v", err)
 	}
+	if err := appdb.MigrateJunctionOrganizationID(db); err != nil {
+		log.Fatalf("failed migrate junction organization_id: %v", err)
+	}
 
 	userRepo := repository.NewUserRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
@@ -122,7 +125,7 @@ func main() {
 	workflowSvc := service.NewWorkflowService(workflowRepo)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
 	statusSvc := service.NewStatusService(statusRepo, workflowRepo, transitionRepo)
-	groupSvc := service.NewGroupService(groupRepo, userGroupRepo)
+	groupSvc := service.NewGroupService(groupRepo, userGroupRepo, userRepo)
 
 	userHandler := handler.NewUserHandler(userSvc)
 	projectHandler := handler.NewProjectHandler(projectSvc, issueWFProv)

@@ -65,6 +65,7 @@
 | PUT | /statuses/:id | todo | |
 | DELETE | /statuses/:id | todo | |
 | POST | /projects | **done** | `project_tenant_test.go`（他 org_id は 403） |
+| POST | /projects/:id/default-issue-workflow | todo | |
 | PUT | /projects/reorder | todo | |
 | GET | /projects/:id | **done** | `project_tenant_test.go`（他 org 404） |
 | PUT | /projects/:id | **done** | 同上 |

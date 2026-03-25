@@ -92,7 +92,11 @@ func (r *roleRepository) Delete(id uint) error {
 
 func (r *roleRepository) AssignRolesToUser(userID uuid.UUID, roleIDs []uint) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("user_id = ?", userID).Delete(&model.UserRole{}).Error; err != nil {
+		var u model.User
+		if err := tx.First(&u, "id = ?", userID).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ? AND organization_id = ?", userID, u.OrganizationID).Delete(&model.UserRole{}).Error; err != nil {
 			return err
 		}
 		seen := map[uint]struct{}{}
@@ -102,10 +106,11 @@ func (r *roleRepository) AssignRolesToUser(userID uuid.UUID, roleIDs []uint) err
 			}
 			seen[roleID] = struct{}{}
 			ur := &model.UserRole{
-				ID:     uuid.New(),
-				UserID: userID,
-				RoleID: roleID,
-				Key:    fmt.Sprintf("%s-%d", userID.String(), roleID),
+				ID:             uuid.New(),
+				OrganizationID: u.OrganizationID,
+				UserID:         userID,
+				RoleID:         roleID,
+				Key:            fmt.Sprintf("%s-%d", userID.String(), roleID),
 			}
 			if err := tx.Create(ur).Error; err != nil {
 				return err

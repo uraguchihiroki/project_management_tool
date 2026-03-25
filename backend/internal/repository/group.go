@@ -88,7 +88,11 @@ func NewUserGroupRepository(db *gorm.DB) UserGroupRepository {
 
 func (r *userGroupRepository) ReplaceMembers(groupID uuid.UUID, userIDs []uuid.UUID) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("group_id = ?", groupID).Delete(&model.UserGroup{}).Error; err != nil {
+		var g model.Group
+		if err := tx.First(&g, "id = ?", groupID).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("group_id = ? AND organization_id = ?", groupID, g.OrganizationID).Delete(&model.UserGroup{}).Error; err != nil {
 			return err
 		}
 		seen := map[uuid.UUID]struct{}{}
@@ -98,10 +102,11 @@ func (r *userGroupRepository) ReplaceMembers(groupID uuid.UUID, userIDs []uuid.U
 			}
 			seen[uid] = struct{}{}
 			ug := model.UserGroup{
-				ID:      uuid.New(),
-				UserID:  uid,
-				GroupID: groupID,
-				Key:     keygen.UUIDKey(uuid.New()),
+				ID:             uuid.New(),
+				OrganizationID: g.OrganizationID,
+				UserID:         uid,
+				GroupID:        groupID,
+				Key:            keygen.UUIDKey(uuid.New()),
 			}
 			if err := tx.Create(&ug).Error; err != nil {
 				return err
@@ -132,7 +137,7 @@ func (r *userGroupRepository) IsMember(userID, groupID uuid.UUID) bool {
 func (r *userGroupRepository) ListGroupsByUser(userID uuid.UUID) ([]model.Group, error) {
 	var groups []model.Group
 	err := r.db.
-		Joins("JOIN user_groups ON user_groups.group_id = groups.id AND user_groups.deleted_at IS NULL").
+		Joins("JOIN user_groups ON user_groups.group_id = groups.id AND user_groups.organization_id = groups.organization_id AND user_groups.deleted_at IS NULL").
 		Where("user_groups.user_id = ?", userID).
 		Order("groups.name ASC").
 		Find(&groups).Error
@@ -157,7 +162,11 @@ func NewIssueGroupRepository(db *gorm.DB) IssueGroupRepository {
 
 func (r *issueGroupRepository) ReplaceForIssue(issueID uuid.UUID, groupIDs []uuid.UUID) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("issue_id = ?", issueID).Delete(&model.IssueGroup{}).Error; err != nil {
+		var issue model.Issue
+		if err := tx.First(&issue, "id = ?", issueID).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("issue_id = ? AND organization_id = ?", issueID, issue.OrganizationID).Delete(&model.IssueGroup{}).Error; err != nil {
 			return err
 		}
 		seen := map[uuid.UUID]struct{}{}
@@ -167,10 +176,11 @@ func (r *issueGroupRepository) ReplaceForIssue(issueID uuid.UUID, groupIDs []uui
 			}
 			seen[gid] = struct{}{}
 			ig := model.IssueGroup{
-				ID:      uuid.New(),
-				IssueID: issueID,
-				GroupID: gid,
-				Key:     keygen.UUIDKey(uuid.New()),
+				ID:             uuid.New(),
+				OrganizationID: issue.OrganizationID,
+				IssueID:        issueID,
+				GroupID:        gid,
+				Key:            keygen.UUIDKey(uuid.New()),
 			}
 			if err := tx.Create(&ig).Error; err != nil {
 				return err

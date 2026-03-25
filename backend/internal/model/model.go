@@ -70,11 +70,12 @@ type User struct {
 }
 
 type UserRole struct {
-	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	UserID    uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_roles_pair,priority:1" json:"user_id"`
-	RoleID    uint           `gorm:"not null;index:idx_user_roles_pair,priority:2" json:"role_id"`
-	Key       string         `gorm:"size:255;not null" json:"key"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_roles_org_pair,priority:1" json:"organization_id"`
+	UserID         uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_roles_org_pair,priority:2" json:"user_id"`
+	RoleID         uint           `gorm:"not null;index:idx_user_roles_org_pair,priority:3" json:"role_id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (UserRole) TableName() string { return "user_roles" }
@@ -174,23 +175,25 @@ type Group struct {
 
 // UserGroup はユーザー ↔ Group 多対多
 type UserGroup struct {
-	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	UserID    uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_groups_pair,priority:1" json:"user_id"`
-	GroupID   uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_groups_pair,priority:2" json:"group_id"`
-	Key       string         `gorm:"size:255;not null" json:"key"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_groups_org_pair,priority:1" json:"organization_id"`
+	UserID         uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_groups_org_pair,priority:2" json:"user_id"`
+	GroupID        uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_groups_org_pair,priority:3" json:"group_id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (UserGroup) TableName() string { return "user_groups" }
 
 // IssueGroup は Issue ↔ Group 多対多
 type IssueGroup struct {
-	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	IssueID   uuid.UUID      `gorm:"type:uuid;not null;index:idx_issue_groups_pair,priority:1" json:"issue_id"`
-	GroupID   uuid.UUID      `gorm:"type:uuid;not null;index:idx_issue_groups_pair,priority:2" json:"group_id"`
-	Key       string         `gorm:"size:255;not null" json:"key"`
-	Role      *string        `gorm:"size:50" json:"role,omitempty"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index:idx_issue_groups_org_pair,priority:1" json:"organization_id"`
+	IssueID        uuid.UUID      `gorm:"type:uuid;not null;index:idx_issue_groups_org_pair,priority:2" json:"issue_id"`
+	GroupID        uuid.UUID      `gorm:"type:uuid;not null;index:idx_issue_groups_org_pair,priority:3" json:"group_id"`
+	Key            string         `gorm:"size:255;not null" json:"key"`
+	Role           *string        `gorm:"size:50" json:"role,omitempty"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (IssueGroup) TableName() string { return "issue_groups" }

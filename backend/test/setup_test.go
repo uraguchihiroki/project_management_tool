@@ -103,6 +103,9 @@ func newTestServer(t *testing.T) *testServer {
 	if err := appdb.MigrateStatusDedupe(db); err != nil {
 		t.Fatalf("failed to migrate status dedupe: %v", err)
 	}
+	if err := appdb.MigrateJunctionOrganizationID(db); err != nil {
+		t.Fatalf("failed migrate junction organization_id: %v", err)
+	}
 
 	frsOrg := model.Organization{
 		ID:        uuid.MustParse(testOrgID),
@@ -156,7 +159,7 @@ func newTestServer(t *testing.T) *testServer {
 	workflowSvc := service.NewWorkflowService(workflowRepo)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
 	statusSvc := service.NewStatusService(statusRepo, workflowRepo, transitionRepo)
-	groupSvc := service.NewGroupService(groupRepo, userGroupRepo)
+	groupSvc := service.NewGroupService(groupRepo, userGroupRepo, userRepo)
 
 	userH := handler.NewUserHandler(userSvc)
 	projectH := handler.NewProjectHandler(projectSvc, issueWFProv)

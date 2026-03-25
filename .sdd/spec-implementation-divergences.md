@@ -37,5 +37,6 @@
 |------|------|------|
 | マイグレーション | `status_integrity` / `migrate_issue_project_status` の物理 DELETE は **移行専用**（業務の論理削除と別物）。 | done |
 | 結合テーブル | `AssignRolesToUser` / `ReplaceMembers` / `ReplaceForIssue` / 部署の `SetUserDepartments` は **論理削除＋新行 Create**（代理 PK により `Unscoped` 不要）。重複 ID は入力側で除去。 | done |
+| organization_id 絶対化 | 結合テーブル `user_roles` / `user_groups` / `issue_groups` に `organization_id` を保持し、作成時に埋める。既存データは起動時マイグレーション `MigrateJunctionOrganizationID` で backfill。 | done |
 | 許可遷移 | **デフォルト Issue ワークフロー**（未着手・進行・完了の 3 列）を作る経路（`CreateOrgIssueWorkflowWithDefaultStatuses` の呼び出し元・`IssueWorkflowProvisioner`・組織シードなど）では、`workflow_transitions` に **4 本**を自動投入（未着手↔進行・進行↔完了）。**`project_status_transitions`** および **上記以外の Issue ワークフロー**では作成時に自動投入しない（`POST .../transitions` 等）。 | done |
 | Project と Issue WF | **`ProjectService.Create` は Issue ワークフローを作らない**。`default_workflow_id` は `IssueWorkflowProvisioner` / `POST /projects/:id/default-issue-workflow` / `IssueService.Create` 前段の lazy 確保で紐付ける。 | done |

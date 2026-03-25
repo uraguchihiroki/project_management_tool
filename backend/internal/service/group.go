@@ -24,10 +24,15 @@ type GroupService interface {
 type groupService struct {
 	groupRepo repository.GroupRepository
 	ugRepo    repository.UserGroupRepository
+	userRepo  repository.UserRepository
 }
 
-func NewGroupService(groupRepo repository.GroupRepository, ugRepo repository.UserGroupRepository) GroupService {
-	return &groupService{groupRepo: groupRepo, ugRepo: ugRepo}
+func NewGroupService(
+	groupRepo repository.GroupRepository,
+	ugRepo repository.UserGroupRepository,
+	userRepo repository.UserRepository,
+) GroupService {
+	return &groupService{groupRepo: groupRepo, ugRepo: ugRepo, userRepo: userRepo}
 }
 
 func (s *groupService) List(orgID uuid.UUID, kind *string) ([]model.Group, error) {
@@ -77,6 +82,19 @@ func (s *groupService) Delete(id uuid.UUID) error {
 }
 
 func (s *groupService) ReplaceMembers(groupID uuid.UUID, userIDs []uuid.UUID) error {
+	g, err := s.groupRepo.FindByID(groupID)
+	if err != nil {
+		return err
+	}
+	for _, uid := range userIDs {
+		u, err := s.userRepo.FindByID(uid)
+		if err != nil {
+			return fmt.Errorf("user not found: %w", err)
+		}
+		if u.OrganizationID != g.OrganizationID {
+			return fmt.Errorf("user %s does not belong to group organization", uid)
+		}
+	}
 	return s.ugRepo.ReplaceMembers(groupID, userIDs)
 }
 
