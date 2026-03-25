@@ -5,6 +5,7 @@ import { use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import dagre from 'dagre'
 import { ChevronLeft, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { SortableDndProvider, SortableList, SortableTbody, DragHandle } from '@/components/SortableList'
 import { useAuth } from '@/context/AuthContext'
@@ -44,6 +45,7 @@ type TransitionDiagramEdge = {
   id: string
   from: string
   to: string
+  invalid: boolean
 }
 
 export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -273,37 +275,120 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   }
 
   const statusesByOrder = [...statuses].sort((a, b) => a.display_order - b.display_order)
+  const visibleStatuses = statusesByOrder.filter(
+    (s) => s.status_key !== 'sts_start' && s.status_key !== 'sts_goal'
+  )
   const transitionDiagram = useMemo(() => {
     const nodeWidth = 170
     const nodeHeight = 54
-    const horizontalGap = 72
     const paddingX = 36
     const paddingY = 30
-    const width = Math.max(
-      420,
-      statusesByOrder.length > 0
-        ? paddingX * 2 + statusesByOrder.length * nodeWidth + Math.max(0, statusesByOrder.length - 1) * horizontalGap
-        : 420
-    )
-    const height = 170
-    const centerY = Math.round(height / 2 - nodeHeight / 2)
+    const minWidth = 420
+    const minHeight = 170
 
-    const nodes: TransitionDiagramNode[] = statusesByOrder.map((s, idx) => ({
+    const persistedEdges: TransitionDiagramEdge[] = transitions.map((t) => ({
+      id: `persisted-${t.id}`,
+      from: t.from_status_id,
+      to: t.to_status_id,
+      invalid: false,
+    }))
+    const invalidEdges: TransitionDiagramEdge[] = invalidTransitionStraps.map((s) => ({
+      id: `invalid-${s.clientId}`,
+      from: s.from_status_id,
+      to: s.to_status_id,
+      invalid: true,
+    }))
+    const edgeCandidates = [...persistedEdges, ...invalidEdges]
+
+    const visibleNodeIds = new Set(visibleStatuses.map((s) => s.id))
+    const edges = edgeCandidates.filter((e) => visibleNodeIds.has(e.from) && visibleNodeIds.has(e.to))
+
+    const degreeById = new Map<string, number>()
+    for (const s of visibleStatuses) degreeById.set(s.id, 0)
+    for (const e of edges) {
+      degreeById.set(e.from, (degreeById.get(e.from) ?? 0) + 1)
+      degreeById.set(e.to, (degreeById.get(e.to) ?? 0) + 1)
+    }
+
+    const connectedStatuses = visibleStatuses.filter((s) => (degreeById.get(s.id) ?? 0) > 0)
+    const disconnectedStatuses = visibleStatuses.filter((s) => (degreeById.get(s.id) ?? 0) === 0)
+
+    const graph = new dagre.graphlib.Graph()
+    graph.setGraph({
+      rankdir: 'LR',
+      ranksep: 100,
+      nodesep: 52,
+      marginx: paddingX,
+      marginy: paddingY,
+    })
+    graph.setDefaultEdgeLabel(() => ({}))
+
+    for (const s of connectedStatuses) {
+      graph.setNode(s.id, { width: nodeWidth, height: nodeHeight })
+    }
+    for (const e of edges) {
+      if (!graph.hasNode(e.from) || !graph.hasNode(e.to)) continue
+      graph.setEdge(e.from, e.to)
+    }
+    if (connectedStatuses.length > 0) {
+      dagre.layout(graph)
+    }
+
+    const connectedNodes: TransitionDiagramNode[] = connectedStatuses.map((s) => {
+      const laid = graph.node(s.id) as { x: number; y: number } | undefined
+      const defaultX = paddingX + nodeWidth / 2
+      const defaultY = paddingY + nodeHeight / 2
+      const centerX = laid?.x ?? defaultX
+      const centerY = laid?.y ?? defaultY
+      return {
+        id: s.id,
+        name: `${s.display_order}. ${s.name}`,
+        color: s.color,
+        x: Math.round(centerX - nodeWidth / 2),
+        y: Math.round(centerY - nodeHeight / 2),
+      }
+    })
+
+    const connectedMaxX =
+      connectedNodes.length > 0
+        ? Math.max(...connectedNodes.map((n) => n.x + nodeWidth))
+        : paddingX + nodeWidth
+    const disconnectedStartX = connectedMaxX + 120
+    const disconnectedNodes: TransitionDiagramNode[] = disconnectedStatuses.map((s, idx) => ({
       id: s.id,
       name: `${s.display_order}. ${s.name}`,
       color: s.color,
-      x: paddingX + idx * (nodeWidth + horizontalGap),
-      y: centerY,
+      x: disconnectedStartX,
+      y: paddingY + idx * (nodeHeight + 22),
     }))
-    const nodeIndex = new Map(nodes.map((n, idx) => [n.id, idx]))
 
-    const edges: TransitionDiagramEdge[] = transitions
-      .filter((t) => nodeIndex.has(t.from_status_id) && nodeIndex.has(t.to_status_id))
-      .map((t) => ({ id: `persisted-${t.id}`, from: t.from_status_id, to: t.to_status_id }))
+    const nodes = [...connectedNodes, ...disconnectedNodes]
+    const nodeById = new Map(nodes.map((n) => [n.id, n]))
+    const drawnEdges = edges.filter((e) => nodeById.has(e.from) && nodeById.has(e.to))
 
-    const invalidEdges: TransitionDiagramEdge[] = invalidTransitionStraps
-      .filter((s) => nodeIndex.has(s.from_status_id) && nodeIndex.has(s.to_status_id))
-      .map((s) => ({ id: `invalid-${s.clientId}`, from: s.from_status_id, to: s.to_status_id }))
+    // Curves can extend beyond node bounds. Reserve vertical padding and shift the whole drawing down if needed.
+    const hasLoop = drawnEdges.some((e) => e.from === e.to)
+    const hasReverseHorizontal = drawnEdges.some((e) => {
+      const f = nodeById.get(e.from)
+      const t = nodeById.get(e.to)
+      if (!f || !t) return false
+      const fromCx = f.x + nodeWidth / 2
+      const toCx = t.x + nodeWidth / 2
+      return toCx < fromCx
+    })
+    const extraTop = (hasReverseHorizontal ? 120 : 0) + (hasLoop ? 120 : 0) + 36
+    const extraBottom = (hasReverseHorizontal ? 72 : 0) + 36
+
+    for (const n of nodes) n.y += extraTop
+
+    const width = Math.max(
+      minWidth,
+      nodes.length > 0 ? Math.max(...nodes.map((n) => n.x + nodeWidth)) + paddingX : minWidth
+    )
+    const height = Math.max(
+      minHeight,
+      nodes.length > 0 ? Math.max(...nodes.map((n) => n.y + nodeHeight)) + paddingY + extraBottom : minHeight
+    )
 
     return {
       nodeWidth,
@@ -311,16 +396,15 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       width,
       height,
       nodes,
-      nodeIndex,
-      edges,
-      invalidEdges,
+      nodeById,
+      edges: drawnEdges,
     }
-  }, [statusesByOrder, transitions, invalidTransitionStraps])
+  }, [visibleStatuses, transitions, invalidTransitionStraps])
 
   const statusReferencedInTransition = (statusId: string) =>
     transitions.some((t) => t.from_status_id === statusId || t.to_status_id === statusId)
-  const initialFromStatusId = statusesByOrder[0]?.id
-  const initialToStatusId = statusesByOrder[1]?.id
+  const initialFromStatusId = visibleStatuses[0]?.id
+  const initialToStatusId = visibleStatuses[1]?.id
 
   const transitionReasonForPersistedRow = (
     rowId: number,
@@ -605,9 +689,9 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             <button
               type="button"
               onClick={() => void addTransitionStrap()}
-              disabled={addingTransition || statusesByOrder.length < 2}
+              disabled={addingTransition || visibleStatuses.length < 2}
               title={
-                statusesByOrder.length < 2
+                visibleStatuses.length < 2
                   ? 'ステータスが2つ以上あるときのみ遷移を追加できます'
                   : undefined
               }
@@ -625,10 +709,10 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             {(statusesLoading || transitionsLoading) && (
               <p className="mt-3 text-sm text-gray-500">遷移図を読み込み中...</p>
             )}
-            {!statusesLoading && !transitionsLoading && statusesByOrder.length < 2 && (
+            {!statusesLoading && !transitionsLoading && visibleStatuses.length < 2 && (
               <p className="mt-3 text-sm text-gray-500">ステータスが2つ以上あるときに遷移図を表示できます。</p>
             )}
-            {!statusesLoading && !transitionsLoading && statusesByOrder.length >= 2 && (
+            {!statusesLoading && !transitionsLoading && visibleStatuses.length >= 2 && (
               <div className="mt-3 overflow-x-auto">
                 <svg
                   width="100%"
@@ -664,45 +748,108 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                     </marker>
                   </defs>
 
-                  {transitionDiagram.edges.map((edge) => {
-                    const from = transitionDiagram.nodes[transitionDiagram.nodeIndex.get(edge.from) ?? -1]
-                    const to = transitionDiagram.nodes[transitionDiagram.nodeIndex.get(edge.to) ?? -1]
+                  {transitionDiagram.edges.map((edge, idx) => {
+                    const from = transitionDiagram.nodeById.get(edge.from)
+                    const to = transitionDiagram.nodeById.get(edge.to)
                     if (!from || !to) return null
-                    const startX = from.x + transitionDiagram.nodeWidth
-                    const endX = to.x
-                    const y = from.y + transitionDiagram.nodeHeight / 2
-                    return (
-                      <line
-                        key={edge.id}
-                        x1={startX}
-                        y1={y}
-                        x2={endX}
-                        y2={to.y + transitionDiagram.nodeHeight / 2}
-                        stroke="#94A3B8"
-                        strokeWidth="2"
-                        markerEnd="url(#transition-arrow)"
-                      />
-                    )
-                  })}
 
-                  {transitionDiagram.invalidEdges.map((edge) => {
-                    const from = transitionDiagram.nodes[transitionDiagram.nodeIndex.get(edge.from) ?? -1]
-                    const to = transitionDiagram.nodes[transitionDiagram.nodeIndex.get(edge.to) ?? -1]
-                    if (!from || !to) return null
-                    const startX = from.x + transitionDiagram.nodeWidth
-                    const endX = to.x
-                    const y = from.y + transitionDiagram.nodeHeight / 2
+                    const samePair = transitionDiagram.edges.filter(
+                      (e) =>
+                        (e.from === edge.from && e.to === edge.to) ||
+                        (e.from === edge.to && e.to === edge.from)
+                    )
+                    const samePairIndex = samePair.findIndex((e) => e.id === edge.id)
+                    const pairOffset = (samePairIndex - (samePair.length - 1) / 2) * 18
+
+                    let path = ''
+                    if (edge.from === edge.to) {
+                      const startX = from.x + transitionDiagram.nodeWidth
+                      const startY = from.y + transitionDiagram.nodeHeight / 2
+                      const loopLift = 42 + idx % 3 * 10
+                      path = `M ${startX} ${startY} C ${startX + 42} ${startY - loopLift}, ${startX - 42} ${startY - loopLift}, ${startX} ${startY}`
+                    } else {
+                      const fromCx = from.x + transitionDiagram.nodeWidth / 2
+                      const fromCy = from.y + transitionDiagram.nodeHeight / 2
+                      const toCx = to.x + transitionDiagram.nodeWidth / 2
+                      const toCy = to.y + transitionDiagram.nodeHeight / 2
+                      const centerDx = toCx - fromCx
+                      const centerDy = toCy - fromCy
+
+                      const horizontalDominant = Math.abs(centerDx) >= Math.abs(centerDy)
+                      const fromCandidates = [
+                        { x: from.x + transitionDiagram.nodeWidth, y: fromCy, side: 'right' as const },
+                        { x: from.x, y: fromCy, side: 'left' as const },
+                        { x: fromCx, y: from.y, side: 'top' as const },
+                        { x: fromCx, y: from.y + transitionDiagram.nodeHeight, side: 'bottom' as const },
+                      ]
+                      const toCandidates = [
+                        { x: to.x + transitionDiagram.nodeWidth, y: toCy, side: 'right' as const },
+                        { x: to.x, y: toCy, side: 'left' as const },
+                        { x: toCx, y: to.y, side: 'top' as const },
+                        { x: toCx, y: to.y + transitionDiagram.nodeHeight, side: 'bottom' as const },
+                      ]
+
+                      let best = {
+                        sx: fromCandidates[0].x,
+                        sy: fromCandidates[0].y,
+                        ex: toCandidates[0].x,
+                        ey: toCandidates[0].y,
+                        score: Number.POSITIVE_INFINITY,
+                      }
+                      for (const s of fromCandidates) {
+                        for (const t of toCandidates) {
+                          const dx = t.x - s.x
+                          const dy = t.y - s.y
+                          const d2 = dx * dx + dy * dy
+                          const sIsVertical = s.side === 'top' || s.side === 'bottom'
+                          const tIsVertical = t.side === 'top' || t.side === 'bottom'
+                          const orientationPenalty =
+                            (horizontalDominant && (sIsVertical || tIsVertical)) ||
+                            (!horizontalDominant && (!sIsVertical || !tIsVertical))
+                              ? 8000
+                              : 0
+                          const score = d2 + orientationPenalty
+                          if (score < best.score) best = { sx: s.x, sy: s.y, ex: t.x, ey: t.y, score }
+                        }
+                      }
+
+                      const startX = best.sx
+                      const startY = best.sy
+                      const endX = best.ex
+                      const endY = best.ey
+
+                      const dx = endX - startX
+                      const dy = endY - startY
+                      const dist = Math.max(1, Math.hypot(dx, dy))
+                      const ux = dx / dist
+                      const uy = dy / dist
+                      const nx = -uy
+                      const ny = ux
+                      const tension = Math.min(90, Math.max(40, dist * 0.3))
+
+                      // Keep bidirectional and reverse edges separated without huge “rainbow” arcs.
+                      const reverseHorizontal = horizontalDominant && centerDx < 0
+                      const baseNudge = pairOffset === 0 ? 14 : pairOffset
+                      const reverseNudge = reverseHorizontal ? -48 : 0
+                      const offsetX = nx * baseNudge
+                      const offsetY = ny * baseNudge + reverseNudge
+
+                      const c1x = startX + ux * tension + offsetX
+                      const c1y = startY + uy * tension + offsetY
+                      const c2x = endX - ux * tension + offsetX
+                      const c2y = endY - uy * tension + offsetY
+                      path = `M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`
+                    }
+
                     return (
-                      <line
+                      <path
                         key={edge.id}
-                        x1={startX}
-                        y1={y}
-                        x2={endX}
-                        y2={to.y + transitionDiagram.nodeHeight / 2}
-                        stroke="#D97706"
+                        d={path}
+                        fill="none"
+                        stroke={edge.invalid ? '#D97706' : '#94A3B8'}
                         strokeWidth="2"
-                        strokeDasharray="5 4"
-                        markerEnd="url(#transition-arrow-invalid)"
+                        strokeDasharray={edge.invalid ? '5 4' : undefined}
+                        markerEnd={edge.invalid ? 'url(#transition-arrow-invalid)' : 'url(#transition-arrow)'}
                       />
                     )
                   })}
@@ -732,10 +879,10 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                     </g>
                   ))}
                 </svg>
-                {transitionDiagram.edges.length === 0 && transitionDiagram.invalidEdges.length === 0 && (
+                {transitionDiagram.edges.length === 0 && (
                   <p className="mt-2 text-xs text-gray-500">遷移はまだありません。下の「ストラップを追加」から作成できます。</p>
                 )}
-                {transitionDiagram.invalidEdges.length > 0 && (
+                {transitionDiagram.edges.some((e) => e.invalid) && (
                   <p className="mt-2 text-xs text-amber-700">
                     破線の矢印は未保存の無効な遷移候補（同一ステータスまたは重複）です。
                   </p>
@@ -752,7 +899,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         {!orgMismatch && (statusesLoading || transitionsLoading) && (
           <p className="text-sm text-gray-500">遷移設定を読み込み中...</p>
         )}
-        {!orgMismatch && !statusesLoading && !transitionsLoading && statusesByOrder.length < 2 && (
+        {!orgMismatch && !statusesLoading && !transitionsLoading && visibleStatuses.length < 2 && (
           <p className="text-sm text-gray-500">
             ステータスが2つ以上あるときのみ遷移を追加できます。まず「ステータスを追加」でステータスを用意してください。
           </p>
@@ -760,7 +907,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         {!orgMismatch &&
           !transitionsLoading &&
           transitions.length === 0 &&
-          statusesByOrder.length >= 2 && (
+          visibleStatuses.length >= 2 && (
           <p className="text-sm text-gray-500">遷移はまだありません。「ストラップを追加」から作成できます。</p>
         )}
         {!orgMismatch && !transitionsLoading && transitions.length > 0 && (
@@ -794,7 +941,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                         disabled={busy || transitionStrapPending}
                         className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
                       >
-                        {statusesByOrder.map((s) => (
+                        {visibleStatuses.map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.display_order}. {s.name}
                           </option>
@@ -807,7 +954,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                         disabled={busy || transitionStrapPending}
                         className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
                       >
-                        {statusesByOrder.map((s) => (
+                        {visibleStatuses.map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.display_order}. {s.name}
                           </option>
@@ -850,7 +997,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                     disabled={transitionStrapPending}
                     className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
                   >
-                    {statusesByOrder.map((st) => (
+                    {visibleStatuses.map((st) => (
                       <option key={st.id} value={st.id}>
                         {st.display_order}. {st.name}
                       </option>
@@ -863,7 +1010,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                     disabled={transitionStrapPending}
                     className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
                   >
-                    {statusesByOrder.map((st) => (
+                    {visibleStatuses.map((st) => (
                       <option key={st.id} value={st.id}>
                         {st.display_order}. {st.name}
                       </option>
@@ -911,7 +1058,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       disabled={transitionStrapPending}
                       className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
                     >
-                      {statusesByOrder.map((st) => (
+                      {visibleStatuses.map((st) => (
                         <option key={st.id} value={st.id}>
                           {st.display_order}. {st.name}
                         </option>
@@ -924,7 +1071,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       disabled={transitionStrapPending}
                       className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
                     >
-                      {statusesByOrder.map((st) => (
+                      {visibleStatuses.map((st) => (
                         <option key={st.id} value={st.id}>
                           {st.display_order}. {st.name}
                         </option>
@@ -981,13 +1128,13 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         {!orgMismatch && statusesLoading && (
           <p className="text-sm text-gray-500">ステータスを読み込み中...</p>
         )}
-        {!orgMismatch && !statusesLoading && statuses.length === 0 && (
+        {!orgMismatch && !statusesLoading && visibleStatuses.length === 0 && (
           <p className="text-sm text-gray-500">まだステータスがありません。「ステータスを追加」から作成できます。</p>
         )}
-        {!orgMismatch && !statusesLoading && statuses.length > 0 && (
+        {!orgMismatch && !statusesLoading && visibleStatuses.length > 0 && (
           <div className="overflow-x-auto rounded-lg border border-gray-200">
             <SortableDndProvider
-              items={statusesByOrder}
+              items={visibleStatuses}
               itemId={(s) => s.id}
               onReorder={(ids) => reorderStatusesMutation.mutate(ids)}
               disabled={
@@ -1007,7 +1154,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   </tr>
                 </thead>
                 <SortableTbody
-                  items={statusesByOrder}
+                  items={visibleStatuses}
                   itemId={(s) => s.id}
                   disabled={
                     reorderStatusesMutation.isPending ||
@@ -1036,49 +1183,45 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                         <span className="ml-2 text-gray-600 font-mono text-xs">{s.color}</span>
                       </td>
                       <td className="px-3 py-2">
-                        {s.status_key === 'sts_start' || s.status_key === 'sts_goal' ? (
-                          <span className="text-xs text-gray-400">システム</span>
-                        ) : (
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openEditStatusDialog(s)}
-                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                              title="編集"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={
-                                deleteStatusMutation.isPending ||
-                                atStatusDeleteFloor ||
-                                statusReferencedInTransition(s.id)
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEditStatusDialog(s)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            title="編集"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              deleteStatusMutation.isPending ||
+                              atStatusDeleteFloor ||
+                              statusReferencedInTransition(s.id)
+                            }
+                            onClick={() => {
+                              if (statusReferencedInTransition(s.id)) {
+                                window.alert(
+                                  'このステータスは許可遷移で使用されているため削除できません'
+                                )
+                                return
                               }
-                              onClick={() => {
-                                if (statusReferencedInTransition(s.id)) {
-                                  window.alert(
-                                    'このステータスは許可遷移で使用されているため削除できません'
-                                  )
-                                  return
-                                }
-                                if (confirm(`「${s.name}」を本当に削除しますか？`)) {
-                                  deleteStatusMutation.mutate(s.id)
-                                }
-                              }}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
-                              title={
-                                atStatusDeleteFloor
-                                  ? 'ステータスはワークフロー内で最低2つ必要なため削除できません'
-                                  : statusReferencedInTransition(s.id)
-                                    ? 'このステータスは許可遷移で使用されているため削除できません'
-                                    : '削除'
+                              if (confirm(`「${s.name}」を本当に削除しますか？`)) {
+                                deleteStatusMutation.mutate(s.id)
                               }
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                            title={
+                              atStatusDeleteFloor
+                                ? 'ステータスはワークフロー内で最低2つ必要なため削除できません'
+                                : statusReferencedInTransition(s.id)
+                                  ? 'このステータスは許可遷移で使用されているため削除できません'
+                                  : '削除'
+                            }
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )}
