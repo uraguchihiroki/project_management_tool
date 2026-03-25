@@ -49,7 +49,7 @@ func (r *projectRepository) FindByOrgAndName(orgID uuid.UUID, name string) (*mod
 
 func (r *projectRepository) FindByID(id uuid.UUID) (*model.Project, error) {
 	var project model.Project
-	err := r.db.Preload("Owner").First(&project, "id = ?", id).Error
+	err := r.db.Preload("Owner").Preload("ProjectStatus").First(&project, "id = ?", id).Error
 	if err != nil {
 		return nil, err
 	}

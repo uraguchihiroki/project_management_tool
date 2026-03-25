@@ -13,6 +13,10 @@ type WorkflowTransitionRepository interface {
 	DeleteByWorkflowID(workflowID uint) error
 	SeedAllPairs(workflowID uint, statusIDs []uuid.UUID) error
 	Exists(workflowID uint, fromID, toID uuid.UUID) bool
+	FindByWorkflowID(workflowID uint) ([]model.WorkflowTransition, error)
+	Create(t *model.WorkflowTransition) error
+	DeleteByID(id uint) error
+	FindByID(id uint) (*model.WorkflowTransition, error)
 }
 
 type workflowTransitionRepository struct {
@@ -59,4 +63,28 @@ func (r *workflowTransitionRepository) Exists(workflowID uint, fromID, toID uuid
 	err := r.db.Where("workflow_id = ? AND from_status_id = ? AND to_status_id = ?", workflowID, fromID, toID).
 		First(&wt).Error
 	return err == nil
+}
+
+func (r *workflowTransitionRepository) FindByWorkflowID(workflowID uint) ([]model.WorkflowTransition, error) {
+	var rows []model.WorkflowTransition
+	if err := r.db.Where("workflow_id = ?", workflowID).Order("id ASC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (r *workflowTransitionRepository) Create(t *model.WorkflowTransition) error {
+	return r.db.Create(t).Error
+}
+
+func (r *workflowTransitionRepository) DeleteByID(id uint) error {
+	return r.db.Delete(&model.WorkflowTransition{}, id).Error
+}
+
+func (r *workflowTransitionRepository) FindByID(id uint) (*model.WorkflowTransition, error) {
+	var t model.WorkflowTransition
+	if err := r.db.First(&t, id).Error; err != nil {
+		return nil, err
+	}
+	return &t, nil
 }

@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	appdb "github.com/uraguchihiroki/project_management_tool/internal/db"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
@@ -80,6 +81,14 @@ func main() {
 
 	db.SetupJoinTable(&model.User{}, "Roles", &model.UserRole{})
 
+	if err := appdb.PrepareStatusesWorkflowColumn(db); err != nil {
+		log.Fatalf("failed to prepare statuses.workflow_id (legacy DB): %v", err)
+	}
+
+	if err := appdb.MigrateIssueProjectStatusSplitPre(db); err != nil {
+		log.Fatalf("failed to migrate issue/project status split (pre): %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
@@ -90,9 +99,11 @@ func main() {
 		&model.Project{},
 		&model.Status{},
 		&model.WorkflowTransition{},
+		&model.Workflow{},
+		&model.ProjectStatus{},
+		&model.ProjectStatusTransition{},
 		&model.Issue{},
 		&model.Comment{},
-		&model.Workflow{},
 		&model.IssueTemplate{},
 		&model.IssueEvent{},
 		&model.Group{},
@@ -103,6 +114,14 @@ func main() {
 		log.Fatalf("failed to migrate: %v", err)
 	}
 
+	if err := appdb.MigrateProjectStatusSeed(db); err != nil {
+		log.Fatalf("failed to migrate project status seed: %v", err)
+	}
+
+	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
+		log.Fatalf("failed to migrate status dedupe / unique index: %v", err)
+	}
+
 	orgRepo := repository.NewOrganizationRepository(db)
 	statusRepo := repository.NewStatusRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
@@ -111,7 +130,9 @@ func main() {
 	issueRepo := repository.NewIssueRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
 	transitionRepo := repository.NewWorkflowTransitionRepository(db)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo)
+	projectStatusRepo := repository.NewProjectStatusRepository(db)
+	projectStatusTransitionRepo := repository.NewProjectStatusTransitionRepository(db)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
 
 	var seedErr error
 	if *seedAll {

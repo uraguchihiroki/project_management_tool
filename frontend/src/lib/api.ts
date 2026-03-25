@@ -3,6 +3,7 @@ import type {
   ApiResponse,
   ListResponse,
   Project,
+  ProjectStatus,
   Issue,
   Comment,
   User,
@@ -13,6 +14,7 @@ import type {
   Workflow,
   Group,
   IssueEvent,
+  WorkflowTransition,
 } from '@/types'
 import { clearAuthSession, getAuthToken } from '@/lib/authToken'
 
@@ -206,15 +208,30 @@ export const createProject = (data: {
 
 export const updateProject = (
   id: string,
-  data: { name?: string; description?: string; start_date?: string; end_date?: string }
+  data: {
+    name?: string
+    description?: string
+    start_date?: string
+    end_date?: string
+    project_status_id?: string
+  }
 ) => api.put<ApiResponse<Project>>(`/projects/${id}`, data).then((r) => r.data.data)
 
 export const deleteProject = (id: string) =>
   api.delete(`/projects/${id}`)
 
 // Statuses
-export const getStatuses = (projectId: string) =>
-  api.get<ListResponse<Status>>(`/projects/${projectId}/statuses`).then((r) => r.data.data)
+export const getProjectStatuses = (projectId: string) =>
+  api.get<ListResponse<ProjectStatus>>(`/projects/${projectId}/project-statuses`).then((r) => r.data.data)
+
+export const updateProjectStatus = (
+  projectId: string,
+  statusId: string,
+  data: { name: string; color: string; order: number }
+) =>
+  api
+    .put<ApiResponse<ProjectStatus>>(`/projects/${projectId}/project-statuses/${statusId}`, data)
+    .then((r) => r.data.data)
 
 // Issues
 export const getIssues = (projectId: string, opts?: { group_id?: string }) =>
@@ -330,11 +347,33 @@ export const getWorkflow = (id: string) =>
 export const getWorkflowStatuses = (workflowId: string) =>
   api.get<ListResponse<Status>>(`/workflows/${workflowId}/statuses`).then((r) => r.data.data)
 
+export const getWorkflowTransitions = (workflowId: string) =>
+  api.get<ListResponse<WorkflowTransition>>(`/workflows/${workflowId}/transitions`).then((r) => r.data.data)
+
+export const createWorkflowTransition = (
+  workflowId: string,
+  data: { from_status_id: string; to_status_id: string }
+) =>
+  api
+    .post<ApiResponse<WorkflowTransition>>(`/workflows/${workflowId}/transitions`, data)
+    .then((r) => r.data.data)
+
+export const deleteWorkflowTransition = (workflowId: string, transitionId: number) =>
+  api.delete(`/workflows/${workflowId}/transitions/${transitionId}`).then(() => undefined)
+
 export const createWorkflowStatus = (
   workflowId: string,
-  data: { name: string; color?: string; type?: 'issue' | 'project'; order?: number }
+  data: { name: string; color?: string; order?: number }
 ) =>
   api.post<ApiResponse<Status>>(`/workflows/${workflowId}/statuses`, data).then((r) => r.data.data)
+
+export const updateStatus = (
+  id: string,
+  data: { name: string; color: string; order: number }
+) => api.put<ApiResponse<Status>>(`/statuses/${id}`, data).then((r) => r.data.data)
+
+export const deleteStatus = (id: string) =>
+  api.delete(`/statuses/${id}`).then(() => undefined)
 
 // Comments
 export const getComments = (issueId: string) =>

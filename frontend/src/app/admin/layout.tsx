@@ -2,14 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Settings, Users, GitBranch, FileText, FolderKanban, Building2, Tag } from 'lucide-react'
+import { Settings, Users, GitBranch, FileText, FolderKanban, Building2 } from 'lucide-react'
 import Header from '@/components/Header'
 import { useRequireAdmin } from '@/context/AuthContext'
 
 const navItems = [
   { href: '/admin/projects', label: 'プロジェクト管理', icon: FolderKanban },
   { href: '/admin/departments', label: 'グループ管理', icon: Building2 },
-  { href: '/admin/statuses', label: 'ステータス管理', icon: Tag },
   { href: '/admin/users', label: 'ユーザー管理', icon: Users },
   { href: '/admin/workflows', label: 'ワークフロー', icon: GitBranch },
   { href: '/admin/templates', label: 'Issueテンプレート', icon: FileText },
@@ -19,7 +18,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const currentUser = useRequireAdmin()
   const pathname = usePathname()
 
-  if (!currentUser) return null
+  // currentUser は AuthContext の useLayoutEffect で sessionStorage から復元されるまで null。
+  // ここで return null すると初回ペイントが真っ白になり「何も表示されない」ように見える。
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-2 text-gray-600">
+        <span className="text-sm">読み込み中…</span>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

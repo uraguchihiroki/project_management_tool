@@ -1,26 +1,24 @@
-# ステータス管理
+# ステータス管理（レガシー導線）
 
 ## パス
 
-`/admin/statuses`
+`/admin/statuses`（現在は `/admin/workflows` へリダイレクト）
 
 ## 概要
 
-組織のステータス（Issue用・プロジェクト用）を管理。カンバンの列として使用。**許可される遷移（形）**・**遷移アラート**は [transition-permissions.md](../transition-permissions.md) で決定（TBD。フォーム項目は合意後に追記）。
+この導線は後方互換のために残し、実運用では **ワークフロー詳細画面（`/admin/workflows/[id]`）で Issue ステータスを編集**する。
 
 ## 遷移元・遷移先
 
 [transition-flow.md](transition-flow.md) を参照。
 
-## UI 要素
+## 現在の挙動
 
-- 見出し「ステータス管理」、説明
-- ステータス追加ボタン
-- ステータス追加/編集フォーム（ステータス名、色、タイプ）
-- ステータス一覧テーブル（sts_start, sts_goal は表示しない）
+- `/admin/statuses` へアクセスすると `/admin/workflows` へリダイレクト
+- Issue ステータスの追加・編集は `/admin/workflows/[id]` の **同一ダイアログ** で実施（新規/編集を統一）
+- `sts_start` / `sts_goal` は編集不可
 
 ## 備考
 
-- `GET /organizations/:orgId/statuses` でステータス一覧。`?exclude_system=1` で sts_start/sts_goal を除外可能
-- `POST /organizations/:orgId/statuses`、`PUT /statuses/:id`、`DELETE /statuses/:id`
-- システムステータス（sts_start, sts_goal）は編集・削除不可。画面には表示しない
+- API 自体は `GET /organizations/:orgId/statuses`、`POST /organizations/:orgId/statuses`、`PUT /statuses/:id`、`DELETE /statuses/:id`
+- UI からの更新主導線はワークフロー詳細

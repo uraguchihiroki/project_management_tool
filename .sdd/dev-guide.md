@@ -123,6 +123,8 @@ go run ./cmd/cli org seed --org-id=<uuid> [--owner-id=<uuid>]
 - **レガシー DB で `statuses.workflow_id` まわり**  
   - 起動時に `PrepareStatusesWorkflowColumn`（`internal/db/legacy_status_workflow.go`）が **AutoMigrate より前**に走り、NULL の `workflow_id` を埋めてから NOT NULL 化する。  
   - 複数テナントで孤立行が残る場合はログに従い手動修正が必要なことがある。
+- **ステータス重複の除去・再発防止**  
+  - `AutoMigrate` の前に `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）が旧 `statuses.type` と「組織Project」ワークフローを整理する。`AutoMigrate` の後に `MigrateProjectStatusSeed` で `project_statuses` を欠けるプロジェクトへ投入し、その直後に `MigrateStatusDedupeAndUniqueIndex`（`internal/db/status_integrity.go`）が走る。既存の同一 `(workflow_id, name, order)` 重複を参照付け替えのうえ削除し、**部分ユニークインデックス**を付与する。
 
 ---
 

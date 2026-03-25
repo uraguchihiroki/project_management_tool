@@ -27,29 +27,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-function getInitialUser(): User | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const stored = sessionStorage.getItem(SESSION_KEY)
-    return stored ? JSON.parse(stored) : null
-  } catch {
-    return null
-  }
-}
-
-function getInitialOrg(): Organization | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const stored = sessionStorage.getItem(ORG_KEY)
-    return stored ? JSON.parse(stored) : null
-  } catch {
-    return null
-  }
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(getInitialUser)
-  const [currentOrg, setCurrentOrg] = useState<Organization | null>(getInitialOrg)
+  // サーバーとクライアントの初回レンダーで同じ null に揃えないと Hydration mismatch になる。
+  // sessionStorage は useLayoutEffect で読み込む（getInitialUser を useState に渡さない）。
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [currentOrg, setCurrentOrg] = useState<Organization | null>(null)
   const router = useRouter()
 
   // ペイント前に sessionStorage を同期（E2E の addInitScript や Hydration 直後の currentOrg 欠落を防ぐ）

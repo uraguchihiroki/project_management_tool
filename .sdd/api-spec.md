@@ -75,8 +75,8 @@ http://localhost:8080/api/v1
 | POST | /organizations | 組織作成 |
 | GET | /users/:id/organizations | ユーザーの所属組織（1ユーザー＝1組織のため1件） |
 | POST | /organizations/:orgId/users | 組織にユーザーを追加（既存ユーザーの name/email で新規ユーザーを作成） |
-| GET | /organizations/:orgId/statuses | 組織のステータス一覧。`?type=issue` で Issue 用にフィルタ。`?exclude_system=1` で sts_start/sts_goal を除外 |
-| POST | /organizations/:orgId/statuses | 組織の「組織Issue」「組織Project」固定ワークフローへステータス追加 |
+| GET | /organizations/:orgId/statuses | 組織に属する **Issue 用** statuses（各ワークフローの `statuses`）。`?type=project` は互換のため **空配列**（プロジェクト進行は `/projects/:id/project-statuses`）。`?exclude_system=1` で sts_start/sts_goal を除外 |
+| POST | /organizations/:orgId/statuses | 組織の「組織Issue」固定ワークフローへ Issue 用ステータス追加 |
 
 ### Workflows（組織スコープのワークフロー）
 
@@ -86,8 +86,8 @@ http://localhost:8080/api/v1
 | POST | /workflows | 作成（body: `organization_id`, `name`, `description`） |
 | PUT | /workflows/reorder | 表示順更新（body: `ids`） |
 | GET | /workflows/:id | 詳細取得（他組織の ID は 404） |
-| GET | /workflows/:id/statuses | **当該ワークフローに紐づく Status 一覧**（`order` 昇順）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。列挙は `workflow_id = :id`。**同一レスポンス内の重複行は DB 欠陥**であり、API でマージして隠してテナント合格にしてはならない（[tenant-invariants.md](tenant-invariants.md)）。 |
-| POST | /workflows/:id/statuses | **ステータス追加**。上記と同様に親ワークフローの組織を先に検証。body: `name`（必須）, `color`（省略時 `#6B7280`）, `type`（`issue` \| `project`、省略時 `issue`）, `order`（`0` または省略時は同一 WF 内の最大 `order` + 1）。作成後、当該 WF の **許可遷移を全ペア再シード**（Issue のステータス変更と整合） |
+| GET | /workflows/:id/statuses | **当該ワークフローに紐づく Issue 用 Status 一覧**（`order` 昇順）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。同一 `(name, order)` の重複は **DB 制約**で防ぐ（[tenant-invariants.md](tenant-invariants.md)、[db-schema.md](db-schema.md)）。 |
+| POST | /workflows/:id/statuses | **Issue 用ステータス追加**。body: `name`（必須）, `color`（省略時 `#6B7280`）, `order`（`0` または省略時は同一 WF 内の最大 `order` + 1）。作成後、当該 WF の **許可遷移を全ペア再シード** |
 | PUT | /workflows/:id | 名前・説明の更新 |
 | DELETE | /workflows/:id | 削除 |
 
@@ -97,6 +97,8 @@ http://localhost:8080/api/v1
 |--------|------|------|
 | PUT | /statuses/:id | 更新 |
 | DELETE | /statuses/:id | 削除 |
+
+> **UI導線:** 管理画面では `/admin/statuses` はレガシー導線として `/admin/workflows` へリダイレクトし、実際の編集は `/admin/workflows/:id` の **共通ダイアログ（新規/編集）** で行う。
 
 ### Super Admin
 
@@ -122,10 +124,12 @@ http://localhost:8080/api/v1
 | GET | /projects | プロジェクト一覧取得（org_id クエリでフィルタ可） |
 | POST | /projects | プロジェクト作成 |
 | GET | /projects/:id | プロジェクト詳細取得 |
-| PUT | /projects/:id | プロジェクト更新 |
+| GET | /projects/:id/project-statuses | 当該プロジェクトの **進行用** `project_statuses` 一覧（JWT の組織と一致しないプロジェクトは 404） |
+| PUT | /projects/:id/project-statuses/:statusId | 進行ステータス更新。body: `name`, `color`（#RRGGBB）, `order`。当該行がこのプロジェクトに属することを検証。`status_key` が sts_start / sts_goal の行は変更不可 |
+| PUT | /projects/:id | プロジェクト更新（任意: `project_status_id` で進行変更。許可遷移は `project_status_transitions` で検証） |
 | DELETE | /projects/:id | プロジェクト削除 |
 
-> **Note:** プロジェクト詳細取得（GET /projects/:id）のレスポンスに `statuses` が含まれる。ステータスはプロジェクト作成時に自動生成され、専用の CRUD API はない。
+> **Note:** GET /projects/:id の `statuses` は **Issue 用**（`default_workflow_id` の列）。`project_status` は現在のプロジェクト進行。進行の一覧は GET /projects/:id/project-statuses。
 
 ### Groups（グループ）
 

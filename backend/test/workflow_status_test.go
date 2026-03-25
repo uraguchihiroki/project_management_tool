@@ -83,11 +83,9 @@ func TestWorkflowStatuses_OrgIsolation(t *testing.T) {
 	})
 }
 
-// 目的: tenant-invariants / api-spec に合わせ、DB に同一 (name,type,order) の重複行があっても API がマージして隠さないこと。
-// 期待: GET /workflows/:id/statuses の data は行数そのまま（ここでは「未着手」が3件）。
-func TestWorkflowStatuses_List_ReturnsAllRowsIncludingDuplicates(t *testing.T) {
+// 同一 workflow・同一 (name,type,order) は DB 部分ユニークで禁止（マイグレーション MigrateStatusDedupeAndUniqueIndex）。
+func TestWorkflowStatuses_DuplicateInsertRejectedByDB(t *testing.T) {
 	ts := newTestServer(t)
-	// --- Arrange ---
 	ownerID := createTestUser(t, ts, "オーナー", "wf-st-duprows@example.com")
 	createTestProject(t, ts, "WFD", "重複行テスト", ownerID)
 	wfID := createTestWorkflow(t, ts, "重複行WF")
@@ -96,35 +94,26 @@ func TestWorkflowStatuses_List_ReturnsAllRowsIncludingDuplicates(t *testing.T) {
 		t.Fatal(err)
 	}
 	wid := uint(wid64)
-	for i := 0; i < 3; i++ {
-		sid := uuid.New()
-		if err := ts.db.Create(&model.Status{
-			ID:         sid,
-			Key:        "sts-dup-" + sid.String(),
-			WorkflowID: wid,
-			Name:       "未着手",
-			Color:      "#6B7280",
-			Order:      1,
-			Type:       "issue",
-		}).Error; err != nil {
-			t.Fatal(err)
-		}
+	sid := uuid.New()
+	if err := ts.db.Create(&model.Status{
+		ID:         sid,
+		Key:        "sts-dup-" + sid.String(),
+		WorkflowID: wid,
+		Name:       "未着手",
+		Color:      "#6B7280",
+		Order:      1,
+	}).Error; err != nil {
+		t.Fatal(err)
 	}
-	// --- Act ---
-	status, resp := ts.req(t, "GET", "/api/v1/workflows/"+wfID+"/statuses", nil)
-	t.Logf("GET statuses: http=%d", status)
-	// --- Assert ---
-	assertStatus(t, status, http.StatusOK, "GET with duplicate rows")
-	arr := mustGetArray(t, resp, "data")
-	t.Logf("len(data)=%d", len(arr))
-	dup := 0
-	for _, x := range arr {
-		m := x.(map[string]interface{})
-		if m["name"].(string) == "未着手" && int(m["order"].(float64)) == 1 {
-			dup++
-		}
-	}
-	if dup != 3 {
-		t.Fatalf("期待: 未着手が3件（マージしない）, 実際: %d 件 (data 総数 %d)", dup, len(arr))
+	err = ts.db.Create(&model.Status{
+		ID:         uuid.New(),
+		Key:        "sts-dup-second",
+		WorkflowID: wid,
+		Name:       "未着手",
+		Color:      "#6B7280",
+		Order:      1,
+	}).Error
+	if err == nil {
+		t.Fatal("2件目の同一 (name,order) は UNIQUE で失敗すべき")
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/auth"
+	appdb "github.com/uraguchihiroki/project_management_tool/internal/db"
 	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
@@ -50,6 +51,10 @@ func newTestServer(t *testing.T) *testServer {
 
 	db.SetupJoinTable(&model.User{}, "Roles", &model.UserRole{})
 
+	if err := appdb.MigrateIssueProjectStatusSplitPre(db); err != nil {
+		t.Fatalf("failed migrate issue/project status split (pre): %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
@@ -58,11 +63,13 @@ func newTestServer(t *testing.T) *testServer {
 		&model.Department{},
 		&model.OrganizationUserDepartment{},
 		&model.Project{},
+		&model.Workflow{},
 		&model.Status{},
 		&model.WorkflowTransition{},
+		&model.ProjectStatus{},
+		&model.ProjectStatusTransition{},
 		&model.Issue{},
 		&model.Comment{},
-		&model.Workflow{},
 		&model.IssueTemplate{},
 		&model.IssueEvent{},
 		&model.Group{},
@@ -71,6 +78,14 @@ func newTestServer(t *testing.T) *testServer {
 		&model.TransitionAlertRule{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
+	}
+
+	if err := appdb.MigrateProjectStatusSeed(db); err != nil {
+		t.Fatalf("failed migrate project status seed: %v", err)
+	}
+
+	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
+		t.Fatalf("failed to migrate status dedupe / unique index: %v", err)
 	}
 
 	frsOrg := model.Organization{
@@ -86,9 +101,6 @@ func newTestServer(t *testing.T) *testServer {
 	transitionRepo := repository.NewWorkflowTransitionRepository(db)
 	if _, _, err := service.CreateWorkflowWithIssueStatuses(workflowRepo, statusRepo, transitionRepo, frsOrg.ID, "組織Issue"); err != nil {
 		t.Fatalf("seed 組織Issue workflow: %v", err)
-	}
-	if _, _, err := service.CreateWorkflowWithProjectStatuses(workflowRepo, statusRepo, transitionRepo, frsOrg.ID, "組織Project"); err != nil {
-		t.Fatalf("seed 組織Project workflow: %v", err)
 	}
 
 	userRepo := repository.NewUserRepository(db)
@@ -106,9 +118,12 @@ func newTestServer(t *testing.T) *testServer {
 	superAdminRepo := repository.NewSuperAdminRepository(db)
 	departmentRepo := repository.NewDepartmentRepository(db)
 
+	projectStatusRepo := repository.NewProjectStatusRepository(db)
+	projectStatusTransitionRepo := repository.NewProjectStatusTransitionRepository(db)
+
 	userSvc := service.NewUserService(userRepo, orgRepo)
-	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo)
+	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
@@ -127,6 +142,7 @@ func newTestServer(t *testing.T) *testServer {
 	commentH := handler.NewCommentHandler(commentSvc)
 	roleH := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowH := handler.NewWorkflowHandler(workflowSvc)
+	workflowTransitionH := handler.NewWorkflowTransitionHandler(workflowSvc, statusSvc, transitionRepo)
 	templateH := handler.NewTemplateHandler(templateSvc, projectSvc)
 	orgH := handler.NewOrganizationHandler(orgSvc)
 	superAdminH := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
@@ -171,6 +187,9 @@ func newTestServer(t *testing.T) *testServer {
 	api.GET("/workflows/:id", workflowH.Get)
 	api.GET("/workflows/:id/statuses", statusH.ListByWorkflow)
 	api.POST("/workflows/:id/statuses", statusH.CreateForWorkflow)
+	api.GET("/workflows/:id/transitions", workflowTransitionH.ListByWorkflow)
+	api.POST("/workflows/:id/transitions", workflowTransitionH.CreateForWorkflow)
+	api.DELETE("/workflows/:id/transitions/:transitionId", workflowTransitionH.Delete)
 	api.PUT("/workflows/:id", workflowH.Update)
 	api.DELETE("/workflows/:id", workflowH.Delete)
 	api.GET("/templates", templateH.List)
@@ -198,6 +217,8 @@ func newTestServer(t *testing.T) *testServer {
 	api.PUT("/admin/users/:id", userH.UpdateUser)
 	api.DELETE("/admin/users/:id", userH.RemoveFromOrg)
 	api.GET("/projects", projectH.List)
+	api.GET("/projects/:id/project-statuses", projectH.ListProjectStatuses)
+	api.PUT("/projects/:id/project-statuses/:statusId", projectH.UpdateProjectStatus)
 	api.GET("/organizations/:orgId/statuses", projectH.ListStatusesByOrg)
 	api.POST("/organizations/:orgId/statuses", statusH.Create)
 	api.PUT("/statuses/:id", statusH.Update)

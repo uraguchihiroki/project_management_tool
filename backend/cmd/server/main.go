@@ -35,6 +35,10 @@ func main() {
 		log.Fatalf("failed to prepare statuses.workflow_id (legacy DB): %v", err)
 	}
 
+	if err := appdb.MigrateIssueProjectStatusSplitPre(db); err != nil {
+		log.Fatalf("failed to migrate issue/project status split (pre): %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
@@ -46,6 +50,8 @@ func main() {
 		&model.Workflow{},
 		&model.Status{},
 		&model.WorkflowTransition{},
+		&model.ProjectStatus{},
+		&model.ProjectStatusTransition{},
 		&model.Issue{},
 		&model.Comment{},
 		&model.IssueTemplate{},
@@ -56,6 +62,14 @@ func main() {
 		&model.TransitionAlertRule{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
+	}
+
+	if err := appdb.MigrateProjectStatusSeed(db); err != nil {
+		log.Fatalf("failed to migrate project status seed: %v", err)
+	}
+
+	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
+		log.Fatalf("failed to migrate status dedupe / unique index: %v", err)
 	}
 
 	userRepo := repository.NewUserRepository(db)
@@ -71,14 +85,16 @@ func main() {
 	roleRepo := repository.NewRoleRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
 	transitionRepo := repository.NewWorkflowTransitionRepository(db)
+	projectStatusRepo := repository.NewProjectStatusRepository(db)
+	projectStatusTransitionRepo := repository.NewProjectStatusTransitionRepository(db)
 	templateRepo := repository.NewTemplateRepository(db)
 	orgRepo := repository.NewOrganizationRepository(db)
 	superAdminRepo := repository.NewSuperAdminRepository(db)
 	departmentRepo := repository.NewDepartmentRepository(db)
 
 	userSvc := service.NewUserService(userRepo, orgRepo)
-	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo)
+	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
@@ -97,6 +113,7 @@ func main() {
 	commentHandler := handler.NewCommentHandler(commentSvc)
 	roleHandler := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowHandler := handler.NewWorkflowHandler(workflowSvc)
+	workflowTransitionHandler := handler.NewWorkflowTransitionHandler(workflowSvc, statusSvc, transitionRepo)
 	templateHandler := handler.NewTemplateHandler(templateSvc, projectSvc)
 	orgHandler := handler.NewOrganizationHandler(orgSvc)
 	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
@@ -165,6 +182,9 @@ func main() {
 	api.GET("/workflows/:id", workflowHandler.Get)
 	api.GET("/workflows/:id/statuses", statusHandler.ListByWorkflow)
 	api.POST("/workflows/:id/statuses", statusHandler.CreateForWorkflow)
+	api.GET("/workflows/:id/transitions", workflowTransitionHandler.ListByWorkflow)
+	api.POST("/workflows/:id/transitions", workflowTransitionHandler.CreateForWorkflow)
+	api.DELETE("/workflows/:id/transitions/:transitionId", workflowTransitionHandler.Delete)
 	api.PUT("/workflows/:id", workflowHandler.Update)
 	api.DELETE("/workflows/:id", workflowHandler.Delete)
 
@@ -198,6 +218,8 @@ func main() {
 	api.DELETE("/admin/users/:id", userHandler.RemoveFromOrg)
 
 	api.GET("/projects", projectHandler.List)
+	api.GET("/projects/:id/project-statuses", projectHandler.ListProjectStatuses)
+	api.PUT("/projects/:id/project-statuses/:statusId", projectHandler.UpdateProjectStatus)
 	api.GET("/organizations/:orgId/statuses", projectHandler.ListStatusesByOrg)
 	api.POST("/organizations/:orgId/statuses", statusHandler.Create)
 	api.PUT("/statuses/:id", statusHandler.Update)

@@ -116,3 +116,10 @@ flowchart TB
 3. ターミナルで `bash scripts/start.sh` を実行
 
 詳細は [README.md](../README.md#ローカル起動手順wsl--bash) を参照。
+
+---
+
+## 変更を人に渡す前の確認（E2E）
+
+- **ログイン〜管理画面（ワークフロー一覧まで）**の最小検証: リポジトリ直下で `bash scripts/verify-login-e2e.sh`（PostgreSQL 起動後）。バックエンド・フロントを立て、Playwright で `e2e/login.spec.ts` と `e2e/login-admin-dashboard.spec.ts` を実行する。
+- **`npx playwright run-server`** は **リモート Chromium 用**であり、API や DB の代わりにはならない。Windows でブラウザだけ別プロセスにしたいときは [testing.md](testing.md) の「Playwright Server」と `PLAYWRIGHT_WS_ENDPOINT` を参照。

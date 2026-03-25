@@ -26,6 +26,8 @@ type orgSeedService struct {
 	issueRepo      repository.IssueRepository
 	workflowRepo   repository.WorkflowRepository
 	transitionRepo repository.WorkflowTransitionRepository
+	psRepo         repository.ProjectStatusRepository
+	pstRepo        repository.ProjectStatusTransitionRepository
 }
 
 func NewOrgSeedService(
@@ -37,6 +39,8 @@ func NewOrgSeedService(
 	issueRepo repository.IssueRepository,
 	workflowRepo repository.WorkflowRepository,
 	transitionRepo repository.WorkflowTransitionRepository,
+	psRepo repository.ProjectStatusRepository,
+	pstRepo repository.ProjectStatusTransitionRepository,
 ) OrgSeedService {
 	return &orgSeedService{
 		orgRepo:        orgRepo,
@@ -47,6 +51,8 @@ func NewOrgSeedService(
 		issueRepo:      issueRepo,
 		workflowRepo:   workflowRepo,
 		transitionRepo: transitionRepo,
+		psRepo:         psRepo,
+		pstRepo:        pstRepo,
 	}
 }
 
@@ -59,18 +65,6 @@ func (s *orgSeedService) ensureOrgIssueWorkflow(orgID uuid.UUID) error {
 		return err
 	}
 	_, _, err = CreateWorkflowWithIssueStatuses(s.workflowRepo, s.statusRepo, s.transitionRepo, orgID, "組織Issue")
-	return err
-}
-
-func (s *orgSeedService) ensureOrgProjectWorkflow(orgID uuid.UUID) error {
-	_, err := s.workflowRepo.FindByOrgAndName(orgID, "組織Project")
-	if err == nil {
-		return nil
-	}
-	if err != gorm.ErrRecordNotFound {
-		return err
-	}
-	_, _, err = CreateWorkflowWithProjectStatuses(s.workflowRepo, s.statusRepo, s.transitionRepo, orgID, "組織Project")
 	return err
 }
 
@@ -90,12 +84,21 @@ func (s *orgSeedService) ensureProjectDefaultWorkflow(project *model.Project) er
 	return s.projectRepo.Update(project)
 }
 
+func (s *orgSeedService) ensureProjectStatuses(project *model.Project) error {
+	if project.ProjectStatusID != nil {
+		return nil
+	}
+	firstID, err := SeedDefaultProjectStatuses(s.psRepo, s.pstRepo, project.ID)
+	if err != nil {
+		return err
+	}
+	project.ProjectStatusID = &firstID
+	return s.projectRepo.Update(project)
+}
+
 // SeedNewOrganization は新規組織にステータス・役職・サンプルプロジェクトを投入する
 func (s *orgSeedService) SeedNewOrganization(orgID uuid.UUID, ownerID *uuid.UUID) error {
 	if err := s.ensureOrgIssueWorkflow(orgID); err != nil {
-		return err
-	}
-	if err := s.ensureOrgProjectWorkflow(orgID); err != nil {
 		return err
 	}
 
@@ -128,6 +131,9 @@ func (s *orgSeedService) SeedNewOrganization(orgID uuid.UUID, ownerID *uuid.UUID
 		}
 		if project != nil {
 			if err := s.ensureProjectDefaultWorkflow(project); err != nil {
+				return err
+			}
+			if err := s.ensureProjectStatuses(project); err != nil {
 				return err
 			}
 			if err := s.upsertSampleIssue(orgID, project.ID, *ownerID); err != nil {
@@ -238,6 +244,9 @@ func (s *orgSeedService) upsertSampleIssue(orgID uuid.UUID, projectID uuid.UUID,
 		return err
 	}
 	if err := s.ensureProjectDefaultWorkflow(project); err != nil {
+		return err
+	}
+	if err := s.ensureProjectStatuses(project); err != nil {
 		return err
 	}
 	project, err = s.projectRepo.FindByID(projectID)
