@@ -201,6 +201,14 @@ export interface Workflow {
   created_at: string
 }
 
+export interface WorkflowTransition {
+  id: number
+  workflow_id: number
+  from_status_id: string
+  to_status_id: string
+  created_at: string
+}
+
 export interface ApiResponse<T> {
   data: T
   message?: string

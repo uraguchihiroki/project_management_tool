@@ -14,6 +14,7 @@ import type {
   Workflow,
   Group,
   IssueEvent,
+  WorkflowTransition,
 } from '@/types'
 import { clearAuthSession, getAuthToken } from '@/lib/authToken'
 
@@ -345,6 +346,20 @@ export const getWorkflow = (id: string) =>
 
 export const getWorkflowStatuses = (workflowId: string) =>
   api.get<ListResponse<Status>>(`/workflows/${workflowId}/statuses`).then((r) => r.data.data)
+
+export const getWorkflowTransitions = (workflowId: string) =>
+  api.get<ListResponse<WorkflowTransition>>(`/workflows/${workflowId}/transitions`).then((r) => r.data.data)
+
+export const createWorkflowTransition = (
+  workflowId: string,
+  data: { from_status_id: string; to_status_id: string }
+) =>
+  api
+    .post<ApiResponse<WorkflowTransition>>(`/workflows/${workflowId}/transitions`, data)
+    .then((r) => r.data.data)
+
+export const deleteWorkflowTransition = (workflowId: string, transitionId: number) =>
+  api.delete(`/workflows/${workflowId}/transitions/${transitionId}`).then(() => undefined)
 
 export const createWorkflowStatus = (
   workflowId: string,

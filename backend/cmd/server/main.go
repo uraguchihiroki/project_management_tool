@@ -113,6 +113,7 @@ func main() {
 	commentHandler := handler.NewCommentHandler(commentSvc)
 	roleHandler := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowHandler := handler.NewWorkflowHandler(workflowSvc)
+	workflowTransitionHandler := handler.NewWorkflowTransitionHandler(workflowSvc, statusSvc, transitionRepo)
 	templateHandler := handler.NewTemplateHandler(templateSvc, projectSvc)
 	orgHandler := handler.NewOrganizationHandler(orgSvc)
 	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
@@ -181,6 +182,9 @@ func main() {
 	api.GET("/workflows/:id", workflowHandler.Get)
 	api.GET("/workflows/:id/statuses", statusHandler.ListByWorkflow)
 	api.POST("/workflows/:id/statuses", statusHandler.CreateForWorkflow)
+	api.GET("/workflows/:id/transitions", workflowTransitionHandler.ListByWorkflow)
+	api.POST("/workflows/:id/transitions", workflowTransitionHandler.CreateForWorkflow)
+	api.DELETE("/workflows/:id/transitions/:transitionId", workflowTransitionHandler.Delete)
 	api.PUT("/workflows/:id", workflowHandler.Update)
 	api.DELETE("/workflows/:id", workflowHandler.Delete)
 

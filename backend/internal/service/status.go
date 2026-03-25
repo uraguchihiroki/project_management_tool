@@ -130,17 +130,6 @@ func (s *statusService) CreateForWorkflow(workflowID uint, name, color string, o
 	if err := s.statusRepo.Create(status); err != nil {
 		return nil, err
 	}
-	all, err := s.statusRepo.FindByWorkflowID(workflowID)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]uuid.UUID, 0, len(all))
-	for _, st := range all {
-		ids = append(ids, st.ID)
-	}
-	if err := s.transitionRepo.SeedAllPairs(workflowID, ids); err != nil {
-		return nil, err
-	}
 	return s.statusRepo.FindByID(statusID)
 }
 
