@@ -105,15 +105,6 @@ export interface IssueTemplate {
 }
 
 /** 組織スコープのグループ（Issue への紐付け・通知等） */
-export interface Group {
-  id: string
-  organization_id: string
-  name: string
-  kind?: string
-  display_order: number
-  created_at: string
-}
-
 /** issue_events の1行（インプリント） */
 export interface IssueEvent {
   id: string
@@ -147,7 +138,6 @@ export interface Issue {
   template_id?: number
   workflow_id?: number
   comments?: Comment[]
-  groups?: Group[]
   created_at: string
   updated_at: string
 }

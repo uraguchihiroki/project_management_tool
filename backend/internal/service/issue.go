@@ -21,7 +21,6 @@ type CreateIssueInput struct {
 	AssigneeID  *uuid.UUID
 	ReporterID  uuid.UUID
 	TemplateID  *uint
-	GroupIDs    []uuid.UUID
 }
 
 type UpdateIssueInput struct {
@@ -30,23 +29,18 @@ type UpdateIssueInput struct {
 	StatusID    *uuid.UUID
 	Priority    *string
 	AssigneeID  *uuid.UUID
-	GroupIDs    *[]uuid.UUID
 }
 
 type IssueService interface {
-	List(projectID uuid.UUID, groupID *uuid.UUID) ([]model.Issue, error)
-	ListByOrg(orgID uuid.UUID, groupID *uuid.UUID) ([]model.Issue, error)
+	List(projectID uuid.UUID) ([]model.Issue, error)
+	ListByOrg(orgID uuid.UUID) ([]model.Issue, error)
 	Get(projectID uuid.UUID, number int) (*model.Issue, error)
 	GetByOrgAndNumber(orgID uuid.UUID, number int) (*model.Issue, error)
-	GetWithGroups(projectID uuid.UUID, number int) (*model.Issue, []model.Group, error)
-	GetByOrgAndNumberWithGroups(orgID uuid.UUID, number int) (*model.Issue, []model.Group, error)
 	Create(projectID uuid.UUID, input CreateIssueInput) (*model.Issue, error)
 	CreateForOrg(orgID uuid.UUID, input CreateIssueInput) (*model.Issue, error)
 	Update(projectID uuid.UUID, number int, input UpdateIssueInput, actorID uuid.UUID) (*model.Issue, error)
 	UpdateByOrgAndNumber(orgID uuid.UUID, number int, input UpdateIssueInput, actorID uuid.UUID) (*model.Issue, error)
 	UpdateStatusWithImprint(issueID uuid.UUID, newStatusID uuid.UUID, actorID uuid.UUID) error
-	SetIssueGroups(projectID uuid.UUID, number int, groupIDs []uuid.UUID) error
-	SetIssueGroupsByOrg(orgID uuid.UUID, number int, groupIDs []uuid.UUID) error
 	Delete(projectID uuid.UUID, number int) error
 	DeleteByOrgAndNumber(orgID uuid.UUID, number int) error
 }
@@ -58,8 +52,6 @@ type issueService struct {
 	workflowRepo   repository.WorkflowRepository
 	transitionRepo repository.WorkflowTransitionRepository
 	eventRepo      repository.IssueEventRepository
-	groupRepo      repository.GroupRepository
-	issueGroupRepo repository.IssueGroupRepository
 	alertEval      *TransitionAlertEvaluator
 	issueWFProv    *IssueWorkflowProvisioner
 }
@@ -71,8 +63,6 @@ func NewIssueService(
 	workflowRepo repository.WorkflowRepository,
 	transitionRepo repository.WorkflowTransitionRepository,
 	eventRepo repository.IssueEventRepository,
-	groupRepo repository.GroupRepository,
-	issueGroupRepo repository.IssueGroupRepository,
 	alertEval *TransitionAlertEvaluator,
 	issueWFProv *IssueWorkflowProvisioner,
 ) IssueService {
@@ -83,8 +73,6 @@ func NewIssueService(
 		workflowRepo:   workflowRepo,
 		transitionRepo: transitionRepo,
 		eventRepo:      eventRepo,
-		groupRepo:      groupRepo,
-		issueGroupRepo: issueGroupRepo,
 		alertEval:      alertEval,
 		issueWFProv:    issueWFProv,
 	}
@@ -133,25 +121,12 @@ func (s *issueService) validateStatusChange(tx *gorm.DB, issue *model.Issue, new
 	return nil
 }
 
-func (s *issueService) validateGroupIDsForOrg(orgID uuid.UUID, ids []uuid.UUID) error {
-	for _, id := range ids {
-		g, err := s.groupRepo.FindByID(id)
-		if err != nil {
-			return fmt.Errorf("group not found: %w", err)
-		}
-		if g.OrganizationID != orgID {
-			return fmt.Errorf("group %s does not belong to organization", id)
-		}
-	}
-	return nil
+func (s *issueService) List(projectID uuid.UUID) ([]model.Issue, error) {
+	return s.issueRepo.FindByProject(projectID)
 }
 
-func (s *issueService) List(projectID uuid.UUID, groupID *uuid.UUID) ([]model.Issue, error) {
-	return s.issueRepo.FindByProject(projectID, groupID)
-}
-
-func (s *issueService) ListByOrg(orgID uuid.UUID, groupID *uuid.UUID) ([]model.Issue, error) {
-	return s.issueRepo.FindByOrg(orgID, groupID)
+func (s *issueService) ListByOrg(orgID uuid.UUID) ([]model.Issue, error) {
+	return s.issueRepo.FindByOrg(orgID)
 }
 
 func assigneePtrEqual(a, b *uuid.UUID) bool {
@@ -178,30 +153,6 @@ func (s *issueService) Get(projectID uuid.UUID, number int) (*model.Issue, error
 
 func (s *issueService) GetByOrgAndNumber(orgID uuid.UUID, number int) (*model.Issue, error) {
 	return s.issueRepo.FindByOrgAndNumber(orgID, number)
-}
-
-func (s *issueService) GetWithGroups(projectID uuid.UUID, number int) (*model.Issue, []model.Group, error) {
-	issue, err := s.issueRepo.FindByNumber(projectID, number)
-	if err != nil {
-		return nil, nil, err
-	}
-	groups, err := s.issueGroupRepo.ListGroupsByIssue(issue.ID)
-	if err != nil {
-		return issue, nil, err
-	}
-	return issue, groups, nil
-}
-
-func (s *issueService) GetByOrgAndNumberWithGroups(orgID uuid.UUID, number int) (*model.Issue, []model.Group, error) {
-	issue, err := s.issueRepo.FindByOrgAndNumber(orgID, number)
-	if err != nil {
-		return nil, nil, err
-	}
-	groups, err := s.issueGroupRepo.ListGroupsByIssue(issue.ID)
-	if err != nil {
-		return issue, nil, err
-	}
-	return issue, groups, nil
 }
 
 func (s *issueService) Create(projectID uuid.UUID, input CreateIssueInput) (*model.Issue, error) {
@@ -258,14 +209,6 @@ func (s *issueService) Create(projectID uuid.UUID, input CreateIssueInput) (*mod
 	if err := s.issueRepo.Create(issue); err != nil {
 		return nil, err
 	}
-	if len(input.GroupIDs) > 0 {
-		if err := s.validateGroupIDsForOrg(orgID, input.GroupIDs); err != nil {
-			return nil, err
-		}
-		if err := s.issueGroupRepo.ReplaceForIssue(issue.ID, input.GroupIDs); err != nil {
-			return nil, err
-		}
-	}
 	// アソシエーションを含めて再取得
 	return s.issueRepo.FindByNumber(projectID, issue.Number)
 }
@@ -307,14 +250,6 @@ func (s *issueService) CreateForOrg(orgID uuid.UUID, input CreateIssueInput) (*m
 	if err := s.issueRepo.Create(issue); err != nil {
 		return nil, err
 	}
-	if len(input.GroupIDs) > 0 {
-		if err := s.validateGroupIDsForOrg(orgID, input.GroupIDs); err != nil {
-			return nil, err
-		}
-		if err := s.issueGroupRepo.ReplaceForIssue(issue.ID, input.GroupIDs); err != nil {
-			return nil, err
-		}
-	}
 	return s.issueRepo.FindByOrgAndNumber(orgID, issue.Number)
 }
 
@@ -325,7 +260,6 @@ func (s *issueService) Update(projectID uuid.UUID, number int, input UpdateIssue
 	err := s.issueRepo.DB().Transaction(func(tx *gorm.DB) error {
 		ir := repository.NewIssueRepository(tx)
 		er := repository.NewIssueEventRepository(tx)
-		igr := repository.NewIssueGroupRepository(tx)
 		issue, err := ir.FindByNumber(projectID, number)
 		if err != nil {
 			return err
@@ -372,14 +306,6 @@ func (s *issueService) Update(projectID uuid.UUID, number int, input UpdateIssue
 				return err
 			}
 		}
-		if input.GroupIDs != nil {
-			if err := s.validateGroupIDsForOrg(issue.OrganizationID, *input.GroupIDs); err != nil {
-				return err
-			}
-			if err := igr.ReplaceForIssue(issue.ID, *input.GroupIDs); err != nil {
-				return err
-			}
-		}
 		out, err = ir.FindByNumber(projectID, number)
 		return err
 	})
@@ -396,7 +322,6 @@ func (s *issueService) UpdateByOrgAndNumber(orgID uuid.UUID, number int, input U
 	err := s.issueRepo.DB().Transaction(func(tx *gorm.DB) error {
 		ir := repository.NewIssueRepository(tx)
 		er := repository.NewIssueEventRepository(tx)
-		igr := repository.NewIssueGroupRepository(tx)
 		issue, err := ir.FindByOrgAndNumber(orgID, number)
 		if err != nil {
 			return err
@@ -440,14 +365,6 @@ func (s *issueService) UpdateByOrgAndNumber(orgID uuid.UUID, number int, input U
 				return err
 			}
 			if err := er.Create(ev); err != nil {
-				return err
-			}
-		}
-		if input.GroupIDs != nil {
-			if err := s.validateGroupIDsForOrg(issue.OrganizationID, *input.GroupIDs); err != nil {
-				return err
-			}
-			if err := igr.ReplaceForIssue(issue.ID, *input.GroupIDs); err != nil {
 				return err
 			}
 		}
@@ -496,28 +413,6 @@ func newAssigneeImprint(issue *model.Issue, actorID uuid.UUID, from, to *uuid.UU
 		OccurredAt:     at,
 		Payload:        datatypes.JSON(raw),
 	}, nil
-}
-
-func (s *issueService) SetIssueGroups(projectID uuid.UUID, number int, groupIDs []uuid.UUID) error {
-	issue, err := s.issueRepo.FindByNumber(projectID, number)
-	if err != nil {
-		return err
-	}
-	if err := s.validateGroupIDsForOrg(issue.OrganizationID, groupIDs); err != nil {
-		return err
-	}
-	return s.issueGroupRepo.ReplaceForIssue(issue.ID, groupIDs)
-}
-
-func (s *issueService) SetIssueGroupsByOrg(orgID uuid.UUID, number int, groupIDs []uuid.UUID) error {
-	issue, err := s.issueRepo.FindByOrgAndNumber(orgID, number)
-	if err != nil {
-		return err
-	}
-	if err := s.validateGroupIDsForOrg(issue.OrganizationID, groupIDs); err != nil {
-		return err
-	}
-	return s.issueGroupRepo.ReplaceForIssue(issue.ID, groupIDs)
 }
 
 func (s *issueService) UpdateStatusWithImprint(issueID uuid.UUID, newStatusID uuid.UUID, actorID uuid.UUID) error {

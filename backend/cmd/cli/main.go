@@ -110,9 +110,6 @@ func main() {
 		&model.Comment{},
 		&model.IssueTemplate{},
 		&model.IssueEvent{},
-		&model.Group{},
-		&model.UserGroup{},
-		&model.IssueGroup{},
 		&model.TransitionAlertRule{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
@@ -139,6 +136,9 @@ func main() {
 	}
 	if err := appdb.MigrateJunctionOrganizationID(db); err != nil {
 		log.Fatalf("failed migrate junction organization_id: %v", err)
+	}
+	if err := appdb.MigrateDropGroupTables(db); err != nil {
+		log.Fatalf("failed migrate drop group tables: %v", err)
 	}
 
 	orgRepo := repository.NewOrganizationRepository(db)

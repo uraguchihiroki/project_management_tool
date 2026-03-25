@@ -16,7 +16,6 @@
 | Method | Path | テナントBB | 主なテスト・備考 |
 |--------|------|------------|-------------------|
 | GET | /users | **done** | `user_tenant_test.go`（一覧は JWT org のみ） |
-| GET | /users/:id/groups | todo | |
 | GET | /users/:id | **done** | `user_tenant_test.go`（他 org ユーザー 404） |
 | POST | /admin/switch-organization | — | 組織切替（別観点） |
 | PUT | /users/:id/admin | todo | |
@@ -70,13 +69,6 @@
 | GET | /projects/:id | **done** | `project_tenant_test.go`（他 org 404） |
 | PUT | /projects/:id | **done** | 同上 |
 | DELETE | /projects/:id | **done** | 同上 |
-| GET | /organizations/:orgId/groups | todo | |
-| POST | /organizations/:orgId/groups | todo | |
-| GET | /groups/:id/members | todo | |
-| PUT | /groups/:id/members | todo | |
-| GET | /groups/:id | todo | |
-| PUT | /groups/:id | todo | |
-| DELETE | /groups/:id | todo | |
 | GET | /projects/:projectId/issues | todo | |
 | POST | /projects/:projectId/issues | todo | |
 | GET | /organizations/:orgId/issues | todo | |
@@ -84,8 +76,6 @@
 | GET | /organizations/:orgId/issues/:number | todo | |
 | PUT | /organizations/:orgId/issues/:number | todo | |
 | DELETE | /organizations/:orgId/issues/:number | todo | |
-| GET | /projects/:projectId/issues/:number/groups | todo | |
-| PUT | /projects/:projectId/issues/:number/groups | todo | |
 | GET | /projects/:projectId/issues/:number | todo | |
 | PUT | /projects/:projectId/issues/:number | todo | |
 | DELETE | /projects/:projectId/issues/:number | todo | |

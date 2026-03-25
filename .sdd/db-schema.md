@@ -17,7 +17,7 @@
 目的はテナント境界の強制だけでなく、契約終了時に「`organization_id = <tenant>` で削除対象を説明・特定できる状態」を維持すること。
 
 - 直接親を辿れば組織が分かるテーブル（中間テーブルを含む）でも、**説明責任のため `organization_id` を保持する**。
-- 結合テーブル（`user_roles`, `user_groups`, `issue_groups`, `organization_user_departments`）も例外にしない。
+- 結合テーブル（`user_roles`, `organization_user_departments`）も例外にしない。
 
 ---
 
@@ -25,7 +25,7 @@
 
 **スキーマ上の一意制約は主キーに限定する。** 組織名・メール・(organization_id, email)・(organization_id, key)・(name, organization_id) on roles・同一ワークフロー内の (name, display_order)（未削除行）・空でない `status_key` の重複禁止などは、**Service 層で保証する**。検索用には必要に応じて **非一意** のインデックスを張ってよい。
 
-**結合テーブル**（`user_roles`, `user_groups`, `issue_groups`, `organization_user_departments`）は **複合主キーは使わず**、**`id`（UUID）単独 PK** とする。`(user_id, role_id)` などの「有効行としての1組み合わせ1件」は **DB UNIQUE ではなく Service/Repository** で保証する。旧複合 PK の PostgreSQL DB は起動時 `MigrateJunctionTablesSurrogatePK`（`internal/db/migrate_junction_surrogate_pk.go`）で移行する。
+**結合テーブル**（`user_roles`, `organization_user_departments`）は **複合主キーは使わず**、**`id`（UUID）単独 PK** とする。`(user_id, role_id)` などの「有効行としての1組み合わせ1件」は **DB UNIQUE ではなく Service/Repository** で保証する。旧複合 PK の PostgreSQL DB は起動時 `MigrateJunctionTablesSurrogatePK`（`internal/db/migrate_junction_surrogate_pk.go`）で移行する。
 
 方針の根拠は [principles.md](principles.md)「データベースの一意制約（PK のみ）」。
 
@@ -219,31 +219,6 @@ comments
 ├── created_at
 └── updated_at
 
-groups（組織スコープ。部署コピー・タグ・通知用など用途を `kind` 等で区別）
-├── id (PK)
-├── key (VARCHAR(255), NOT NULL)
-├── organization_id (FK → organizations.id, NOT NULL)
-├── name
-├── kind (nullable)                     # 例: team / tag / notification / sync_from_hr 等・実装で確定
-└── created_at
-
-user_groups（ユーザー ↔ Group 多対多）
-├── id (PK, UUID)
-├── organization_id (FK → organizations.id, NOT NULL)
-├── user_id (FK → users.id)
-├── group_id (FK → groups.id)
-├── key (VARCHAR(255), NOT NULL)
-└── deleted_at
-
-issue_groups（Issue ↔ Group 多対多・開示・共同文脈）
-├── id (PK, UUID)
-├── organization_id (FK → organizations.id, NOT NULL)
-├── issue_id (FK → issues.id)
-├── group_id (FK → groups.id)
-├── role (nullable)                     # 例: primary / collaborator / tag・実装で確定
-├── key (VARCHAR(255), NOT NULL)
-└── deleted_at
-
 issue_events（インプリントの列・追記のみ。上記「イベントログ」節と同一概念）
 ├── （上記セクションの列定義に準拠）
 
@@ -263,12 +238,12 @@ issue_templates
 
 ---
 
-## ステータス遷移・Group（仕様の柱の一部）
+## ステータス遷移（仕様の柱の一部）
 
-**許可遷移・遷移アラート・監査**の意味論は [transition-permissions.md](transition-permissions.md)（**7**）。本ドキュメントでは **テーブル**として `groups` / `issue_groups` / `user_groups` / `issue_events` を置く（上記 ER・各節）。
+**許可遷移・遷移アラート・監査**の意味論は [transition-permissions.md](transition-permissions.md)（**7**）。本ドキュメントでは **テーブル**として `issue_events` を置く（上記 ER・各節）。
 
-- **役職（roles）** は稟議・ディレクトリ型のマスタとして必須ではない。**Issue 文脈の Group** を主とし、`roles` / `user_roles` は既存互換・補助として扱う（廃止は別議論）。
-- **Position** 専用テーブルは必須としない。表示順が必要なら `groups.display_order` 等で足りる想定（詳細は transition-permissions）。
+- **役職（roles）** は稟議・ディレクトリ型のマスタとして必須ではない。`roles` / `user_roles` は既存互換・補助として扱う（廃止は別議論）。
+- **Position** 専用テーブルは必須としない（詳細は transition-permissions）。
 
 ---
 
@@ -441,45 +416,6 @@ issue_templates
 | body | TEXT | | 本文テンプレート |
 | default_priority | VARCHAR(20) | NOT NULL, DEFAULT 'medium' | デフォルト優先度 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
-
-### groups
-
-| カラム | 型 | 制約 | 説明 |
-|-------|-----|------|------|
-| id | UUID | PK | グループID |
-| key | VARCHAR(255) | NOT NULL | API/URL 用識別子 |
-| organization_id | UUID | FK, NOT NULL | 所属組織 |
-| name | VARCHAR(200) | NOT NULL | 表示名 |
-| kind | VARCHAR(50) | nullable | 用途区分（例: team / tag / notification）。集計・フィルタ用 |
-| display_order | INTEGER | nullable | 一覧の並び（任意） |
-| created_at | TIMESTAMPTZ | NOT NULL | 作成日時 |
-
-### user_groups
-
-| カラム | 型 | 制約 | 説明 |
-|-------|-----|------|------|
-| id | UUID | PK | 行ID（代理キー） |
-| organization_id | UUID | FK, NOT NULL | 所属組織 |
-| user_id | UUID | FK, NOT NULL | ユーザー |
-| group_id | UUID | FK, NOT NULL | グループ |
-| key | VARCHAR(255) | NOT NULL | API/URL 用 |
-| deleted_at | TIMESTAMP | nullable | 論理削除 |
-
-> **Note:** 有効行における `(user_id, group_id)` の一意は **Repository** で保証。1 ユーザーが複数グループに入るときは行が複数（兼務）。
-
-### issue_groups
-
-| カラム | 型 | 制約 | 説明 |
-|-------|-----|------|------|
-| id | UUID | PK | 行ID（代理キー） |
-| organization_id | UUID | FK, NOT NULL | 所属組織 |
-| issue_id | UUID | FK, NOT NULL | Issue |
-| group_id | UUID | FK, NOT NULL | グループ |
-| role | VARCHAR(50) | nullable | 例: primary / collaborator / tag |
-| key | VARCHAR(255) | NOT NULL | API/URL 用 |
-| deleted_at | TIMESTAMP | nullable | 論理削除 |
-
-> **Note:** 有効行における `(issue_id, group_id)` の一意は **Repository** で保証。
 
 ### organization_user_departments
 

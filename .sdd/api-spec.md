@@ -6,7 +6,7 @@
 
 | 順 | ドキュメント | 内容 |
 |----|--------------|------|
-| **5** | [db-schema.md](db-schema.md) | **インプリント**（`issue_events` の追記行）、**イベントログ**、**Group** と **Issue↔Group / User↔Group** 多対多 |
+| **5** | [db-schema.md](db-schema.md) | **インプリント**（`issue_events` の追記行）、**イベントログ** |
 | **6** | 本ドキュメント（api-spec） | 一覧・フィルタ・**イベント取得**など **クエリしやすい** API 契約 |
 | **7** | [transition-permissions.md](transition-permissions.md) | **許可される遷移（形）**、**遷移アラート**、**監査の意味**（運用・通知・ログの分担） |
 
@@ -138,32 +138,15 @@ http://localhost:8080/api/v1
 
 > **Note:** GET /projects/:id の `statuses` は **Issue 用**（`default_workflow_id` の列）。**POST /projects 直後は未プロビジョンのため空や未設定になりうる**。カンバンを使う前に POST …/default-issue-workflow または初回 Issue 作成で確保する。`project_status` は現在のプロジェクト進行。進行の一覧は GET /projects/:id/project-statuses。
 
-### Groups（グループ）
-
-組織内の **Group**（開示・共同文脈・通知の宛先・タグ的用途）。**Issue 文脈を主**とし、HR ディレクトリと完全一致させる必要はない（同期は `kind` 等で表現可能）。
-
-| Method | Path | 説明 |
-|--------|------|------|
-| GET | /organizations/:orgId/groups | グループ一覧（`?kind=` でフィルタ可） |
-| POST | /organizations/:orgId/groups | グループ作成 |
-| GET | /groups/:id | グループ詳細 |
-| PUT | /groups/:id | グループ更新 |
-| DELETE | /groups/:id | グループ削除 |
-| GET | /groups/:id/members | メンバー（User）一覧 |
-| PUT | /groups/:id/members | メンバー一括置換または差分（実装で確定） |
-| GET | /users/:id/groups | ユーザーが所属するグループ一覧 |
-
 ### Issues（チケット）
 
 | Method | Path | 説明 |
 |--------|------|------|
-| GET | /projects/:projectId/issues | Issue一覧取得。**クエリ例**: `group_id`（Group に紐づく Issue のみ）、`status_id`、`assignee_id`、期間は **`updated_at` またはイベント API** と整合させる（一覧は軽量を優先） |
-| POST | /projects/:projectId/issues | Issue作成（body に `group_ids` 任意） |
-| GET | /projects/:projectId/issues/:number | Issue詳細取得（**groups** を含めてもよい） |
+| GET | /projects/:projectId/issues | Issue一覧取得。期間は **`updated_at` またはイベント API** と整合させる（一覧は軽量を優先） |
+| POST | /projects/:projectId/issues | Issue作成 |
+| GET | /projects/:projectId/issues/:number | Issue詳細取得 |
 | PUT | /projects/:projectId/issues/:number | Issue更新（ステータス・担当変更時はサーバが **issue_events** に追記する想定） |
 | DELETE | /projects/:projectId/issues/:number | Issue削除 |
-| GET | /projects/:projectId/issues/:number/groups | Issue に付いた Group 一覧 |
-| PUT | /projects/:projectId/issues/:number/groups | Issue ↔ Group の紐付け更新（多対多） |
 
 ### Issue events（インプリント・イベントログ・監査向け）
 

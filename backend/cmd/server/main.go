@@ -60,9 +60,6 @@ func main() {
 		&model.Comment{},
 		&model.IssueTemplate{},
 		&model.IssueEvent{},
-		&model.Group{},
-		&model.UserGroup{},
-		&model.IssueGroup{},
 		&model.TransitionAlertRule{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
@@ -90,15 +87,15 @@ func main() {
 	if err := appdb.MigrateJunctionOrganizationID(db); err != nil {
 		log.Fatalf("failed migrate junction organization_id: %v", err)
 	}
+	if err := appdb.MigrateDropGroupTables(db); err != nil {
+		log.Fatalf("failed migrate drop group tables: %v", err)
+	}
 
 	userRepo := repository.NewUserRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
 	statusRepo := repository.NewStatusRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
 	issueEventRepo := repository.NewIssueEventRepository(db)
-	groupRepo := repository.NewGroupRepository(db)
-	userGroupRepo := repository.NewUserGroupRepository(db)
-	issueGroupRepo := repository.NewIssueGroupRepository(db)
 	alertRuleRepo := repository.NewTransitionAlertRuleRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
@@ -118,14 +115,13 @@ func main() {
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
-	alertEval := &service.TransitionAlertEvaluator{Rules: alertRuleRepo, UG: userGroupRepo}
-	issueSvc := service.NewIssueService(issueRepo, projectRepo, statusRepo, workflowRepo, transitionRepo, issueEventRepo, groupRepo, issueGroupRepo, alertEval, issueWFProv)
+	alertEval := &service.TransitionAlertEvaluator{Rules: alertRuleRepo}
+	issueSvc := service.NewIssueService(issueRepo, projectRepo, statusRepo, workflowRepo, transitionRepo, issueEventRepo, alertEval, issueWFProv)
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
 	statusSvc := service.NewStatusService(statusRepo, workflowRepo, transitionRepo)
-	groupSvc := service.NewGroupService(groupRepo, userGroupRepo, userRepo)
 
 	userHandler := handler.NewUserHandler(userSvc)
 	projectHandler := handler.NewProjectHandler(projectSvc, issueWFProv)
@@ -140,7 +136,6 @@ func main() {
 	departmentHandler := handler.NewDepartmentHandler(departmentSvc)
 	statusHandler := handler.NewStatusHandler(statusSvc, workflowSvc)
 	issueEventHandler := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
-	groupHandler := handler.NewGroupHandler(groupSvc)
 
 	e := echo.New()
 	e.Use(middleware.Logger())
@@ -183,7 +178,6 @@ func main() {
 	public.POST("/admin/login", userHandler.AdminLogin)
 	public.POST("/super-admin/login", superAdminHandler.Login)
 	api.GET("/users", userHandler.List)
-	api.GET("/users/:id/groups", groupHandler.ListByUser)
 	api.GET("/users/:id", userHandler.Get)
 	api.POST("/admin/switch-organization", userHandler.SwitchOrganization)
 	api.PUT("/users/:id/admin", userHandler.SetAdmin)
@@ -254,14 +248,6 @@ func main() {
 	api.PUT("/projects/:id", projectHandler.Update)
 	api.DELETE("/projects/:id", projectHandler.Delete)
 
-	api.GET("/organizations/:orgId/groups", groupHandler.List)
-	api.POST("/organizations/:orgId/groups", groupHandler.Create)
-	api.GET("/groups/:id/members", groupHandler.ListMembers)
-	api.PUT("/groups/:id/members", groupHandler.ReplaceMembers)
-	api.GET("/groups/:id", groupHandler.Get)
-	api.PUT("/groups/:id", groupHandler.Update)
-	api.DELETE("/groups/:id", groupHandler.Delete)
-
 	api.GET("/projects/:projectId/issues", issueHandler.List)
 	api.POST("/projects/:projectId/issues", issueHandler.Create)
 	api.GET("/organizations/:orgId/issues", issueHandler.ListByOrg)
@@ -269,8 +255,6 @@ func main() {
 	api.GET("/organizations/:orgId/issues/:number", issueHandler.GetByOrgAndNumber)
 	api.PUT("/organizations/:orgId/issues/:number", issueHandler.UpdateByOrgAndNumber)
 	api.DELETE("/organizations/:orgId/issues/:number", issueHandler.DeleteByOrgAndNumber)
-	api.GET("/projects/:projectId/issues/:number/groups", issueHandler.ListIssueGroups)
-	api.PUT("/projects/:projectId/issues/:number/groups", issueHandler.PutIssueGroups)
 	api.GET("/projects/:projectId/issues/:number", issueHandler.Get)
 	api.PUT("/projects/:projectId/issues/:number", issueHandler.Update)
 	api.DELETE("/projects/:projectId/issues/:number", issueHandler.Delete)

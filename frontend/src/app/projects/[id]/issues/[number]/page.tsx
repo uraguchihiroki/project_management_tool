@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProject, getIssue, createComment, updateIssue, getIssueEvents } from '@/lib/api'
 import { useState, use } from 'react'
 import Link from 'next/link'
-import { Circle, MessageSquare, Send, History, Users } from 'lucide-react'
+import { Circle, MessageSquare, Send, History } from 'lucide-react'
 import { PRIORITY_LABELS, PRIORITY_COLORS, type Priority } from '@/types'
 import type { Status, Comment, IssueEvent } from '@/types'
 import { format } from 'date-fns'
@@ -214,25 +214,6 @@ export default function IssuePage({ params }: { params: Promise<{ id: string; nu
                 </button>
               )}
             </div>
-
-            {(issue.groups?.length ?? 0) > 0 && (
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5" />
-                  グループ
-                </h3>
-                <div className="flex flex-wrap gap-2" data-testid="issue-groups">
-                  {(issue.groups ?? []).map((g) => (
-                    <span
-                      key={g.id}
-                      className="text-xs px-2 py-1 rounded-md bg-indigo-50 text-indigo-800 border border-indigo-100"
-                    >
-                      {g.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">詳細</h3>

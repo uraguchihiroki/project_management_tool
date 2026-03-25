@@ -161,43 +161,6 @@ type WorkflowTransition struct {
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// Group は組織スコープのグループ（開示・通知・タグ等）
-type Group struct {
-	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	Key            string         `gorm:"size:255;not null" json:"key"`
-	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index" json:"organization_id"`
-	Name           string         `gorm:"size:200;not null" json:"name"`
-	Kind           *string        `gorm:"size:50" json:"kind,omitempty"`
-	DisplayOrder   int            `gorm:"column:display_order;not null;default:0" json:"display_order"`
-	CreatedAt      time.Time      `json:"created_at"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
-}
-
-// UserGroup はユーザー ↔ Group 多対多
-type UserGroup struct {
-	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_groups_org_pair,priority:1" json:"organization_id"`
-	UserID         uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_groups_org_pair,priority:2" json:"user_id"`
-	GroupID        uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_groups_org_pair,priority:3" json:"group_id"`
-	Key            string         `gorm:"size:255;not null" json:"key"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
-}
-
-func (UserGroup) TableName() string { return "user_groups" }
-
-// IssueGroup は Issue ↔ Group 多対多
-type IssueGroup struct {
-	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index:idx_issue_groups_org_pair,priority:1" json:"organization_id"`
-	IssueID        uuid.UUID      `gorm:"type:uuid;not null;index:idx_issue_groups_org_pair,priority:2" json:"issue_id"`
-	GroupID        uuid.UUID      `gorm:"type:uuid;not null;index:idx_issue_groups_org_pair,priority:3" json:"group_id"`
-	Key            string         `gorm:"size:255;not null" json:"key"`
-	Role           *string        `gorm:"size:50" json:"role,omitempty"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
-}
-
-func (IssueGroup) TableName() string { return "issue_groups" }
-
 // TransitionAlertRule は遷移アラート条件（想定外 actor 検知用）
 type TransitionAlertRule struct {
 	ID              uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
@@ -206,8 +169,6 @@ type TransitionAlertRule struct {
 	Name            string         `gorm:"size:200;not null" json:"name"`
 	FromStatusID    *uuid.UUID     `gorm:"type:uuid" json:"from_status_id,omitempty"`
 	ToStatusID      uuid.UUID      `gorm:"type:uuid;not null;index" json:"to_status_id"`
-	ExpectedGroupID *uuid.UUID     `gorm:"type:uuid" json:"expected_group_id,omitempty"`
-	NotifyGroupID   *uuid.UUID     `gorm:"type:uuid" json:"notify_group_id,omitempty"`
 	CreatedAt       time.Time      `json:"created_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }
@@ -231,7 +192,6 @@ type Issue struct {
 	TemplateID     *uint          `json:"template_id,omitempty"`
 	WorkflowID     uint           `gorm:"not null;index" json:"workflow_id"`
 	Comments       []Comment      `gorm:"foreignKey:IssueID" json:"comments,omitempty"`
-	Groups         []Group        `gorm:"-" json:"groups,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`

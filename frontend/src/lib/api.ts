@@ -12,7 +12,6 @@ import type {
   Organization,
   SuperAdmin,
   Workflow,
-  Group,
   IssueEvent,
   WorkflowTransition,
 } from '@/types'
@@ -238,12 +237,8 @@ export const updateProjectStatus = (
     .then((r) => r.data.data)
 
 // Issues
-export const getIssues = (projectId: string, opts?: { group_id?: string }) =>
-  api
-    .get<ListResponse<Issue>>(`/projects/${projectId}/issues`, {
-      params: opts?.group_id ? { group_id: opts.group_id } : {},
-    })
-    .then((r) => r.data.data)
+export const getIssues = (projectId: string) =>
+  api.get<ListResponse<Issue>>(`/projects/${projectId}/issues`).then((r) => r.data.data)
 
 export const getIssue = (projectId: string, number: number) =>
   api.get<ApiResponse<Issue>>(`/projects/${projectId}/issues/${number}`).then((r) => r.data.data)
@@ -259,7 +254,6 @@ export const createIssue = (
     reporter_id: string
     due_date?: string
     template_id?: number
-    group_ids?: string[]
   }
 ) => api.post<ApiResponse<Issue>>(`/projects/${projectId}/issues`, data).then((r) => r.data.data)
 
@@ -297,27 +291,12 @@ export const updateIssue = (
     status_id: string
     priority: string
     assignee_id: string
-    group_ids: string[]
   }>
 ) => api.put<ApiResponse<Issue>>(`/projects/${projectId}/issues/${number}`, data).then((r) => r.data.data)
 
 /** Issue のインプリント（時系列） */
 export const getIssueEvents = (issueId: string) =>
   api.get<{ data: IssueEvent[] }>(`/issues/${issueId}/events`).then((r) => r.data.data)
-
-/** 組織のグループ一覧 */
-export const getOrganizationGroups = (orgId: string, params?: { kind?: string }) =>
-  api.get<ListResponse<Group>>(`/organizations/${orgId}/groups`, { params: params ?? {} }).then((r) => r.data.data)
-
-/** Issue に付いたグループ一覧（GET は Issue 詳細に含まれることもあるが、明示取得用） */
-export const getIssueGroups = (projectId: string, number: number) =>
-  api.get<{ data: Group[] }>(`/projects/${projectId}/issues/${number}/groups`).then((r) => r.data.data)
-
-export const putIssueGroups = (projectId: string, number: number, groupIds: string[]) =>
-  api.put(`/projects/${projectId}/issues/${number}/groups`, { group_ids: groupIds })
-
-export const getUserGroups = (userId: string) =>
-  api.get<ListResponse<Group>>(`/users/${userId}/groups`).then((r) => r.data.data)
 
 export const deleteIssue = (projectId: string, number: number) =>
   api.delete(`/projects/${projectId}/issues/${number}`)
