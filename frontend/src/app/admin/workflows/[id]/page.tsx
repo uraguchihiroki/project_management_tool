@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -32,6 +32,18 @@ type InvalidTransitionStrap = {
   clientId: string
   from_status_id: string
   to_status_id: string
+}
+type TransitionDiagramNode = {
+  id: string
+  name: string
+  color: string
+  x: number
+  y: number
+}
+type TransitionDiagramEdge = {
+  id: string
+  from: string
+  to: string
 }
 
 export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -261,6 +273,49 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   }
 
   const statusesByOrder = [...statuses].sort((a, b) => a.display_order - b.display_order)
+  const transitionDiagram = useMemo(() => {
+    const nodeWidth = 170
+    const nodeHeight = 54
+    const horizontalGap = 72
+    const paddingX = 36
+    const paddingY = 30
+    const width = Math.max(
+      420,
+      statusesByOrder.length > 0
+        ? paddingX * 2 + statusesByOrder.length * nodeWidth + Math.max(0, statusesByOrder.length - 1) * horizontalGap
+        : 420
+    )
+    const height = 170
+    const centerY = Math.round(height / 2 - nodeHeight / 2)
+
+    const nodes: TransitionDiagramNode[] = statusesByOrder.map((s, idx) => ({
+      id: s.id,
+      name: `${s.display_order}. ${s.name}`,
+      color: s.color,
+      x: paddingX + idx * (nodeWidth + horizontalGap),
+      y: centerY,
+    }))
+    const nodeIndex = new Map(nodes.map((n, idx) => [n.id, idx]))
+
+    const edges: TransitionDiagramEdge[] = transitions
+      .filter((t) => nodeIndex.has(t.from_status_id) && nodeIndex.has(t.to_status_id))
+      .map((t) => ({ id: `persisted-${t.id}`, from: t.from_status_id, to: t.to_status_id }))
+
+    const invalidEdges: TransitionDiagramEdge[] = invalidTransitionStraps
+      .filter((s) => nodeIndex.has(s.from_status_id) && nodeIndex.has(s.to_status_id))
+      .map((s) => ({ id: `invalid-${s.clientId}`, from: s.from_status_id, to: s.to_status_id }))
+
+    return {
+      nodeWidth,
+      nodeHeight,
+      width,
+      height,
+      nodes,
+      nodeIndex,
+      edges,
+      invalidEdges,
+    }
+  }, [statusesByOrder, transitions, invalidTransitionStraps])
 
   const statusReferencedInTransition = (statusId: string) =>
     transitions.some((t) => t.from_status_id === statusId || t.to_status_id === statusId)
@@ -563,6 +618,131 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             </button>
           )}
         </div>
+        {!orgMismatch && (
+          <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50/60 p-4">
+            <h3 className="text-sm font-semibold text-gray-900">遷移図</h3>
+            <p className="mt-1 text-xs text-gray-600">現在の許可遷移を図で表示しています。</p>
+            {(statusesLoading || transitionsLoading) && (
+              <p className="mt-3 text-sm text-gray-500">遷移図を読み込み中...</p>
+            )}
+            {!statusesLoading && !transitionsLoading && statusesByOrder.length < 2 && (
+              <p className="mt-3 text-sm text-gray-500">ステータスが2つ以上あるときに遷移図を表示できます。</p>
+            )}
+            {!statusesLoading && !transitionsLoading && statusesByOrder.length >= 2 && (
+              <div className="mt-3 overflow-x-auto">
+                <svg
+                  width={transitionDiagram.width}
+                  height={transitionDiagram.height}
+                  viewBox={`0 0 ${transitionDiagram.width} ${transitionDiagram.height}`}
+                  className="min-w-full"
+                  role="img"
+                  aria-label="ステータス遷移図"
+                >
+                  <defs>
+                    <marker
+                      id="transition-arrow"
+                      markerWidth="10"
+                      markerHeight="10"
+                      refX="8"
+                      refY="3"
+                      orient="auto"
+                      markerUnits="strokeWidth"
+                    >
+                      <path d="M0,0 L0,6 L9,3 z" fill="#94A3B8" />
+                    </marker>
+                    <marker
+                      id="transition-arrow-invalid"
+                      markerWidth="10"
+                      markerHeight="10"
+                      refX="8"
+                      refY="3"
+                      orient="auto"
+                      markerUnits="strokeWidth"
+                    >
+                      <path d="M0,0 L0,6 L9,3 z" fill="#D97706" />
+                    </marker>
+                  </defs>
+
+                  {transitionDiagram.edges.map((edge) => {
+                    const from = transitionDiagram.nodes[transitionDiagram.nodeIndex.get(edge.from) ?? -1]
+                    const to = transitionDiagram.nodes[transitionDiagram.nodeIndex.get(edge.to) ?? -1]
+                    if (!from || !to) return null
+                    const startX = from.x + transitionDiagram.nodeWidth
+                    const endX = to.x
+                    const y = from.y + transitionDiagram.nodeHeight / 2
+                    return (
+                      <line
+                        key={edge.id}
+                        x1={startX}
+                        y1={y}
+                        x2={endX}
+                        y2={to.y + transitionDiagram.nodeHeight / 2}
+                        stroke="#94A3B8"
+                        strokeWidth="2"
+                        markerEnd="url(#transition-arrow)"
+                      />
+                    )
+                  })}
+
+                  {transitionDiagram.invalidEdges.map((edge) => {
+                    const from = transitionDiagram.nodes[transitionDiagram.nodeIndex.get(edge.from) ?? -1]
+                    const to = transitionDiagram.nodes[transitionDiagram.nodeIndex.get(edge.to) ?? -1]
+                    if (!from || !to) return null
+                    const startX = from.x + transitionDiagram.nodeWidth
+                    const endX = to.x
+                    const y = from.y + transitionDiagram.nodeHeight / 2
+                    return (
+                      <line
+                        key={edge.id}
+                        x1={startX}
+                        y1={y}
+                        x2={endX}
+                        y2={to.y + transitionDiagram.nodeHeight / 2}
+                        stroke="#D97706"
+                        strokeWidth="2"
+                        strokeDasharray="5 4"
+                        markerEnd="url(#transition-arrow-invalid)"
+                      />
+                    )
+                  })}
+
+                  {transitionDiagram.nodes.map((node) => (
+                    <g key={node.id}>
+                      <rect
+                        x={node.x}
+                        y={node.y}
+                        width={transitionDiagram.nodeWidth}
+                        height={transitionDiagram.nodeHeight}
+                        rx="10"
+                        fill="#ffffff"
+                        stroke="#D1D5DB"
+                      />
+                      <circle cx={node.x + 16} cy={node.y + 16} r="6" fill={node.color} />
+                      <text
+                        x={node.x + 30}
+                        y={node.y + 20}
+                        fontSize="12"
+                        fontWeight="600"
+                        fill="#111827"
+                        dominantBaseline="middle"
+                      >
+                        {node.name}
+                      </text>
+                    </g>
+                  ))}
+                </svg>
+                {transitionDiagram.edges.length === 0 && transitionDiagram.invalidEdges.length === 0 && (
+                  <p className="mt-2 text-xs text-gray-500">遷移はまだありません。下の「ストラップを追加」から作成できます。</p>
+                )}
+                {transitionDiagram.invalidEdges.length > 0 && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    破線の矢印は未保存の無効な遷移候補（同一ステータスまたは重複）です。
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {orgMismatch && (
           <p className="text-sm text-gray-500">
             選択中の組織に属するワークフローのみ、遷移設定を表示・編集できます。
