@@ -29,7 +29,7 @@
 
 | 項目 | 内容 | 状態 |
 |------|------|------|
-| 論理削除まわりの残差 | **(1) 起動時マイグレーション** … サーバ起動時に [`internal/db`](../backend/internal/db) が実行する処理（レガシー列の除去・重複 statuses のマージ・旧業務 UNIQUE の DROP・任意の非一意インデックス作成・結合テーブルの代理 PK 移行など）は、**業務 API ではなく DB 移行・整合用**である。ここでは意図的に **生 `DELETE`** や **`Unscoped().Delete`** が使われる（[`cmd/server/main.go`](../backend/cmd/server/main.go) の起動順で呼ばれる）。業務上の一意は DB の UNIQUE ではなく Service で保証する（[principles.md](principles.md)）。 **(2) 遷移テーブル等の再シード** … `workflow_transitions` / `project_status_transitions` の **全作り直し**など、単一サロゲート PK でも同一ビジネスキーで再挿入がぶつかる経路では **`Unscoped` で物理削除してから Create** が残る。一方、**`user_roles` / `user_groups` / `issue_groups` / `organization_user_departments`** は **`id`（UUID）代理 PK**（`MigrateJunctionTablesSurrogatePK`）により、付け替えは **論理削除＋新行 Create** で行い、業務 Repository では **`Unscoped` に依存しない**。詳細は [db-schema.md](db-schema.md) の論理削除ノート参照。 | open |
+| 論理削除まわりの残差 | **起動時マイグレーションのみ** … サーバ起動時に [`internal/db`](../backend/internal/db) が実行する処理（レガシー列の除去・重複 statuses のマージ・旧業務 UNIQUE の DROP・任意の非一意インデックス作成・結合テーブルの代理 PK 移行・`workflow_transitions` の重複行畳み込みなど）は、**業務 API ではなく DB 移行・整合用**である。ここでは意図的に **生 `DELETE`** や **`Unscoped().Delete`** が使われる（[`cmd/server/main.go`](../backend/cmd/server/main.go) の起動順で呼ばれる）。**業務 Repository**（結合テーブルの付け替え、`workflow_transitions` / `project_status_transitions` の許可遷移の更新含む）は原則 **ソフト削除＋新行 `Create`** であり、**`Unscoped` による物理削除**は業務経路では使わない。業務上の一意は DB の UNIQUE ではなく Service で保証する（[principles.md](principles.md)）。詳細は [db-schema.md](db-schema.md) の論理削除ノート参照。 | open |
 
 ## 棚卸しメモ（参考）
 
@@ -37,3 +37,4 @@
 |------|------|------|
 | マイグレーション | `status_integrity` / `migrate_issue_project_status` の物理 DELETE は **移行専用**（業務の論理削除と別物）。 | done |
 | 結合テーブル | `AssignRolesToUser` / `ReplaceMembers` / `ReplaceForIssue` / 部署の `SetUserDepartments` は **論理削除＋新行 Create**（代理 PK により `Unscoped` 不要）。重複 ID は入力側で除去。 | done |
+| 許可遷移 | `SeedAllPairs`（`workflow_transitions` / `project_status_transitions`）は **当該スコープの有効行をソフト削除のうえ再作成**。業務経路で `Unscoped` は使わない。 | done |

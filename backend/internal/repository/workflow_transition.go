@@ -34,16 +34,16 @@ func NewWorkflowTransitionRepository(db *gorm.DB) WorkflowTransitionRepository {
 }
 
 func (r *workflowTransitionRepository) DeleteByWorkflowID(workflowID uint) error {
-	return r.db.Unscoped().Where("workflow_id = ?", workflowID).Delete(&model.WorkflowTransition{}).Error
+	return r.db.Where("workflow_id = ?", workflowID).Delete(&model.WorkflowTransition{}).Error
 }
 
-// SeedAllPairs は同一ワークフロー内の任意遷移を許可（全ペア）
+// SeedAllPairs は同一ワークフロー内の各ステータス組み合わせに許可遷移を作成する（既存有効行はソフト削除のうえ再作成）
 func (r *workflowTransitionRepository) SeedAllPairs(workflowID uint, statusIDs []uuid.UUID) error {
 	if len(statusIDs) == 0 {
 		return nil
 	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().Where("workflow_id = ?", workflowID).Delete(&model.WorkflowTransition{}).Error; err != nil {
+		if err := tx.Where("workflow_id = ?", workflowID).Delete(&model.WorkflowTransition{}).Error; err != nil {
 			return err
 		}
 		seq := 0

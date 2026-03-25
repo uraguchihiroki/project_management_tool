@@ -87,7 +87,7 @@ http://localhost:8080/api/v1
 | PUT | /workflows/reorder | 表示順更新（body: `ids`） |
 | GET | /workflows/:id | 詳細取得（他組織の ID は 404） |
 | GET | /workflows/:id/statuses | **当該ワークフローに紐づく Issue 用 Status 一覧**（`display_order` 昇順）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。同一 `(name, display_order)` の重複は **DB 制約**で防ぐ（[tenant-invariants.md](tenant-invariants.md)、[db-schema.md](db-schema.md)）。 |
-| POST | /workflows/:id/statuses | **Issue 用ステータス追加**。body: `name`（必須）, `color`（省略時 `#6B7280`）, `display_order`（`0` または省略時は同一 WF 内の最大 `display_order` + 1）。作成後、当該 WF の **許可遷移を全ペア再シード** |
+| POST | /workflows/:id/statuses | **Issue 用ステータス追加**。body: `name`（必須）, `color`（省略時 `#6B7280`）, `display_order`（`0` または省略時は同一 WF 内の最大 `display_order` + 1）。作成後、当該 WF の **許可遷移を、現在のステータス一覧に基づき更新**（既存有効行の論理削除のうえ、必要な行を作成） |
 | PUT | /workflows/:id/statuses/reorder | ステータス並び替え。body: `status_ids`（UUID の配列・全件・順序どおり `display_order` が 1..n に振り直される） |
 | PUT | /workflows/:id | 名前・説明の更新 |
 | DELETE | /workflows/:id | 削除 |
