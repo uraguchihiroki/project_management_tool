@@ -4,7 +4,7 @@ export interface Organization {
   created_at: string
 }
 
-export interface Department {
+export interface Group {
   id: string
   organization_id: string
   name: string

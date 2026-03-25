@@ -89,6 +89,10 @@ func main() {
 		log.Fatalf("failed to migrate issue/project status split (pre): %v", err)
 	}
 
+	if err := appdb.MigrateRenameDepartmentsToGroups(db); err != nil {
+		log.Fatalf("failed migrate rename departments to groups: %v", err)
+	}
+
 	if err := appdb.MigrateJunctionTablesSurrogatePK(db); err != nil {
 		log.Fatalf("failed to migrate junction tables surrogate PK: %v", err)
 	}
@@ -98,8 +102,8 @@ func main() {
 		&model.SuperAdmin{},
 		&model.Role{},
 		&model.User{},
-		&model.Department{},
-		&model.OrganizationUserDepartment{},
+		&model.Group{},
+		&model.OrganizationUserGroup{},
 		&model.Project{},
 		&model.Status{},
 		&model.WorkflowTransition{},
@@ -148,13 +152,13 @@ func main() {
 	statusRepo := repository.NewStatusRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
-	departmentRepo := repository.NewDepartmentRepository(db)
+	groupRepo := repository.NewGroupRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
 	projectStatusRepo := repository.NewProjectStatusRepository(db)
 	transitionRepo := repository.NewWorkflowTransitionRepository(db)
 	issueWFProv := service.NewIssueWorkflowProvisioner(projectRepo, workflowRepo, statusRepo, transitionRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, issueWFProv)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, groupRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, issueWFProv)
 
 	var seedErr error
 	if *seedAll {

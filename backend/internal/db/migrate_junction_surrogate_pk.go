@@ -14,7 +14,7 @@ func MigrateJunctionTablesSurrogatePK(db *gorm.DB) error {
 	}
 	for _, table := range []string{
 		"user_roles",
-		"organization_user_departments",
+		"organization_user_groups",
 	} {
 		if err := migratePostgresJunctionTable(db, table); err != nil {
 			return err

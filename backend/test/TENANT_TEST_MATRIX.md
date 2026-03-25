@@ -45,13 +45,13 @@
 | POST | /organizations | todo | |
 | GET | /users/:id/organizations | todo | |
 | POST | /organizations/:orgId/users | todo | |
-| GET | /organizations/:orgId/departments | todo | |
-| POST | /organizations/:orgId/departments | todo | |
-| PUT | /organizations/:orgId/departments/reorder | todo | |
-| PUT | /organizations/:orgId/departments/:id | todo | |
-| DELETE | /organizations/:orgId/departments/:id | todo | |
-| GET | /users/:id/departments | todo | |
-| PUT | /users/:id/departments | todo | |
+| GET | /organizations/:orgId/groups | todo | |
+| POST | /organizations/:orgId/groups | todo | |
+| PUT | /organizations/:orgId/groups/reorder | todo | |
+| PUT | /organizations/:orgId/groups/:id | todo | |
+| DELETE | /organizations/:orgId/groups/:id | todo | |
+| GET | /users/:id/groups | todo | |
+| PUT | /users/:id/groups | todo | |
 | GET | /super-admin/organizations | — | SA 専用 |
 | POST | /super-admin/organizations | — | SA 専用 |
 | GET | /admin/users | todo | |

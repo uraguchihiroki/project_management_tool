@@ -17,7 +17,7 @@
 目的はテナント境界の強制だけでなく、契約終了時に「`organization_id = <tenant>` で削除対象を説明・特定できる状態」を維持すること。
 
 - 直接親を辿れば組織が分かるテーブル（中間テーブルを含む）でも、**説明責任のため `organization_id` を保持する**。
-- 結合テーブル（`user_roles`, `organization_user_departments`）も例外にしない。
+- 結合テーブル（`user_roles`, `organization_user_groups`）も例外にしない。
 
 ---
 
@@ -25,7 +25,7 @@
 
 **スキーマ上の一意制約は主キーに限定する。** 組織名・メール・(organization_id, email)・(organization_id, key)・(name, organization_id) on roles・同一ワークフロー内の (name, display_order)（未削除行）・空でない `status_key` の重複禁止などは、**Service 層で保証する**。検索用には必要に応じて **非一意** のインデックスを張ってよい。
 
-**結合テーブル**（`user_roles`, `organization_user_departments`）は **複合主キーは使わず**、**`id`（UUID）単独 PK** とする。`(user_id, role_id)` などの「有効行としての1組み合わせ1件」は **DB UNIQUE ではなく Service/Repository** で保証する。旧複合 PK の PostgreSQL DB は起動時 `MigrateJunctionTablesSurrogatePK`（`internal/db/migrate_junction_surrogate_pk.go`）で移行する。
+**結合テーブル**（`user_roles`, `organization_user_groups`）は **複合主キーは使わず**、**`id`（UUID）単独 PK** とする。`(user_id, role_id)` などの「有効行としての1組み合わせ1件」は **DB UNIQUE ではなく Service/Repository** で保証する。旧複合 PK の PostgreSQL DB は起動時 `MigrateJunctionTablesSurrogatePK`（`internal/db/migrate_junction_surrogate_pk.go`）で移行する。
 
 方針の根拠は [principles.md](principles.md)「データベースの一意制約（PK のみ）」。
 
@@ -417,18 +417,18 @@ issue_templates
 | default_priority | VARCHAR(20) | NOT NULL, DEFAULT 'medium' | デフォルト優先度 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
-### organization_user_departments
+### organization_user_groups
 
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | UUID | PK | 行ID（代理キー） |
 | organization_id | UUID | FK, NOT NULL | 組織 |
 | user_id | UUID | FK, NOT NULL | ユーザー |
-| department_id | UUID | FK, NOT NULL | 部署 |
+| group_id | UUID | FK, NOT NULL | グループ |
 | key | VARCHAR(255) | NOT NULL | API/URL 用 |
 | deleted_at | TIMESTAMP | nullable | 論理削除 |
 
-> **Note:** 有効行における `(organization_id, user_id, department_id)` の一意は **Repository** で保証。
+> **Note:** 有効行における `(organization_id, user_id, group_id)` の一意は **Repository** で保証。
 
 ### issue_events
 

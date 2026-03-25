@@ -55,6 +55,10 @@ func newTestServer(t *testing.T) *testServer {
 		t.Fatalf("failed migrate issue/project status split (pre): %v", err)
 	}
 
+	if err := appdb.MigrateRenameDepartmentsToGroups(db); err != nil {
+		t.Fatalf("failed migrate rename departments to groups: %v", err)
+	}
+
 	if err := appdb.MigrateJunctionTablesSurrogatePK(db); err != nil {
 		t.Fatalf("failed migrate junction tables surrogate PK: %v", err)
 	}
@@ -64,8 +68,8 @@ func newTestServer(t *testing.T) *testServer {
 		&model.SuperAdmin{},
 		&model.Role{},
 		&model.User{},
-		&model.Department{},
-		&model.OrganizationUserDepartment{},
+		&model.Group{},
+		&model.OrganizationUserGroup{},
 		&model.Project{},
 		&model.Workflow{},
 		&model.Status{},
@@ -139,7 +143,7 @@ func newTestServer(t *testing.T) *testServer {
 	templateRepo := repository.NewTemplateRepository(db)
 	orgRepo := repository.NewOrganizationRepository(db)
 	superAdminRepo := repository.NewSuperAdminRepository(db)
-	departmentRepo := repository.NewDepartmentRepository(db)
+	groupRepo := repository.NewGroupRepository(db)
 
 	projectStatusRepo := repository.NewProjectStatusRepository(db)
 	projectStatusTransitionRepo := repository.NewProjectStatusTransitionRepository(db)
@@ -148,10 +152,10 @@ func newTestServer(t *testing.T) *testServer {
 
 	userSvc := service.NewUserService(userRepo, orgRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo, projectStatusRepo, projectStatusTransitionRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, issueWFProv)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, groupRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, issueWFProv)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
-	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
+	groupSvc := service.NewGroupService(groupRepo, orgRepo)
 	alertEval := &service.TransitionAlertEvaluator{Rules: alertRuleRepo}
 	issueSvc := service.NewIssueService(issueRepo, projectRepo, statusRepo, workflowRepo, transitionRepo, issueEventRepo, alertEval, issueWFProv)
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
@@ -170,7 +174,7 @@ func newTestServer(t *testing.T) *testServer {
 	templateH := handler.NewTemplateHandler(templateSvc, projectSvc)
 	orgH := handler.NewOrganizationHandler(orgSvc)
 	superAdminH := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
-	departmentH := handler.NewDepartmentHandler(departmentSvc)
+	groupH := handler.NewGroupHandler(groupSvc)
 	statusH := handler.NewStatusHandler(statusSvc, workflowSvc)
 	issueEventH := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
 
@@ -228,13 +232,13 @@ func newTestServer(t *testing.T) *testServer {
 	api.POST("/organizations", orgH.Create)
 	api.GET("/users/:id/organizations", orgH.ListByUser)
 	api.POST("/organizations/:orgId/users", orgH.AddUser)
-	api.GET("/organizations/:orgId/departments", departmentH.List)
-	api.POST("/organizations/:orgId/departments", departmentH.Create)
-	api.PUT("/organizations/:orgId/departments/reorder", departmentH.Reorder)
-	api.PUT("/organizations/:orgId/departments/:id", departmentH.Update)
-	api.DELETE("/organizations/:orgId/departments/:id", departmentH.Delete)
-	api.GET("/users/:id/departments", departmentH.GetUserDepartments)
-	api.PUT("/users/:id/departments", departmentH.SetUserDepartments)
+	api.GET("/organizations/:orgId/groups", groupH.List)
+	api.POST("/organizations/:orgId/groups", groupH.Create)
+	api.PUT("/organizations/:orgId/groups/reorder", groupH.Reorder)
+	api.PUT("/organizations/:orgId/groups/:id", groupH.Update)
+	api.DELETE("/organizations/:orgId/groups/:id", groupH.Delete)
+	api.GET("/users/:id/groups", groupH.GetUserGroups)
+	api.PUT("/users/:id/groups", groupH.SetUserGroups)
 	api.GET("/super-admin/organizations", superAdminH.ListOrganizations)
 	api.POST("/super-admin/organizations", superAdminH.CreateOrganization)
 	api.GET("/admin/users", userH.ListWithRoles)
@@ -314,8 +318,18 @@ func (ts *testServer) reqWithToken(t *testing.T, token, method, path string, bod
 	}
 	defer resp.Body.Close()
 
+	b, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
+	if len(b) > 0 {
+		if err := json.Unmarshal(b, &result); err != nil {
+			result = map[string]interface{}{
+				"message": string(b),
+			}
+		}
+	}
+	if result == nil {
+		result = map[string]interface{}{}
+	}
 	return resp.StatusCode, result
 }
 
@@ -326,7 +340,7 @@ func mustGetString(t *testing.T, m map[string]interface{}, keys ...string) strin
 	for _, k := range keys {
 		mp, ok := current.(map[string]interface{})
 		if !ok {
-			t.Fatalf("expected map at key chain %v, got %T", keys, current)
+			t.Fatalf("expected map at key chain %v, got %T (%v). full response=%v", keys, current, current, m)
 		}
 		current = mp[k]
 	}
@@ -360,7 +374,7 @@ func mustGetArray(t *testing.T, m map[string]interface{}, key string) []interfac
 	t.Helper()
 	arr, ok := m[key].([]interface{})
 	if !ok {
-		t.Fatalf("expected array at key %q, got %T: %v", key, m[key], m[key])
+		t.Fatalf("expected array at key %q, got %T: %v. full response=%v", key, m[key], m[key], m)
 	}
 	return arr
 }

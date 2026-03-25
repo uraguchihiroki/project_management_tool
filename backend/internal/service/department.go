@@ -9,84 +9,84 @@ import (
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
-type DepartmentService interface {
-	ListByOrganization(orgID uuid.UUID) ([]model.Department, error)
-	Get(id uuid.UUID) (*model.Department, error)
-	Create(orgID uuid.UUID, name string) (*model.Department, error)
-	Update(id uuid.UUID, name string) (*model.Department, error)
+type GroupService interface {
+	ListByOrganization(orgID uuid.UUID) ([]model.Group, error)
+	Get(id uuid.UUID) (*model.Group, error)
+	Create(orgID uuid.UUID, name string) (*model.Group, error)
+	Update(id uuid.UUID, name string) (*model.Group, error)
 	Delete(id uuid.UUID) error
 	Reorder(orgID uuid.UUID, ids []uuid.UUID) error
-	GetUserDepartments(orgID, userID uuid.UUID) ([]model.Department, error)
-	SetUserDepartments(orgID, userID uuid.UUID, departmentIDs []uuid.UUID) error
+	GetUserGroups(orgID, userID uuid.UUID) ([]model.Group, error)
+	SetUserGroups(orgID, userID uuid.UUID, groupIDs []uuid.UUID) error
 }
 
-type departmentService struct {
-	deptRepo repository.DepartmentRepository
+type groupService struct {
+	groupRepo repository.GroupRepository
 	orgRepo  repository.OrganizationRepository
 }
 
-func NewDepartmentService(deptRepo repository.DepartmentRepository, orgRepo repository.OrganizationRepository) DepartmentService {
-	return &departmentService{deptRepo: deptRepo, orgRepo: orgRepo}
+func NewGroupService(groupRepo repository.GroupRepository, orgRepo repository.OrganizationRepository) GroupService {
+	return &groupService{groupRepo: groupRepo, orgRepo: orgRepo}
 }
 
-func (s *departmentService) ListByOrganization(orgID uuid.UUID) ([]model.Department, error) {
-	return s.deptRepo.FindByOrganizationID(orgID)
+func (s *groupService) ListByOrganization(orgID uuid.UUID) ([]model.Group, error) {
+	return s.groupRepo.FindByOrganizationID(orgID)
 }
 
-func (s *departmentService) Get(id uuid.UUID) (*model.Department, error) {
-	return s.deptRepo.FindByID(id)
+func (s *groupService) Get(id uuid.UUID) (*model.Group, error) {
+	return s.groupRepo.FindByID(id)
 }
 
-func (s *departmentService) Create(orgID uuid.UUID, name string) (*model.Department, error) {
-	maxOrder, err := s.deptRepo.GetMaxOrder(orgID)
+func (s *groupService) Create(orgID uuid.UUID, name string) (*model.Group, error) {
+	maxOrder, err := s.groupRepo.GetMaxOrder(orgID)
 	if err != nil {
 		return nil, err
 	}
-	deptID := uuid.New()
+	groupID := uuid.New()
 	key := keygen.Slug(name)
 	if key == "" {
-		key = keygen.UUIDKey(deptID)
+		key = keygen.UUIDKey(groupID)
 	}
-	d := &model.Department{
-		ID:             deptID,
+	g := &model.Group{
+		ID:             groupID,
 		Key:            key,
 		OrganizationID: orgID,
 		Name:           name,
 		Order:          maxOrder + 1,
 		CreatedAt:      time.Now(),
 	}
-	if err := s.deptRepo.Create(d); err != nil {
+	if err := s.groupRepo.Create(g); err != nil {
 		return nil, err
 	}
-	return d, nil
+	return g, nil
 }
 
-func (s *departmentService) Update(id uuid.UUID, name string) (*model.Department, error) {
-	d, err := s.deptRepo.FindByID(id)
+func (s *groupService) Update(id uuid.UUID, name string) (*model.Group, error) {
+	g, err := s.groupRepo.FindByID(id)
 	if err != nil {
 		return nil, err
 	}
 	if name != "" {
-		d.Name = name
+		g.Name = name
 	}
-	if err := s.deptRepo.Update(d); err != nil {
+	if err := s.groupRepo.Update(g); err != nil {
 		return nil, err
 	}
-	return d, nil
+	return g, nil
 }
 
-func (s *departmentService) Reorder(orgID uuid.UUID, ids []uuid.UUID) error {
-	return s.deptRepo.Reorder(orgID, ids)
+func (s *groupService) Reorder(orgID uuid.UUID, ids []uuid.UUID) error {
+	return s.groupRepo.Reorder(orgID, ids)
 }
 
-func (s *departmentService) Delete(id uuid.UUID) error {
-	return s.deptRepo.Delete(id)
+func (s *groupService) Delete(id uuid.UUID) error {
+	return s.groupRepo.Delete(id)
 }
 
-func (s *departmentService) GetUserDepartments(orgID, userID uuid.UUID) ([]model.Department, error) {
-	return s.deptRepo.FindUserDepartments(orgID, userID)
+func (s *groupService) GetUserGroups(orgID, userID uuid.UUID) ([]model.Group, error) {
+	return s.groupRepo.FindUserGroups(orgID, userID)
 }
 
-func (s *departmentService) SetUserDepartments(orgID, userID uuid.UUID, departmentIDs []uuid.UUID) error {
-	return s.deptRepo.SetUserDepartments(orgID, userID, departmentIDs)
+func (s *groupService) SetUserGroups(orgID, userID uuid.UUID, groupIDs []uuid.UUID) error {
+	return s.groupRepo.SetUserGroups(orgID, userID, groupIDs)
 }

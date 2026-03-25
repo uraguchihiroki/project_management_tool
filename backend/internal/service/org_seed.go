@@ -22,7 +22,7 @@ type orgSeedService struct {
 	statusRepo     repository.StatusRepository
 	roleRepo       repository.RoleRepository
 	projectRepo    repository.ProjectRepository
-	departmentRepo repository.DepartmentRepository
+	groupRepo      repository.GroupRepository
 	issueRepo      repository.IssueRepository
 	workflowRepo   repository.WorkflowRepository
 	transitionRepo repository.WorkflowTransitionRepository
@@ -35,7 +35,7 @@ func NewOrgSeedService(
 	statusRepo repository.StatusRepository,
 	roleRepo repository.RoleRepository,
 	projectRepo repository.ProjectRepository,
-	departmentRepo repository.DepartmentRepository,
+	groupRepo repository.GroupRepository,
 	issueRepo repository.IssueRepository,
 	workflowRepo repository.WorkflowRepository,
 	transitionRepo repository.WorkflowTransitionRepository,
@@ -47,7 +47,7 @@ func NewOrgSeedService(
 		statusRepo:     statusRepo,
 		roleRepo:       roleRepo,
 		projectRepo:    projectRepo,
-		departmentRepo: departmentRepo,
+		groupRepo:      groupRepo,
 		issueRepo:      issueRepo,
 		workflowRepo:   workflowRepo,
 		transitionRepo: transitionRepo,
@@ -108,9 +108,9 @@ func (s *orgSeedService) SeedNewOrganization(orgID uuid.UUID, ownerID *uuid.UUID
 		}
 	}
 
-	departments := []string{"開発部", "営業部", "管理部"}
-	for i, name := range departments {
-		if err := s.upsertDepartment(orgID, name, i+1); err != nil {
+	groups := []string{"開発部", "営業部", "管理部"}
+	for i, name := range groups {
+		if err := s.upsertGroup(orgID, name, i+1); err != nil {
 			return err
 		}
 	}
@@ -201,22 +201,22 @@ func (s *orgSeedService) upsertSampleProject(orgID uuid.UUID, ownerID uuid.UUID)
 	return project, nil
 }
 
-func (s *orgSeedService) upsertDepartment(orgID uuid.UUID, name string, _ int) error {
-	_, err := s.departmentRepo.FindByOrgAndName(orgID, name)
+func (s *orgSeedService) upsertGroup(orgID uuid.UUID, name string, _ int) error {
+	_, err := s.groupRepo.FindByOrgAndName(orgID, name)
 	if err == nil {
 		return nil
 	}
 	if err != gorm.ErrRecordNotFound {
 		return err
 	}
-	maxOrder, _ := s.departmentRepo.GetMaxOrder(orgID)
-	deptID := uuid.New()
+	maxOrder, _ := s.groupRepo.GetMaxOrder(orgID)
+	groupID := uuid.New()
 	key := strings.ReplaceAll(strings.ToLower(name), " ", "-")
 	if key == "" {
-		key = deptID.String()
+		key = groupID.String()
 	}
-	return s.departmentRepo.Create(&model.Department{
-		ID:             deptID,
+	return s.groupRepo.Create(&model.Group{
+		ID:             groupID,
 		Key:            key,
 		OrganizationID: orgID,
 		Name:           name,

@@ -39,6 +39,10 @@ func main() {
 		log.Fatalf("failed to migrate issue/project status split (pre): %v", err)
 	}
 
+	if err := appdb.MigrateRenameDepartmentsToGroups(db); err != nil {
+		log.Fatalf("failed migrate rename departments to groups: %v", err)
+	}
+
 	if err := appdb.MigrateJunctionTablesSurrogatePK(db); err != nil {
 		log.Fatalf("failed to migrate junction tables surrogate PK: %v", err)
 	}
@@ -48,8 +52,8 @@ func main() {
 		&model.SuperAdmin{},
 		&model.Role{},
 		&model.User{},
-		&model.Department{},
-		&model.OrganizationUserDepartment{},
+		&model.Group{},
+		&model.OrganizationUserGroup{},
 		&model.Project{},
 		&model.Workflow{},
 		&model.Status{},
@@ -109,15 +113,15 @@ func main() {
 	templateRepo := repository.NewTemplateRepository(db)
 	orgRepo := repository.NewOrganizationRepository(db)
 	superAdminRepo := repository.NewSuperAdminRepository(db)
-	departmentRepo := repository.NewDepartmentRepository(db)
+	groupRepo := repository.NewGroupRepository(db)
 
 	userSvc := service.NewUserService(userRepo, orgRepo)
 	issueWFProv := service.NewIssueWorkflowProvisioner(projectRepo, workflowRepo, statusRepo, transitionRepo)
 	projectSvc := service.NewProjectService(projectRepo, statusRepo, projectStatusRepo, projectStatusTransitionRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, issueWFProv)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, groupRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, issueWFProv)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
-	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
+	groupSvc := service.NewGroupService(groupRepo, orgRepo)
 	alertEval := &service.TransitionAlertEvaluator{Rules: alertRuleRepo}
 	issueSvc := service.NewIssueService(issueRepo, projectRepo, statusRepo, workflowRepo, transitionRepo, issueEventRepo, alertEval, issueWFProv)
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
@@ -136,7 +140,7 @@ func main() {
 	templateHandler := handler.NewTemplateHandler(templateSvc, projectSvc)
 	orgHandler := handler.NewOrganizationHandler(orgSvc)
 	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
-	departmentHandler := handler.NewDepartmentHandler(departmentSvc)
+	groupHandler := handler.NewGroupHandler(groupSvc)
 	statusHandler := handler.NewStatusHandler(statusSvc, workflowSvc)
 	issueEventHandler := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
 
@@ -221,13 +225,13 @@ func main() {
 	api.GET("/users/:id/organizations", orgHandler.ListByUser)
 	api.POST("/organizations/:orgId/users", orgHandler.AddUser)
 
-	api.GET("/organizations/:orgId/departments", departmentHandler.List)
-	api.POST("/organizations/:orgId/departments", departmentHandler.Create)
-	api.PUT("/organizations/:orgId/departments/reorder", departmentHandler.Reorder)
-	api.PUT("/organizations/:orgId/departments/:id", departmentHandler.Update)
-	api.DELETE("/organizations/:orgId/departments/:id", departmentHandler.Delete)
-	api.GET("/users/:id/departments", departmentHandler.GetUserDepartments)
-	api.PUT("/users/:id/departments", departmentHandler.SetUserDepartments)
+	api.GET("/organizations/:orgId/groups", groupHandler.List)
+	api.POST("/organizations/:orgId/groups", groupHandler.Create)
+	api.PUT("/organizations/:orgId/groups/reorder", groupHandler.Reorder)
+	api.PUT("/organizations/:orgId/groups/:id", groupHandler.Update)
+	api.DELETE("/organizations/:orgId/groups/:id", groupHandler.Delete)
+	api.GET("/users/:id/groups", groupHandler.GetUserGroups)
+	api.PUT("/users/:id/groups", groupHandler.SetUserGroups)
 
 	api.GET("/super-admin/organizations", superAdminHandler.ListOrganizations)
 	api.POST("/super-admin/organizations", superAdminHandler.CreateOrganization)

@@ -32,7 +32,7 @@ type SuperAdmin struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-type Department struct {
+type Group struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	Key            string         `gorm:"size:255;not null" json:"key"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null" json:"organization_id"`
@@ -43,15 +43,19 @@ type Department struct {
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-type OrganizationUserDepartment struct {
+func (Group) TableName() string { return "groups" }
+
+type OrganizationUserGroup struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index:idx_oud_trip,priority:1" json:"organization_id"`
-	UserID         uuid.UUID      `gorm:"type:uuid;not null;index:idx_oud_trip,priority:2" json:"user_id"`
-	DepartmentID   uuid.UUID      `gorm:"type:uuid;not null;index:idx_oud_trip,priority:3" json:"department_id"`
+	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index:idx_oug_trip,priority:1" json:"organization_id"`
+	UserID         uuid.UUID      `gorm:"type:uuid;not null;index:idx_oug_trip,priority:2" json:"user_id"`
+	GroupID        uuid.UUID      `gorm:"type:uuid;not null;index:idx_oug_trip,priority:3" json:"group_id"`
 	Key            string         `gorm:"size:255;not null" json:"key"`
-	Department     Department     `gorm:"foreignKey:DepartmentID" json:"department,omitempty"`
+	Group          Group          `gorm:"foreignKey:GroupID" json:"group,omitempty"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
+
+func (OrganizationUserGroup) TableName() string { return "organization_user_groups" }
 
 type User struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
