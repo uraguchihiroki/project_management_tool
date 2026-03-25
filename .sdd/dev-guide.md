@@ -124,6 +124,8 @@ go run ./cmd/cli org seed --org-id=<uuid> [--owner-id=<uuid>]
 
 ## トラブルシュート（ログイン・API が立たない）
 
+- **IDE で `frontend/.../routes.d.ts` が無い／`next-env.d.ts` が赤い（clone 直後）**  
+  Next の生成物 `.next` がまだ無い状態。[README.md](../README.md) の **「Cursor で TypeScript エラー（`routes.d.ts` が無い等）が出るとき」** を参照。`cd frontend` のうえ `npm install` の後、**`npm run build` または `npm run dev`** を一度実行する。
 - **AI 向け**: 画面・挙動の不具合報告では、**いきなり実装を疑わず**、[AGENTS.md](../AGENTS.md) の **「### 6」** と [`.cursor/rules/browser-first-investigation.mdc`](../.cursor/rules/browser-first-investigation.mdc) に従い、**まずブラウザで再現**し、続けて **疎通・再起動**を確認する。
 - **`bash scripts/start.sh` を使っているのにログインできない**  
   - スクリプトは **フロント（npm）をフォアグラウンド**にするため、ターミナルにはフロントのログばかり出ることがある。  

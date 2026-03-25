@@ -107,6 +107,18 @@ flowchart TB
 4. Windows で Cursor を起動 → WSL に接続 → `~/work/AI/project_management_tool` を開く
 5. 初回のみ: バックエンドを一度起動してマイグレーションを実行後、`cat backend/seed.sql | docker exec -i pmt_db psql -U pmt_user -d pmt_db` で初期データを投入
 
+### Next.js: clone 直後の型エラー（routes.d.ts）
+
+`frontend/.next/` は Git 管理外のため、clone 直後は `next-env.d.ts` の参照先が無く、IDE が `routes.d.ts` 欠如などを報告することがある。詳細とコピペ用コマンドは [README.md](../README.md) の **初回セットアップ** と同じ並びの見出し **「Cursor で TypeScript エラー（`routes.d.ts` が無い等）が出るとき」** を参照。
+
+次でも可（リポジトリルート想定）:
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
 ---
 
 ## 毎回の起動手順
