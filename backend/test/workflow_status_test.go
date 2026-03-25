@@ -3,11 +3,7 @@ package test
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 	"testing"
-
-	"github.com/google/uuid"
-	"github.com/uraguchihiroki/project_management_tool/internal/model"
 )
 
 func TestWorkflowStatuses_ListAndCreate(t *testing.T) {
@@ -83,37 +79,17 @@ func TestWorkflowStatuses_OrgIsolation(t *testing.T) {
 	})
 }
 
-// 同一 workflow・同一 (name,type,order) は DB 部分ユニークで禁止（マイグレーション MigrateStatusDedupeAndUniqueIndex）。
-func TestWorkflowStatuses_DuplicateInsertRejectedByDB(t *testing.T) {
+// 同一 workflow・同一 (name, display_order) は Service で拒否（DB 業務 UNIQUE は張らない）。
+func TestWorkflowStatuses_DuplicateRejectedByService(t *testing.T) {
 	ts := newTestServer(t)
-	ownerID := createTestUser(t, ts, "オーナー", "wf-st-duprows@example.com")
-	createTestProject(t, ts, "WFD", "重複行テスト", ownerID)
-	wfID := createTestWorkflow(t, ts, "重複行WF")
-	wid64, err := strconv.ParseUint(wfID, 10, 64)
-	if err != nil {
-		t.Fatal(err)
+	wfID := createTestWorkflow(t, ts, "重複拒否WF")
+	body := map[string]interface{}{
+		"name":          "かぶり",
+		"color":         "#6B7280",
+		"display_order": 5,
 	}
-	wid := uint(wid64)
-	sid := uuid.New()
-	if err := ts.db.Create(&model.Status{
-		ID:           sid,
-		Key:          "sts-dup-" + sid.String(),
-		WorkflowID:   wid,
-		Name:         "未着手",
-		Color:        "#6B7280",
-		DisplayOrder: 1,
-	}).Error; err != nil {
-		t.Fatal(err)
-	}
-	err = ts.db.Create(&model.Status{
-		ID:           uuid.New(),
-		Key:          "sts-dup-second",
-		WorkflowID:   wid,
-		Name:         "未着手",
-		Color:        "#6B7280",
-		DisplayOrder: 1,
-	}).Error
-	if err == nil {
-		t.Fatal("2件目の同一 (name,order) は UNIQUE で失敗すべき")
-	}
+	st1, _ := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/statuses", body)
+	assertStatus(t, st1, http.StatusCreated, "first POST workflow status")
+	st2, _ := ts.req(t, "POST", "/api/v1/workflows/"+wfID+"/statuses", body)
+	assertStatus(t, st2, http.StatusBadRequest, "duplicate (name, display_order) should fail")
 }

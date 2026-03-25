@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -124,6 +125,9 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 		EndDate:        endDate,
 	})
 	if err != nil {
+		if errors.Is(err, service.ErrDuplicateProjectKey) {
+			return echo.NewHTTPError(http.StatusConflict, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": project})
@@ -146,11 +150,11 @@ func (h *ProjectHandler) Update(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "project not found")
 	}
 	type Request struct {
-		Name              *string `json:"name"`
-		Description       *string `json:"description"`
-		StartDate         string  `json:"start_date"`
-		EndDate           string  `json:"end_date"`
-		ProjectStatusID   *string `json:"project_status_id"`
+		Name            *string `json:"name"`
+		Description     *string `json:"description"`
+		StartDate       string  `json:"start_date"`
+		EndDate         string  `json:"end_date"`
+		ProjectStatusID *string `json:"project_status_id"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {

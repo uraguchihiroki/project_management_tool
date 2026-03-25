@@ -111,4 +111,4 @@
 | 論点 | 正しい理解 | テスト・根拠 |
 |------|------------|--------------|
 | `GET /workflows`（スーパーアドミン） | `org_id` なしでは全組織分を返し得る。管理画面で「選択中の1社」だけ見せるときは **`org_id` をクエリで付け、サーバがその組織だけ返す**（フロントだけで絞らない）。非スーパーアドミンは JWT の org のみ。 | [workflow_tenant_test.go](workflow_tenant_test.go) |
-| `GET/POST /workflows/:id/statuses` | テナント境界は **親ワークフローが JWT の組織に属するか**の検証。通過後の列挙は **`workflow_id = :id`**。同一 `(name,type,order)` の重複は **マイグレーション + 部分ユニーク**で防ぐ（「org での再フィルタが足りない」という筋の問題と混同しない）。 | [workflow_status_test.go](workflow_status_test.go)（別組織 404、重複 INSERT は UNIQUE） |
+| `GET/POST /workflows/:id/statuses` | テナント境界は **親ワークフローが JWT の組織に属するか**の検証。通過後の列挙は **`workflow_id = :id`**。同一 `(name, display_order)` の重複は **Service** で拒否（起動時 `MigrateStatusDedupe` はレガシー重複の整理のみ）。 | [workflow_status_test.go](workflow_status_test.go)（別組織 404、重複 POST は 400） |

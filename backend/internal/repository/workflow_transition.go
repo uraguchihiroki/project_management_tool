@@ -34,7 +34,7 @@ func NewWorkflowTransitionRepository(db *gorm.DB) WorkflowTransitionRepository {
 }
 
 func (r *workflowTransitionRepository) DeleteByWorkflowID(workflowID uint) error {
-	return r.db.Where("workflow_id = ?", workflowID).Delete(&model.WorkflowTransition{}).Error
+	return r.db.Unscoped().Where("workflow_id = ?", workflowID).Delete(&model.WorkflowTransition{}).Error
 }
 
 // SeedAllPairs は同一ワークフロー内の任意遷移を許可（全ペア）
@@ -43,7 +43,7 @@ func (r *workflowTransitionRepository) SeedAllPairs(workflowID uint, statusIDs [
 		return nil
 	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("workflow_id = ?", workflowID).Delete(&model.WorkflowTransition{}).Error; err != nil {
+		if err := tx.Unscoped().Where("workflow_id = ?", workflowID).Delete(&model.WorkflowTransition{}).Error; err != nil {
 			return err
 		}
 		seq := 0
@@ -51,12 +51,12 @@ func (r *workflowTransitionRepository) SeedAllPairs(workflowID uint, statusIDs [
 			for _, to := range statusIDs {
 				seq++
 				wt := &model.WorkflowTransition{
-					Key:           keygen.UUIDKey(uuid.New()),
-					WorkflowID:    workflowID,
-					FromStatusID:  from,
-					ToStatusID:    to,
-					DisplayOrder:  seq,
-					CreatedAt:     time.Now(),
+					Key:          keygen.UUIDKey(uuid.New()),
+					WorkflowID:   workflowID,
+					FromStatusID: from,
+					ToStatusID:   to,
+					DisplayOrder: seq,
+					CreatedAt:    time.Now(),
 				}
 				if err := tx.Create(wt).Error; err != nil {
 					return err

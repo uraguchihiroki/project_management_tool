@@ -11,11 +11,12 @@ import (
 	"gorm.io/gorm"
 )
 
-const statusUniqueIndexName = "idx_statuses_wf_name_order_active"
+const statusWorkflowNameOrderLookupIndex = "idx_statuses_wf_name_order_active"
 
-// MigrateStatusDedupeAndUniqueIndex は (1) 同一 workflow 内の重複 statuses を参照先を付け替えて1行にまとめ、
-// (2) 有効行のみ対象とする部分ユニークインデックスを作成する。サーバ起動・テストの AutoMigrate 後に1回呼ぶ。冪等。
-func MigrateStatusDedupeAndUniqueIndex(db *gorm.DB) error {
+// MigrateStatusDedupe は (1) 同一 workflow 内の重複 statuses を参照先を付け替えて1行にまとめ、
+// (2) 有効行のみ対象とする部分インデックス（非一意）を作成する。サーバ起動・テストの AutoMigrate 後に1回呼ぶ。冪等。
+// 業務上の (workflow_id, name, display_order) の一意は Service で保証する。
+func MigrateStatusDedupe(db *gorm.DB) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		if err := dedupeStatuses(tx); err != nil {
 			return err
@@ -23,7 +24,7 @@ func MigrateStatusDedupeAndUniqueIndex(db *gorm.DB) error {
 		if err := dedupeWorkflowTransitions(tx); err != nil {
 			return err
 		}
-		if err := ensureStatusPartialUniqueIndex(tx); err != nil {
+		if err := ensureStatusPartialLookupIndex(tx); err != nil {
 			return err
 		}
 		return nil
@@ -152,6 +153,7 @@ func isLegacyWorkflowStepsMissingErr(err error) bool {
 		(strings.Contains(msg, "does not exist") && (strings.Contains(msg, "workflow_steps") || strings.Contains(msg, "column")))
 }
 
+// dedupeWorkflowTransitions は起動時マイグレーション専用。重複行の物理削除（業務 API の論理削除とは別）。
 func dedupeWorkflowTransitions(tx *gorm.DB) error {
 	dialect := tx.Dialector.Name()
 	switch dialect {
@@ -176,22 +178,21 @@ func dedupeWorkflowTransitions(tx *gorm.DB) error {
 	}
 }
 
-func ensureStatusPartialUniqueIndex(tx *gorm.DB) error {
+func ensureStatusPartialLookupIndex(tx *gorm.DB) error {
 	dialect := tx.Dialector.Name()
 	var stmt string
 	switch dialect {
 	case "postgres", "sqlite":
-		// 論理削除されていない行のみユニーク（同一 workflow で name + order）
 		stmt = fmt.Sprintf(`
-			CREATE UNIQUE INDEX IF NOT EXISTS %s
+			CREATE INDEX IF NOT EXISTS %s
 			ON statuses (workflow_id, name, display_order)
 			WHERE deleted_at IS NULL
-		`, statusUniqueIndexName)
+		`, statusWorkflowNameOrderLookupIndex)
 	default:
-		return fmt.Errorf("status unique index: unsupported dialect %q", dialect)
+		return fmt.Errorf("status lookup index: unsupported dialect %q", dialect)
 	}
 	if err := tx.Exec(stmt).Error; err != nil {
-		return fmt.Errorf("create partial unique index on statuses: %w", err)
+		return fmt.Errorf("create partial index on statuses: %w", err)
 	}
 	return nil
 }

@@ -4,21 +4,36 @@
 
 ここに載っている項目は **ユーザーが内容を認識し、現時点で許容している乖離** とする。未合意のズレは書かない。新たな乖離を検知したら [AGENTS.md](../AGENTS.md) の **§7** に従い、ユーザーに確認してから追加する。
 
+## 運用ルール（状態列）
+
+表の **`状態`** 列は次のとおり。
+
+| 値 | 意味 |
+|----|------|
+| `open` | 追跡中（乖離の解消・方針確定をまだ終えていない、または許容として監視中）。 |
+| `done` | 解消済み、または許容として確定し **このリストでの追跡を終えた**（履歴として行は残してよい）。 |
+
+- 新規に行を足すときは原則 **`open`**。
+- **`done`** に更新した事実は、コミット・PR・チャットなどでいつ誰が変えたか分かればよい（本ファイルに日付列は設けない）。
+
 ## スコープ合意（一文）
 
 論理削除を `.sdd/db-schema.md` に沿って全テーブル・全 DELETE 経路へ適用する **対象の切り方・復元の要否・API の意味** は、別途詰めたうえで実装する。本ファイルは **現状の乖離の明示** に用いる。
 
+## 読み方（このリストで言う「乖離」）
+
+- **「テーブルに `deleted_at` が無い」ことだけ**を指しているわけではない。業務モデルには GORM の `DeletedAt` を付け、通常の `Delete` はソフト削除に寄せてある。
+- ここで問題にしているのは、`.sdd/db-schema.md` の **「削除は UPDATE 相当（論理削除）」という理想**に対して、実装上 **どうしても別の削除の仕方になる経路**が残っていること、および **起動時の移行処理**が業務 API とは別のルールで `DELETE` を使うこと。
+
 ## 合意済みの乖離
 
-- **論理削除が実装されていない** — `.sdd/db-schema.md` の「論理削除（本番環境）」（全テーブル `deleted_at`、削除は `UPDATE` 相当）に対し、実装はテーブル・経路ごとに GORM ソフト削除・物理削除 SQL・モデル未対応（例: `workflow_transitions` に `deleted_at` なし）が混在している。
+| 項目 | 内容 | 状態 |
+|------|------|------|
+| 論理削除まわりの残差 | **(1) 起動時マイグレーション** … サーバ起動時に [`internal/db`](../backend/internal/db) が実行する処理（レガシー列の除去・重複 statuses のマージ・旧業務 UNIQUE の DROP・任意の非一意インデックス作成など）は、**業務 API ではなく DB 移行・整合用**である。ここでは意図的に **生 `DELETE`** や **`Unscoped().Delete`** が使われる（[`cmd/server/main.go`](../backend/cmd/server/main.go) の起動順で呼ばれる）。業務上の一意は DB の UNIQUE ではなく Service で保証する（[principles.md](principles.md)）。 **(2) 多対多の全差し替え** … 例: `user_roles` の役割の付け替え、`user_groups` / `issue_groups` のメンバー・グループの付け替え、`SeedAllPairs` 系の再生成など、**複合主キー（例: user_id, role_id）で行を作り直す**都合で、ソフト削除のままだと **同じキーで再挿入できない**ため **`Unscoped` で行を消してから Create** する経路がある（DB に業務用 UNIQUE を張らない方針でも PK は残る）。詳細は [db-schema.md](db-schema.md) の論理削除ノート参照。 | open |
 
-## 棚卸しメモ（db-schema との差分・実装タスク化の材料）
+## 棚卸しメモ（参考）
 
-調査時点のコード参照。詳細は実装時に再確認すること。
-
-| 観点 | メモ |
-|------|------|
-| `workflow_transitions` | モデルに `deleted_at` がなく、`repository/workflow_transition.go` の `Delete` は行を消す。 |
-| `statuses` / `workflows` 等 | GORM の `DeletedAt` ありのモデルは `Delete` がソフト削除になりうる一方、一覧・JOIN で `deleted_at IS NULL` が漏れうる。 |
-| 整合・マイグレーション | `internal/db/status_integrity.go` 等で `Unscoped().Delete` や `DELETE FROM workflow_transitions` の生 SQL あり。 |
-| その他エンティティ | `internal/repository/*.go` の `Delete` が多数。db-schema の「原則」と一対一で未照合。 |
+| 観点 | メモ | 状態 |
+|------|------|------|
+| マイグレーション | `status_integrity` / `migrate_issue_project_status` の物理 DELETE は **移行専用**（業務の論理削除と別物）。 | done |
+| 結合テーブル | `AssignRolesToUser` / `ReplaceMembers` / `ReplaceForIssue` は **Unscoped 削除＋Create**（全差し替えのため）。 | done |

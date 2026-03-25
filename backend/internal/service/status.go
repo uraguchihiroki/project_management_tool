@@ -155,6 +155,18 @@ func (s *statusService) Update(id uuid.UUID, name, color string, order int) (*mo
 		status.Color = color
 	}
 	status.DisplayOrder = order
+	peers, err := s.statusRepo.FindByWorkflowID(status.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+	for _, st := range peers {
+		if st.ID == id {
+			continue
+		}
+		if st.Name == status.Name && st.DisplayOrder == status.DisplayOrder {
+			return nil, fmt.Errorf("同一ワークフローに同じ表示順・名前のステータスが既にあります")
+		}
+	}
 	if err := s.statusRepo.Update(status); err != nil {
 		return nil, err
 	}

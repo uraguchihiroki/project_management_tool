@@ -48,8 +48,8 @@ func (r *groupRepository) ListByOrg(orgID uuid.UUID, kind *string) ([]model.Grou
 
 func (r *groupRepository) Update(g *model.Group) error {
 	return r.db.Model(&model.Group{}).Where("id = ?", g.ID).Updates(map[string]interface{}{
-		"name":        g.Name,
-		"kind":        g.Kind,
+		"name":          g.Name,
+		"kind":          g.Kind,
 		"display_order": g.DisplayOrder,
 	}).Error
 }
@@ -88,7 +88,8 @@ func NewUserGroupRepository(db *gorm.DB) UserGroupRepository {
 
 func (r *userGroupRepository) ReplaceMembers(groupID uuid.UUID, userIDs []uuid.UUID) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Delete(&model.UserGroup{}, "group_id = ?", groupID).Error; err != nil {
+		// メンバー全差し替え: 複合 PK のため Unscoped（テナント一括オフボーディング時は通常の Delete で論理削除）
+		if err := tx.Unscoped().Delete(&model.UserGroup{}, "group_id = ?", groupID).Error; err != nil {
 			return err
 		}
 		for _, uid := range userIDs {
@@ -126,7 +127,7 @@ func (r *userGroupRepository) IsMember(userID, groupID uuid.UUID) bool {
 func (r *userGroupRepository) ListGroupsByUser(userID uuid.UUID) ([]model.Group, error) {
 	var groups []model.Group
 	err := r.db.
-		Joins("JOIN user_groups ON user_groups.group_id = groups.id").
+		Joins("JOIN user_groups ON user_groups.group_id = groups.id AND user_groups.deleted_at IS NULL").
 		Where("user_groups.user_id = ?", userID).
 		Order("groups.name ASC").
 		Find(&groups).Error
@@ -151,7 +152,8 @@ func NewIssueGroupRepository(db *gorm.DB) IssueGroupRepository {
 
 func (r *issueGroupRepository) ReplaceForIssue(issueID uuid.UUID, groupIDs []uuid.UUID) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Delete(&model.IssueGroup{}, "issue_id = ?", issueID).Error; err != nil {
+		// Issue のグループ全差し替え: 複合 PK のため Unscoped
+		if err := tx.Unscoped().Delete(&model.IssueGroup{}, "issue_id = ?", issueID).Error; err != nil {
 			return err
 		}
 		for _, gid := range groupIDs {

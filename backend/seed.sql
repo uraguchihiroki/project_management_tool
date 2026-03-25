@@ -71,7 +71,7 @@ UPDATE users SET
 WHERE organization_id IS NULL;
 ALTER TABLE users ALTER COLUMN organization_id SET NOT NULL;
 DROP INDEX IF EXISTS idx_user_org_email;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_user_org_email ON users(organization_id, email);
+CREATE INDEX IF NOT EXISTS idx_user_org_email ON users(organization_id, email);
 
 -- 10. Set admin_email for FRS from first org admin user
 UPDATE organizations o
@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS approval_objects (
 
 -- 14g. ステータスベースワークフローステップ
 ALTER TABLE statuses ADD COLUMN IF NOT EXISTS status_key VARCHAR(50);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_statuses_status_key ON statuses(status_key) WHERE status_key IS NOT NULL AND status_key != '';
+CREATE INDEX IF NOT EXISTS idx_statuses_status_key ON statuses(status_key) WHERE status_key IS NOT NULL AND status_key != '';
 
 -- sts_start, sts_goal システムステータス（全会社共通・グローバル）
 INSERT INTO statuses (id, project_id, organization_id, name, color, "order", status_key)

@@ -114,6 +114,10 @@ func main() {
 		log.Fatalf("failed to migrate: %v", err)
 	}
 
+	if err := appdb.MigrateDropLegacyBusinessUniqueIndexes(db); err != nil {
+		log.Fatalf("failed to drop legacy unique indexes: %v", err)
+	}
+
 	if err := appdb.MigrateProjectStatusSeed(db); err != nil {
 		log.Fatalf("failed to migrate project status seed: %v", err)
 	}
@@ -126,8 +130,8 @@ func main() {
 		log.Fatalf("failed migrate workflow transition display_order: %v", err)
 	}
 
-	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
-		log.Fatalf("failed to migrate status dedupe / unique index: %v", err)
+	if err := appdb.MigrateStatusDedupe(db); err != nil {
+		log.Fatalf("failed to migrate status dedupe: %v", err)
 	}
 
 	orgRepo := repository.NewOrganizationRepository(db)

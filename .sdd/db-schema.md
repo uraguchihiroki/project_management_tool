@@ -11,6 +11,14 @@
 
 ---
 
+## DB における一意性（PK のみ）
+
+**スキーマ上の一意制約は主キーに限定する。** 組織名・メール・(organization_id, email)・(organization_id, key)・(name, organization_id) on roles・同一ワークフロー内の (name, display_order)（未削除行）・空でない `status_key` の重複禁止などは、**Service 層で保証する**。検索用には必要に応じて **非一意** のインデックスを張ってよい。
+
+方針の根拠は [principles.md](principles.md)「データベースの一意制約（PK のみ）」。
+
+---
+
 ## 論理削除（本番環境）
 
 **本番では基本的にすべてのデータは論理削除とする。**
@@ -25,6 +33,8 @@
 | deleted_at | TIMESTAMP | NULL = 有効、日時が入っている = 削除済み |
 
 > **Note:** 実装時は各テーブルに `deleted_at` を追加し、Repository 層で削除時は物理削除ではなく `UPDATE ... SET deleted_at = NOW()` とする。一覧取得・検索時は `deleted_at IS NULL` を条件に含める。
+
+**実装（Go / GORM）:** モデルに `gorm.DeletedAt` を付与し、業務経路の `Delete` は原則ソフト削除とする。**起動時マイグレーション**（`internal/db` の重複除去・レガシー除去など）では意図的に生 `DELETE` や `Unscoped().Delete` が残る。多対多の**結合テーブル**で「全メンバー差し替え」等を行う箇所は、**複合主キー (user_id, role_id) 等での再登録**のためソフト削除済み行が残ると衝突するので `Unscoped` による物理削除を使う（DB に業務用 UNIQUE を張らない方針でも、**主キー**は変わらず衝突しうる）。
 
 ---
 
@@ -47,6 +57,7 @@
 | **時刻（属性）** | 各インプリントに **`occurred_at`**。PostgreSQL では **`TIMESTAMPTZ`**（タイムゾーン付き）を推奨。UTC 格納・表示時変換。 |
 | **エンティティの時刻** | 通常レコードの作成・更新は `created_at` / `updated_at`（**インプリント**とは別物。`updated_at` だけでは監査に代えない）。 |
 | **インデックス** | よく使う絞り込み軸に **`(organization_id, occurred_at)`**、**`(issue_id, occurred_at)`** など複合インデックスを検討する。 |
+| **deleted_at** | インプリントは追記のみを業務ルールとするが、**テナント／契約終了時**に全データを一括論理削除し、システムに異常がないか確認してから物理削除する運用に備え、行に `deleted_at` を持てるようにする（通常運用では削除 API を使わない想定）。 |
 
 ---
 
@@ -92,7 +103,7 @@ issue_events（名称は実装で確定）
 organizations（グローバル）
 ├── id (PK)
 ├── key (VARCHAR(255), NOT NULL)
-├── name (UNIQUE)
+├── name（アプリで一意）
 ├── admin_email
 └── created_at
 
@@ -100,7 +111,7 @@ super_admins（グローバル）
 ├── id (PK)
 ├── key (VARCHAR(255), NOT NULL)
 ├── name
-├── email (UNIQUE)
+├── email（アプリで一意）
 └── created_at
 
 users（1ユーザー＝1組織）
@@ -108,7 +119,7 @@ users（1ユーザー＝1組織）
 ├── key (VARCHAR(255), NOT NULL)
 ├── organization_id (FK → organizations.id, NOT NULL)
 ├── name
-├── email（組織内UNIQUE: (organization_id, email)）
+├── email（組織内はアプリで一意: (organization_id, email)）
 ├── avatar_url (nullable)
 ├── is_admin
 ├── is_org_admin
@@ -118,7 +129,7 @@ users（1ユーザー＝1組織）
 roles
 ├── id (PK, auto)
 ├── key (VARCHAR(255), NOT NULL)
-├── name
+├── name（同一 organization_id 内はアプリで一意）
 ├── level
 ├── description
 ├── organization_id (FK → organizations.id, nullable)
@@ -131,7 +142,7 @@ user_roles (中間テーブル, many2many)
 
 projects
 ├── id (PK)
-├── key（組織内UNIQUE: (organization_id, key)）
+├── key（組織内はアプリで一意: (organization_id, key)）
 ├── name
 ├── description (nullable)
 ├── owner_id (FK → users.id)
@@ -248,7 +259,7 @@ issue_templates
 |-------|-----|------|------|
 | id | UUID | PK | 組織ID |
 | key | VARCHAR(255) | NOT NULL | API/URL 用識別子 |
-| name | VARCHAR(200) | UNIQUE, NOT NULL | 組織名 |
+| name | VARCHAR(200) | NOT NULL | 組織名（**アプリ**で一意） |
 | admin_email | VARCHAR(255) | nullable | 組織管理者のメールアドレス |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
@@ -259,7 +270,7 @@ issue_templates
 | id | UUID | PK | スーパー管理者ID |
 | key | VARCHAR(255) | NOT NULL | API/URL 用識別子 |
 | name | VARCHAR(100) | NOT NULL | 表示名 |
-| email | VARCHAR(255) | UNIQUE, NOT NULL | メールアドレス |
+| email | VARCHAR(255) | NOT NULL | メールアドレス（**アプリ**で一意） |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
 ### users
@@ -279,7 +290,7 @@ issue_templates
 | joined_at | TIMESTAMP | NOT NULL | 参加日時 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
-> **Note:** (organization_id, email) でユニークインデックス。
+> **Note:** (organization_id, email) の一意は **Service** で保証。DB には非一意インデックスのみ（任意）。
 
 ### roles
 
@@ -293,14 +304,14 @@ issue_templates
 | organization_id | UUID | FK, nullable | 所属組織（NULL はグローバル） |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
-> **Note:** (name, organization_id) でユニークインデックス。
+> **Note:** (name, organization_id) の一意は **Service** で保証。
 
 ### projects
 
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | UUID | PK | プロジェクトID |
-| key | VARCHAR(10) | NOT NULL | 識別キー（組織内でユニーク）。API/URL 用にも使用 |
+| key | VARCHAR(10) | NOT NULL | 識別キー（組織内は**アプリ**で一意）。API/URL 用にも使用 |
 | name | VARCHAR(200) | NOT NULL | プロジェクト名 |
 | description | TEXT | nullable | 説明 |
 | owner_id | UUID | FK | オーナーユーザー |
@@ -309,7 +320,7 @@ issue_templates
 | project_status_id | UUID | FK → project_statuses.id, nullable | 現在のプロジェクト進行 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
-> **Note:** (organization_id, key) でユニークインデックス。
+> **Note:** (organization_id, key) の一意は **Service** で保証。
 
 ### statuses（Issue 専用）
 
@@ -323,7 +334,7 @@ issue_templates
 | display_order | INTEGER | NOT NULL | 表示順 |
 | status_key | VARCHAR(50) | nullable | システム用: sts_start, sts_goal。NULL=ユーザー定義 |
 
-> **重複防止**: 同一 `workflow_id` で `(name, display_order)` は **論理削除されていない行のみ**一意（部分ユニークインデックス `idx_statuses_wf_name_order_active`）。起動時 `MigrateStatusDedupeAndUniqueIndex`（`internal/db/status_integrity.go`）。旧 `type` 列は `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）で除去する。レガシー列名 `order` は `MigrateStatusOrderToDisplayOrder` で `display_order` に寄せる。
+> **重複防止**: 同一 `workflow_id` で、論理削除されていない行について `(name, display_order)` の一意は **Service** で保証する。起動時 `MigrateStatusDedupe`（`internal/db/status_integrity.go`）でレガシー重複行を畳む。旧 `type` 列は `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）で除去する。レガシー列名 `order` は `MigrateStatusOrderToDisplayOrder` で `display_order` に寄せる。必要に応じ **非一意** の複合インデックスで検索を補助してよい。
 >
 > **件数下限（Issue 用）**: 同一 `workflow_id` に紐づく有効な `statuses` は **少なくとも 2 行**を保つ（削除で 1 行以下になる操作は API で拒否）。運用上の意味・用語の正本は [domain-model.md](domain-model.md)。
 
@@ -417,7 +428,7 @@ issue_templates
 | group_id | UUID | FK, NOT NULL | グループ |
 | key | VARCHAR(255) | NOT NULL | API/URL 用 |
 
-> **Note:** (user_id, group_id) でユニーク。兼務は複数行で表現。
+> **Note:** 複合 **PK** (user_id, group_id)。1 ユーザーが複数グループに入るときは行が複数（兼務）。
 
 ### issue_groups
 
@@ -428,7 +439,7 @@ issue_templates
 | role | VARCHAR(50) | nullable | 例: primary / collaborator / tag |
 | key | VARCHAR(255) | NOT NULL | API/URL 用 |
 
-> **Note:** (issue_id, group_id) でユニーク。
+> **Note:** 複合 **PK** (issue_id, group_id)。
 
 ### issue_events
 

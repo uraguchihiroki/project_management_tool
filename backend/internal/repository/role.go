@@ -12,6 +12,7 @@ type RoleRepository interface {
 	FindAll() ([]model.Role, error)
 	FindByOrg(orgID uuid.UUID) ([]model.Role, error)
 	FindByOrgAndName(orgID uuid.UUID, name string) (*model.Role, error)
+	FindGlobalByName(name string) (*model.Role, error)
 	FindByID(id uint) (*model.Role, error)
 	Create(role *model.Role) error
 	Update(role *model.Role) error
@@ -51,6 +52,15 @@ func (r *roleRepository) FindByOrgAndName(orgID uuid.UUID, name string) (*model.
 	return &role, nil
 }
 
+func (r *roleRepository) FindGlobalByName(name string) (*model.Role, error) {
+	var role model.Role
+	err := r.db.Where("organization_id IS NULL AND name = ?", name).First(&role).Error
+	if err != nil {
+		return nil, err
+	}
+	return &role, nil
+}
+
 func (r *roleRepository) FindByID(id uint) (*model.Role, error) {
 	var role model.Role
 	err := r.db.First(&role, id).Error
@@ -81,7 +91,8 @@ func (r *roleRepository) Delete(id uint) error {
 }
 
 func (r *roleRepository) AssignRolesToUser(userID uuid.UUID, roleIDs []uint) error {
-	if err := r.db.Where("user_id = ?", userID).Delete(&model.UserRole{}).Error; err != nil {
+	// 役割の全差し替え: ソフト削除だと (user_id,role_id) が残り再 Create と衝突するため Unscoped
+	if err := r.db.Unscoped().Where("user_id = ?", userID).Delete(&model.UserRole{}).Error; err != nil {
 		return err
 	}
 	for _, roleID := range roleIDs {

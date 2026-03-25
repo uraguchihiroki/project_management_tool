@@ -24,7 +24,7 @@ func NewProjectStatusTransitionRepository(db *gorm.DB) ProjectStatusTransitionRe
 }
 
 func (r *projectStatusTransitionRepository) DeleteByProjectID(projectID uuid.UUID) error {
-	return r.db.Where("project_id = ?", projectID).Delete(&model.ProjectStatusTransition{}).Error
+	return r.db.Unscoped().Where("project_id = ?", projectID).Delete(&model.ProjectStatusTransition{}).Error
 }
 
 // SeedAllPairs は同一プロジェクト内の任意遷移を許可（全ペア）
@@ -33,7 +33,8 @@ func (r *projectStatusTransitionRepository) SeedAllPairs(projectID uuid.UUID, st
 		return nil
 	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("project_id = ?", projectID).Delete(&model.ProjectStatusTransition{}).Error; err != nil {
+		// 全ペア再生成: 論理削除のみだと同一 (project,from,to) の再挿入で重複しうるため Unscoped
+		if err := tx.Unscoped().Where("project_id = ?", projectID).Delete(&model.ProjectStatusTransition{}).Error; err != nil {
 			return err
 		}
 		for _, from := range statusIDs {

@@ -8,8 +8,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	appdb "github.com/uraguchihiroki/project_management_tool/internal/db"
+	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
@@ -64,6 +64,10 @@ func main() {
 		log.Fatalf("failed to migrate: %v", err)
 	}
 
+	if err := appdb.MigrateDropLegacyBusinessUniqueIndexes(db); err != nil {
+		log.Fatalf("failed to drop legacy unique indexes: %v", err)
+	}
+
 	if err := appdb.MigrateProjectStatusSeed(db); err != nil {
 		log.Fatalf("failed to migrate project status seed: %v", err)
 	}
@@ -76,8 +80,8 @@ func main() {
 		log.Fatalf("failed migrate workflow transition display_order: %v", err)
 	}
 
-	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
-		log.Fatalf("failed to migrate status dedupe / unique index: %v", err)
+	if err := appdb.MigrateStatusDedupe(db); err != nil {
+		log.Fatalf("failed to migrate status dedupe: %v", err)
 	}
 
 	userRepo := repository.NewUserRepository(db)

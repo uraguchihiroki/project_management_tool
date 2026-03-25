@@ -1,11 +1,13 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"gorm.io/gorm"
 )
 
 type SuperAdminService interface {
@@ -26,6 +28,11 @@ func (s *superAdminService) FindByEmail(email string) (*model.SuperAdmin, error)
 }
 
 func (s *superAdminService) Create(name, email string) (*model.SuperAdmin, error) {
+	if _, err := s.repo.FindByEmail(email); err == nil {
+		return nil, ErrDuplicateSuperAdminEmail
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	admin := &model.SuperAdmin{
 		ID:        uuid.New(),
 		Key:       email,

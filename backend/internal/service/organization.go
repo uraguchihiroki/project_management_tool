@@ -1,12 +1,14 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"gorm.io/gorm"
 )
 
 type OrganizationService interface {
@@ -36,6 +38,11 @@ func (s *organizationService) Get(id uuid.UUID) (*model.Organization, error) {
 }
 
 func (s *organizationService) Create(name, adminEmail, adminName string) (*model.Organization, error) {
+	if _, err := s.orgRepo.FindByName(name); err == nil {
+		return nil, ErrDuplicateOrganizationName
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	orgID := uuid.New()
 	key := keygen.Slug(name)
 	if key == "" {

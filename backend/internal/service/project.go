@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"gorm.io/gorm"
 )
 
 var projectStatusColorRegex = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
@@ -92,6 +94,11 @@ func (s *projectService) Get(id uuid.UUID) (*model.Project, error) {
 }
 
 func (s *projectService) Create(input CreateProjectInput) (*model.Project, error) {
+	if _, err := s.projectRepo.FindByOrgAndKey(input.OrganizationID, input.Key); err == nil {
+		return nil, ErrDuplicateProjectKey
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	orgID := &input.OrganizationID
 	maxOrder, err := s.projectRepo.GetMaxOrder(orgID)
 	if err != nil {

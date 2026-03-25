@@ -6,6 +6,32 @@ import (
 	"testing"
 )
 
+// getFirstOrgIssueWorkflowStatusID は組織の「組織Issue」ワークフローの先頭ステータス ID を返す（組織横断 statuses 一覧の先頭は別 WF になりうるため）。
+func getFirstOrgIssueWorkflowStatusID(t *testing.T, ts *testServer, orgID string) string {
+	t.Helper()
+	st, wfListResp := ts.req(t, "GET", "/api/v1/workflows?org_id="+orgID, nil)
+	assertStatus(t, st, http.StatusOK, "list workflows for org issue")
+	workflows := mustGetArray(t, wfListResp, "data")
+	var issueWfID string
+	for _, w := range workflows {
+		m := w.(map[string]interface{})
+		if m["name"].(string) == "組織Issue" {
+			issueWfID = fmt.Sprintf("%.0f", m["id"].(float64))
+			break
+		}
+	}
+	if issueWfID == "" {
+		t.Fatal("組織Issue workflow not found")
+	}
+	st2, statResp := ts.req(t, "GET", "/api/v1/workflows/"+issueWfID+"/statuses", nil)
+	assertStatus(t, st2, http.StatusOK, "GET statuses for 組織Issue")
+	arr := mustGetArray(t, statResp, "data")
+	if len(arr) == 0 {
+		t.Fatal("組織Issue workflow has no statuses")
+	}
+	return arr[0].(map[string]interface{})["id"].(string)
+}
+
 // createTestIssue はテスト用Issueを作成し、そのIssue番号を返します
 func createTestIssue(t *testing.T, ts *testServer, projectID, statusID, reporterID, title string) float64 {
 	t.Helper()
@@ -197,23 +223,11 @@ func TestIssue_Delete(t *testing.T) {
 	})
 }
 
-func getFirstOrgStatusID(t *testing.T, ts *testServer, orgID string) string {
-	t.Helper()
-	status, resp := ts.req(t, "GET", "/api/v1/organizations/"+orgID+"/statuses", nil)
-	assertStatus(t, status, http.StatusOK, "getOrgStatuses")
-	data := resp["data"]
-	arr, ok := data.([]interface{})
-	if !ok || len(arr) == 0 {
-		t.Fatal("org has no statuses")
-	}
-	return arr[0].(map[string]interface{})["id"].(string)
-}
-
 func TestIssue_OrgScoped(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "org@example.com")
 	createTestProject(t, ts, "ORG", "組織Issueテスト", ownerID)
-	orgStatusID := getFirstOrgStatusID(t, ts, testOrgID)
+	orgStatusID := getFirstOrgIssueWorkflowStatusID(t, ts, testOrgID)
 
 	t.Run("組織別にIssueを作成できる（project_idなし）", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/issues", map[string]interface{}{
@@ -230,7 +244,7 @@ func TestIssue_OrgScoped(t *testing.T) {
 
 	t.Run("組織別Issue一覧を取得できる", func(t *testing.T) {
 		ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/issues", map[string]interface{}{
-			"title":       "一覧用Issue", "status_id": orgStatusID, "reporter_id": ownerID,
+			"title": "一覧用Issue", "status_id": orgStatusID, "reporter_id": ownerID,
 		})
 		status, resp := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/issues", nil)
 		assertStatus(t, status, http.StatusOK, "list org issues")

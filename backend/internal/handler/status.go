@@ -57,9 +57,9 @@ func (h *StatusHandler) CreateForWorkflow(c echo.Context) error {
 		return err
 	}
 	type Request struct {
-		Name          string `json:"name"`
-		Color         string `json:"color"`
-		DisplayOrder  int    `json:"display_order"`
+		Name         string `json:"name"`
+		Color        string `json:"color"`
+		DisplayOrder int    `json:"display_order"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {

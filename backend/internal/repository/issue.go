@@ -41,7 +41,7 @@ func (r *issueRepository) FindByProject(projectID uuid.UUID, groupID *uuid.UUID)
 		Preload("Reporter").
 		Where("project_id = ?", projectID)
 	if groupID != nil {
-		q = q.Where("issues.id IN (SELECT issue_id FROM issue_groups WHERE group_id = ?)", *groupID)
+		q = q.Where("issues.id IN (SELECT issue_id FROM issue_groups WHERE group_id = ? AND deleted_at IS NULL)", *groupID)
 	}
 	err := q.Order("number desc").Find(&issues).Error
 	return issues, err
@@ -118,7 +118,7 @@ func (r *issueRepository) FindByOrg(orgID uuid.UUID, groupID *uuid.UUID) ([]mode
 		Preload("Reporter").
 		Where("organization_id = ?", orgID)
 	if groupID != nil {
-		q = q.Where("issues.id IN (SELECT issue_id FROM issue_groups WHERE group_id = ?)", *groupID)
+		q = q.Where("issues.id IN (SELECT issue_id FROM issue_groups WHERE group_id = ? AND deleted_at IS NULL)", *groupID)
 	}
 	err := q.Order("created_at DESC").Find(&issues).Error
 	return issues, err

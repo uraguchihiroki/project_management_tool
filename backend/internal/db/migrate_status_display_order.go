@@ -8,10 +8,10 @@ import (
 )
 
 // MigrateStatusOrderToDisplayOrder はレガシー列名 `order` を `display_order` に寄せる（新規DBでは no-op）。
-// MigrateStatusDedupeAndUniqueIndex より前に呼ぶこと。
+// MigrateStatusDedupe より前に呼ぶこと。
 func MigrateStatusOrderToDisplayOrder(db *gorm.DB) error {
-	if err := db.Exec("DROP INDEX IF EXISTS " + statusUniqueIndexName).Error; err != nil {
-		return fmt.Errorf("drop status unique index: %w", err)
+	if err := db.Exec("DROP INDEX IF EXISTS " + statusWorkflowNameOrderLookupIndex).Error; err != nil {
+		return fmt.Errorf("drop status workflow name/order index: %w", err)
 	}
 
 	dialect := db.Dialector.Name()

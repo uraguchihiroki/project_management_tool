@@ -52,15 +52,15 @@ type IssueService interface {
 }
 
 type issueService struct {
-	issueRepo        repository.IssueRepository
-	projectRepo      repository.ProjectRepository
-	statusRepo       repository.StatusRepository
-	workflowRepo     repository.WorkflowRepository
-	transitionRepo   repository.WorkflowTransitionRepository
-	eventRepo        repository.IssueEventRepository
-	groupRepo        repository.GroupRepository
-	issueGroupRepo   repository.IssueGroupRepository
-	alertEval        *TransitionAlertEvaluator
+	issueRepo      repository.IssueRepository
+	projectRepo    repository.ProjectRepository
+	statusRepo     repository.StatusRepository
+	workflowRepo   repository.WorkflowRepository
+	transitionRepo repository.WorkflowTransitionRepository
+	eventRepo      repository.IssueEventRepository
+	groupRepo      repository.GroupRepository
+	issueGroupRepo repository.IssueGroupRepository
+	alertEval      *TransitionAlertEvaluator
 }
 
 func NewIssueService(

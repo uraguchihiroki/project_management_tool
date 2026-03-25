@@ -14,9 +14,9 @@ import (
 )
 
 type WorkflowTransitionHandler struct {
-	workflowService   service.WorkflowService
-	statusService     service.StatusService
-	transitionRepo    repository.WorkflowTransitionRepository
+	workflowService service.WorkflowService
+	statusService   service.StatusService
+	transitionRepo  repository.WorkflowTransitionRepository
 }
 
 func NewWorkflowTransitionHandler(
@@ -104,12 +104,12 @@ func (h *WorkflowTransitionHandler) CreateForWorkflow(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	row := &model.WorkflowTransition{
-		Key:           keygen.UUIDKey(uuid.New()),
-		WorkflowID:    wfID,
-		FromStatusID:  fromID,
-		ToStatusID:    toID,
-		DisplayOrder:  nextDO + 1,
-		CreatedAt:     time.Now(),
+		Key:          keygen.UUIDKey(uuid.New()),
+		WorkflowID:   wfID,
+		FromStatusID: fromID,
+		ToStatusID:   toID,
+		DisplayOrder: nextDO + 1,
+		CreatedAt:    time.Now(),
 	}
 	if err := h.transitionRepo.Create(row); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())

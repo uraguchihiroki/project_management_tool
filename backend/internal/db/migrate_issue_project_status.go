@@ -26,6 +26,7 @@ func MigrateIssueProjectStatusSplitPre(db *gorm.DB) error {
 	}
 
 	// 組織スコープのプロジェクト進行ワークフロー（Workflow は Issue のみにする）
+	// 以下の DELETE はレガシー移行専用（本番データの論理削除 API ではない）
 	if err := db.Exec(`
 		DELETE FROM workflow_transitions
 		WHERE workflow_id IN (SELECT id FROM workflows WHERE name = ?)

@@ -43,7 +43,7 @@ type memUG struct {
 
 func (m *memUG) ReplaceMembers(groupID uuid.UUID, userIDs []uuid.UUID) error { return nil }
 func (m *memUG) ListMemberIDs(groupID uuid.UUID) ([]uuid.UUID, error)        { return nil, nil }
-func (m *memUG) ListGroupsByUser(userID uuid.UUID) ([]model.Group, error)     { return nil, nil }
+func (m *memUG) ListGroupsByUser(userID uuid.UUID) ([]model.Group, error)    { return nil, nil }
 func (m *memUG) IsMember(userID, groupID uuid.UUID) bool {
 	if m.pairs == nil {
 		return false
@@ -61,12 +61,12 @@ func TestTransitionAlertEvaluator_OnStatusChanged_expectedMember_noAlert(t *test
 	actor := uuid.New()
 
 	rule := model.TransitionAlertRule{
-		ID:               uuid.New(),
-		OrganizationID:   org,
-		Name:             "r1",
-		FromStatusID:     &from,
-		ToStatusID:       to,
-		ExpectedGroupID:  &gid,
+		ID:              uuid.New(),
+		OrganizationID:  org,
+		Name:            "r1",
+		FromStatusID:    &from,
+		ToStatusID:      to,
+		ExpectedGroupID: &gid,
 	}
 	var alertCalls int
 	ev := &TransitionAlertEvaluator{
@@ -93,12 +93,12 @@ func TestTransitionAlertEvaluator_OnStatusChanged_unexpectedMember_alertsOnce(t 
 	actor := uuid.New()
 
 	rule := model.TransitionAlertRule{
-		ID:               uuid.New(),
-		OrganizationID:   org,
-		Name:             "r1",
-		FromStatusID:     &from,
-		ToStatusID:       to,
-		ExpectedGroupID:  &gid,
+		ID:              uuid.New(),
+		OrganizationID:  org,
+		Name:            "r1",
+		FromStatusID:    &from,
+		ToStatusID:      to,
+		ExpectedGroupID: &gid,
 	}
 	var gotRule *model.TransitionAlertRule
 	var gotActor uuid.UUID
@@ -131,12 +131,12 @@ func TestTransitionAlertEvaluator_OnStatusChanged_nilExpectedGroup_skipped(t *te
 	to := uuid.New()
 	actor := uuid.New()
 	rule := model.TransitionAlertRule{
-		ID:               uuid.New(),
-		OrganizationID:   org,
-		Name:             "r1",
-		FromStatusID:     &from,
-		ToStatusID:       to,
-		ExpectedGroupID:  nil,
+		ID:              uuid.New(),
+		OrganizationID:  org,
+		Name:            "r1",
+		FromStatusID:    &from,
+		ToStatusID:      to,
+		ExpectedGroupID: nil,
 	}
 	var alertCalls int
 	ev := &TransitionAlertEvaluator{
