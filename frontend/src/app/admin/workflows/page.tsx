@@ -127,7 +127,7 @@ export default function WorkflowsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">ワークフロー管理</h1>
-          <p className="text-sm text-gray-500 mt-0.5">承認フローを定義します</p>
+          <p className="text-sm text-gray-500 mt-0.5">Issue のカンバン列（ステータス）と許可遷移を管理します</p>
         </div>
         {!showForm && editingId === null && (
           <button
@@ -165,7 +165,7 @@ export default function WorkflowsPage() {
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="例: 通常承認フロー"
+                placeholder="例: 通常Issue"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>

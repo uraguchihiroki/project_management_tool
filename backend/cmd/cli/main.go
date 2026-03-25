@@ -140,6 +140,9 @@ func main() {
 	if err := appdb.MigrateDropGroupTables(db); err != nil {
 		log.Fatalf("failed migrate drop group tables: %v", err)
 	}
+	if err := appdb.MigrateDropApprovalTables(db); err != nil {
+		log.Fatalf("failed migrate drop approval tables: %v", err)
+	}
 
 	orgRepo := repository.NewOrganizationRepository(db)
 	statusRepo := repository.NewStatusRepository(db)

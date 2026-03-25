@@ -54,7 +54,7 @@
 ## ステータス（Status）と Issue
 
 - Issue は **`status_id`** を持ち、Status がカンバンの**列**を定義する。
-- **ステータス遷移**（経路の形・**遷移アラート**・インプリントによる監査）は、**承認フローとは独立**に設計する。候補・用語・ルールは [transition-permissions.md](transition-permissions.md)。
+- **ステータス遷移**（経路の形・**遷移アラート**・インプリントによる監査）は、稟議・承認とは独立に設計する。候補・用語・ルールは [transition-permissions.md](transition-permissions.md)。
 
 ### Issue 用ワークフローにおける「最低2つの遷移」とは
 
@@ -140,5 +140,5 @@ erDiagram
 | 項目 | メモ |
 |------|------|
 | Department | 設計上は上記。実装の有無は [db-schema.md](db-schema.md) およびコードを参照。 |
-| Workflow / IssueApproval 等 | **Issue 管理の正規ドメインから除外**。コードに残る場合はレガシーとして移行・削除を検討。 |
+| 承認ステップ系（workflow_steps/approval_objects/issue_approvals） | **Issue 管理の正規ドメインから除外**。レガシーとして移行・削除を検討。 |
 | Issue の organization_id | 設計上は会社に直接紐づく想定。実装との整合は db-schema を参照。 |

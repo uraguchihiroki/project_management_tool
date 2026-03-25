@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
@@ -127,31 +126,10 @@ func repointStatusFKs(tx *gorm.DB, old, newID uuid.UUID) error {
 	if err := tx.Model(&model.TransitionAlertRule{}).Where("to_status_id = ?", old).Update("to_status_id", newID).Error; err != nil {
 		return fmt.Errorf("repoint transition_alert_rules.to_status_id: %w", err)
 	}
-	return repointLegacyWorkflowStepsStatusID(tx, old, newID)
-}
-
-// レガシー DB に workflow_steps が残っている場合（GORM モデルからは外れているが FK が残る）
-func repointLegacyWorkflowStepsStatusID(tx *gorm.DB, old, newID uuid.UUID) error {
-	if err := tx.Exec(`UPDATE workflow_steps SET status_id = ? WHERE status_id = ?`, newID, old).Error; err != nil {
-		if !isLegacyWorkflowStepsMissingErr(err) {
-			return fmt.Errorf("repoint workflow_steps.status_id: %w", err)
-		}
-	}
-	if err := tx.Exec(`UPDATE workflow_steps SET next_status_id = ? WHERE next_status_id = ?`, newID, old).Error; err != nil {
-		if !isLegacyWorkflowStepsMissingErr(err) {
-			return fmt.Errorf("repoint workflow_steps.next_status_id: %w", err)
-		}
-	}
 	return nil
 }
 
-func isLegacyWorkflowStepsMissingErr(err error) bool {
-	msg := err.Error()
-	return strings.Contains(msg, "no such table") ||
-		strings.Contains(msg, "UndefinedTable") ||
-		strings.Contains(msg, "no such column") ||
-		(strings.Contains(msg, "does not exist") && (strings.Contains(msg, "workflow_steps") || strings.Contains(msg, "column")))
-}
+// NOTE: workflow_steps は承認ステップ系として廃止。起動時に DROP されるため参照しない。
 
 // dedupeWorkflowTransitions は起動時マイグレーション専用。重複行の物理削除（業務 API の論理削除とは別）。
 func dedupeWorkflowTransitions(tx *gorm.DB) error {

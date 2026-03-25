@@ -106,6 +106,9 @@ func newTestServer(t *testing.T) *testServer {
 	if err := appdb.MigrateDropGroupTables(db); err != nil {
 		t.Fatalf("failed migrate drop group tables: %v", err)
 	}
+	if err := appdb.MigrateDropApprovalTables(db); err != nil {
+		t.Fatalf("failed migrate drop approval tables: %v", err)
+	}
 
 	frsOrg := model.Organization{
 		ID:        uuid.MustParse(testOrgID),

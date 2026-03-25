@@ -78,19 +78,6 @@ export interface Status {
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical'
 
-export interface IssueApproval {
-  id: string
-  issue_id: string
-  workflow_step_id: number
-  workflow_step: WorkflowStep
-  approver_id?: string
-  approver?: User
-  status: 'pending' | 'approved' | 'rejected'
-  comment: string
-  acted_at?: string
-  created_at: string
-}
-
 export interface IssueTemplate {
   id: number
   project_id: string
@@ -152,21 +139,6 @@ export interface Comment {
   updated_at: string
 }
 
-export interface ApprovalObject {
-  id: number
-  workflow_step_id: number
-  order: number
-  type: 'role' | 'user'
-  role_id?: number
-  role?: Role
-  role_operator?: 'eq' | 'gte'
-  user_id?: string
-  user?: User
-  points: number
-  exclude_reporter: boolean
-  exclude_assignee: boolean
-}
-
 export interface WorkflowStep {
   id: number
   workflow_id: number
@@ -177,7 +149,6 @@ export interface WorkflowStep {
   next_status?: Status
   description?: string
   threshold?: number
-  approval_objects?: ApprovalObject[]
   exclude_reporter?: boolean
   exclude_assignee?: boolean
 }

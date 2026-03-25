@@ -9,7 +9,7 @@ import (
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
 )
 
-// WorkflowService は組織スコープのワークフロー CRUD（承認ステップは廃止）
+// WorkflowService は組織スコープのワークフロー CRUD（Issue 用）
 type WorkflowService interface {
 	ListAll() ([]model.Workflow, error)
 	GetWorkflow(id uint) (*model.Workflow, error)

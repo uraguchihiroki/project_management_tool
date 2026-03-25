@@ -22,7 +22,7 @@ test.describe('組織管理者: ワークフロー作成', () => {
       { timeout: 15_000 },
     )
     await page.getByRole('button', { name: /ワークフローを追加/ }).click()
-    await page.getByPlaceholder('例: 通常承認フロー').fill(name)
+    await page.getByPlaceholder('例: 通常Issue').fill(name)
     await page.getByPlaceholder('例: 一般的な業務申請に使用').fill('E2Eテスト用')
     // h2「新しいワークフロー」は form の外にあるため、送信ボタンは role で直接指定する
     await page.getByRole('button', { name: '追加' }).click()

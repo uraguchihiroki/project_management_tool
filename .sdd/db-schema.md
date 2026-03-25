@@ -1,6 +1,6 @@
 # データベース設計
 
-本ドキュメントは **Issue 管理システム**を正とする設計へ寄せて更新する。稟議・承認ワークフロー向けのテーブルは **廃止方向**（実装に残る場合は [transition-permissions.md](transition-permissions.md) のレガシー扱い）。
+本ドキュメントは **Issue 管理システム**を正とする設計へ寄せて更新する。稟議・承認向けのテーブルは **廃止方向**（実装に残る場合は [transition-permissions.md](transition-permissions.md) のレガシー扱い）。
 
 ## Key カラム（全テーブル共通）
 
@@ -234,7 +234,7 @@ issue_templates
 └── created_at
 ```
 
-> **レガシー（移行予定）**: 実装 DB に `workflows` / `workflow_steps` / `approval_objects` / `issue_approvals` および `issues.workflow_id` / `issue_templates.workflow_id` が残っている場合がある。Issue 管理を正とする設計では **これらは廃止方向**。[transition-permissions.md](transition-permissions.md) で合意したあと、スキーマから除去する。
+> **レガシー（削除対象）**: 承認ステップ系（`workflow_steps` / `approval_objects` / `issue_approvals`）は Issue 管理を正とする設計では **廃止**。起動時マイグレーションで削除する。
 
 ---
 
