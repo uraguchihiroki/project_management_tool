@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dagre from 'dagre'
 import { ChevronLeft, Pencil, Plus, Trash2, X } from 'lucide-react'
@@ -48,9 +48,77 @@ type TransitionDiagramEdge = {
   invalid: boolean
 }
 
+/** API 由来の UUID 文字列の表記揺れ（大文字・小文字）で辺の端点とノード id が一致しないのを防ぐ */
+function normUuid(id: string): string {
+  return id.trim().toLowerCase()
+}
+
+function orient2(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
+  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+}
+
+function onSeg2(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): boolean {
+  return (
+    cx >= Math.min(ax, bx) - 1e-9 &&
+    cx <= Math.max(ax, bx) + 1e-9 &&
+    cy >= Math.min(ay, by) - 1e-9 &&
+    cy <= Math.max(ay, by) + 1e-9
+  )
+}
+
+/** 線分 AB と線分 CD が交差（端点接触含む） */
+function segmentsIntersect2(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number
+): boolean {
+  const o1 = orient2(ax, ay, bx, by, cx, cy)
+  const o2 = orient2(ax, ay, bx, by, dx, dy)
+  const o3 = orient2(cx, cy, dx, dy, ax, ay)
+  const o4 = orient2(cx, cy, dx, dy, bx, by)
+  if (o1 * o2 < 0 && o3 * o4 < 0) return true
+  if (o1 === 0 && onSeg2(ax, ay, bx, by, cx, cy)) return true
+  if (o2 === 0 && onSeg2(ax, ay, bx, by, dx, dy)) return true
+  if (o3 === 0 && onSeg2(cx, cy, dx, dy, ax, ay)) return true
+  if (o4 === 0 && onSeg2(cx, cy, dx, dy, bx, by)) return true
+  return false
+}
+
+/** 開線分が拡張矩形と交わるか（他ノード貫通の検知用） */
+function segmentHitsExpandedRect(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  rx: number,
+  ry: number,
+  rw: number,
+  rh: number
+): boolean {
+  const r2x = rx + rw
+  const r2y = ry + rh
+  const edges: [number, number, number, number][] = [
+    [rx, ry, r2x, ry],
+    [r2x, ry, r2x, r2y],
+    [r2x, r2y, rx, r2y],
+    [rx, r2y, rx, ry],
+  ]
+  for (const [x1, y1, x2, y2] of edges) {
+    if (segmentsIntersect2(ax, ay, bx, by, x1, y1, x2, y2)) return true
+  }
+  return false
+}
+
 export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const transitionDiagramDebugEnabled = searchParams.get('debug') === '1'
   const queryClient = useQueryClient()
   const authFetch = useAuthFetchEnabled()
   const { currentOrg } = useAuth()
@@ -286,16 +354,20 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     const minWidth = 420
     const minHeight = 170
 
+    const statusIdByNorm = new Map<string, string>()
+    for (const s of visibleStatuses) statusIdByNorm.set(normUuid(s.id), s.id)
+    const canonStatusId = (raw: string) => statusIdByNorm.get(normUuid(raw)) ?? raw
+
     const persistedEdges: TransitionDiagramEdge[] = transitions.map((t) => ({
       id: `persisted-${t.id}`,
-      from: t.from_status_id,
-      to: t.to_status_id,
+      from: canonStatusId(t.from_status_id),
+      to: canonStatusId(t.to_status_id),
       invalid: false,
     }))
     const invalidEdges: TransitionDiagramEdge[] = invalidTransitionStraps.map((s) => ({
       id: `invalid-${s.clientId}`,
-      from: s.from_status_id,
-      to: s.to_status_id,
+      from: canonStatusId(s.from_status_id),
+      to: canonStatusId(s.to_status_id),
       invalid: true,
     }))
     const edgeCandidates = [...persistedEdges, ...invalidEdges]
@@ -400,6 +472,69 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       edges: drawnEdges,
     }
   }, [visibleStatuses, transitions, invalidTransitionStraps])
+
+  const transitionDiagramDebugPayload = useMemo(() => {
+    const label = (sid: string) =>
+      visibleStatuses.find((s) => normUuid(s.id) === normUuid(sid))?.name ?? sid
+    const edgesDrawn = transitionDiagram.edges.map((e) => ({
+      id: e.id,
+      from: e.from,
+      to: e.to,
+      fromLabel: label(e.from),
+      toLabel: label(e.to),
+      invalid: e.invalid,
+      reverseEdgeExists: transitionDiagram.edges.some(
+        (x) => normUuid(x.from) === normUuid(e.to) && normUuid(x.to) === normUuid(e.from)
+      ),
+    }))
+    const forwardKeys = new Set(
+      transitionDiagram.edges.map((e) => `${normUuid(e.from)}>${normUuid(e.to)}`)
+    )
+    const seenUndirected = new Set<string>()
+    const bidirectionalPairsInDraw: string[] = []
+    for (const e of transitionDiagram.edges) {
+      const a = normUuid(e.from)
+      const b = normUuid(e.to)
+      const uKey = a < b ? `${a}|${b}` : `${b}|${a}`
+      if (seenUndirected.has(uKey)) continue
+      seenUndirected.add(uKey)
+      if (forwardKeys.has(`${a}>${b}`) && forwardKeys.has(`${b}>${a}`)) {
+        bidirectionalPairsInDraw.push(`${label(e.from)} ⟷ ${label(e.to)}`)
+      }
+    }
+    return {
+      visibleStatusIds: visibleStatuses.map((s) => s.id),
+      visibleStatusKeys: visibleStatuses.map((s) => s.status_key),
+      persistedTransitions: transitions.map((t) => ({
+        id: t.id,
+        from: t.from_status_id,
+        to: t.to_status_id,
+        fromLabel: label(t.from_status_id),
+        toLabel: label(t.to_status_id),
+      })),
+      invalidStraps: invalidTransitionStraps.map((s) => ({
+        clientId: s.clientId,
+        from: s.from_status_id,
+        to: s.to_status_id,
+        fromLabel: label(s.from_status_id),
+        toLabel: label(s.to_status_id),
+      })),
+      bidirectionalPairsInDraw,
+      edgesDrawn,
+      nodesForDraw: transitionDiagram.nodes.map((n) => ({
+        id: n.id,
+        name: n.name,
+        x: n.x,
+        y: n.y,
+      })),
+      svg: { width: transitionDiagram.width, height: transitionDiagram.height },
+    }
+  }, [transitionDiagram, visibleStatuses, transitions, invalidTransitionStraps])
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+    console.log('[WorkflowTransitionDiagram] draw payload', transitionDiagramDebugPayload)
+  }, [transitionDiagramDebugPayload])
 
   const statusReferencedInTransition = (statusId: string) =>
     transitions.some((t) => t.from_status_id === statusId || t.to_status_id === statusId)
@@ -716,7 +851,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
               <div className="mt-3 overflow-x-auto">
                 <svg
                   width="100%"
-                  height="auto"
                   viewBox={`0 0 ${transitionDiagram.width} ${transitionDiagram.height}`}
                   preserveAspectRatio="xMinYMin meet"
                   className="h-auto min-w-[640px] xl:min-w-0"
@@ -755,18 +889,24 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
 
                     const samePair = transitionDiagram.edges.filter(
                       (e) =>
-                        (e.from === edge.from && e.to === edge.to) ||
-                        (e.from === edge.to && e.to === edge.from)
+                        (normUuid(e.from) === normUuid(edge.from) &&
+                          normUuid(e.to) === normUuid(edge.to)) ||
+                        (normUuid(e.from) === normUuid(edge.to) &&
+                          normUuid(e.to) === normUuid(edge.from))
                     )
                     const samePairIndex = samePair.findIndex((e) => e.id === edge.id)
-                    const pairOffset = (samePairIndex - (samePair.length - 1) / 2) * 18
+                    const pairSep = samePair.length > 1 ? 34 : 18
+                    const pairOffset = (samePairIndex - (samePair.length - 1) / 2) * pairSep
 
                     let path = ''
                     if (edge.from === edge.to) {
-                      const startX = from.x + transitionDiagram.nodeWidth
-                      const startY = from.y + transitionDiagram.nodeHeight / 2
-                      const loopLift = 42 + idx % 3 * 10
-                      path = `M ${startX} ${startY} C ${startX + 42} ${startY - loopLift}, ${startX - 42} ${startY - loopLift}, ${startX} ${startY}`
+                      // 自己ループのみ折れ線（曲線は使わない）
+                      const sx = from.x + transitionDiagram.nodeWidth
+                      const sy = from.y + transitionDiagram.nodeHeight / 2
+                      const pad = 28 + (idx % 3) * 7
+                      const lift = 38 + (idx % 2) * 10
+                      const lx = from.x
+                      path = `M ${sx} ${sy} L ${sx + pad} ${sy} L ${sx + pad} ${sy - lift} L ${lx} ${sy - lift} L ${lx} ${sy}`
                     } else {
                       const fromCx = from.x + transitionDiagram.nodeWidth / 2
                       const fromCy = from.y + transitionDiagram.nodeHeight / 2
@@ -825,20 +965,62 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       const uy = dy / dist
                       const nx = -uy
                       const ny = ux
-                      const tension = Math.min(90, Math.max(40, dist * 0.3))
 
-                      // Keep bidirectional and reverse edges separated without huge “rainbow” arcs.
-                      const reverseHorizontal = horizontalDominant && centerDx < 0
-                      const baseNudge = pairOffset === 0 ? 14 : pairOffset
-                      const reverseNudge = reverseHorizontal ? -48 : 0
-                      const offsetX = nx * baseNudge
-                      const offsetY = ny * baseNudge + reverseNudge
+                      // 直線＋法線方向の平行オフセット（双方向の分離＋他ノード貫通の回避）
+                      const basePerp = samePair.length > 1 ? pairOffset : 0
+                      const obstaclePad = 8
+                      const avoidStep = 20
+                      const avoidMaxK = 32
 
-                      const c1x = startX + ux * tension + offsetX
-                      const c1y = startY + uy * tension + offsetY
-                      const c2x = endX - ux * tension + offsetX
-                      const c2y = endY - uy * tension + offsetY
-                      path = `M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`
+                      const blockers = transitionDiagram.nodes.filter(
+                        (n) =>
+                          normUuid(n.id) !== normUuid(edge.from) &&
+                          normUuid(n.id) !== normUuid(edge.to)
+                      )
+                      const nw = transitionDiagram.nodeWidth
+                      const nh = transitionDiagram.nodeHeight
+
+                      const hitsObstacle = (perpMag: number) => {
+                        const px1 = startX + nx * perpMag
+                        const py1 = startY + ny * perpMag
+                        const px2 = endX + nx * perpMag
+                        const py2 = endY + ny * perpMag
+                        for (const n of blockers) {
+                          const rx = n.x - obstaclePad
+                          const ry = n.y - obstaclePad
+                          const rw = nw + obstaclePad * 2
+                          const rh = nh + obstaclePad * 2
+                          if (segmentHitsExpandedRect(px1, py1, px2, py2, rx, ry, rw, rh)) {
+                            return true
+                          }
+                        }
+                        return false
+                      }
+
+                      let chosenPerp = basePerp
+                      if (hitsObstacle(chosenPerp)) {
+                        let best: number | null = null
+                        let bestAbs = Number.POSITIVE_INFINITY
+                        for (let k = 1; k <= avoidMaxK; k++) {
+                          for (const s of [1, -1] as const) {
+                            const tryPerp = basePerp + s * k * avoidStep
+                            if (!hitsObstacle(tryPerp)) {
+                              const ad = Math.abs(tryPerp - basePerp)
+                              if (ad < bestAbs) {
+                                bestAbs = ad
+                                best = tryPerp
+                              }
+                            }
+                          }
+                        }
+                        if (best !== null) chosenPerp = best
+                      }
+
+                      const sx1 = startX + nx * chosenPerp
+                      const sy1 = startY + ny * chosenPerp
+                      const ex1 = endX + nx * chosenPerp
+                      const ey1 = endY + ny * chosenPerp
+                      path = `M ${sx1} ${sy1} L ${ex1} ${ey1}`
                     }
 
                     return (
@@ -886,6 +1068,11 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   <p className="mt-2 text-xs text-amber-700">
                     破線の矢印は未保存の無効な遷移候補（同一ステータスまたは重複）です。
                   </p>
+                )}
+                {transitionDiagramDebugEnabled && (
+                  <pre className="mt-3 max-h-64 overflow-auto rounded border border-amber-200 bg-amber-50/80 p-3 text-left text-[11px] leading-snug text-gray-800">
+                    {JSON.stringify(transitionDiagramDebugPayload, null, 2)}
+                  </pre>
                 )}
               </div>
             )}
