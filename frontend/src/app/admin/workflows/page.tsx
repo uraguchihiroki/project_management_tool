@@ -118,7 +118,7 @@ export default function WorkflowsPage() {
   }
 
   return (
-    <div className="max-w-3xl">
+    <div className="w-full max-w-screen-2xl mx-auto">
       {!currentOrg?.id && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           現在の組織が選択されていません。プロジェクト一覧に戻り、右上の組織から選択してください。

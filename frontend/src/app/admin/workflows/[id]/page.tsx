@@ -480,7 +480,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   }
   if (!currentOrg?.id) {
     return (
-      <div className="max-w-3xl mx-auto p-6">
+      <div className="w-full max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           現在の組織が選択されていません。プロジェクト一覧に戻り、右上の組織から選択してください。
         </div>
@@ -500,7 +500,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const statusDialogSaving = addStatusMutation.isPending || updateStatusMutation.isPending
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
+    <div className="w-full max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <Link
         href="/admin/workflows"
         className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-6"
@@ -631,10 +631,11 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             {!statusesLoading && !transitionsLoading && statusesByOrder.length >= 2 && (
               <div className="mt-3 overflow-x-auto">
                 <svg
-                  width={transitionDiagram.width}
-                  height={transitionDiagram.height}
+                  width="100%"
+                  height="auto"
                   viewBox={`0 0 ${transitionDiagram.width} ${transitionDiagram.height}`}
-                  className="min-w-full"
+                  preserveAspectRatio="xMinYMin meet"
+                  className="h-auto min-w-[640px] xl:min-w-0"
                   role="img"
                   aria-label="ステータス遷移図"
                 >
@@ -784,7 +785,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       key={t.id}
                       ref={props.setNodeRef}
                       style={props.style}
-                      className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${row.reason ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}
+                      className={`flex flex-wrap xl:flex-nowrap items-center gap-2 rounded-lg border px-3 py-2 ${row.reason ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}
                     >
                       <DragHandle handleProps={props.handleProps} />
                       <select
@@ -841,7 +842,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
               return (
                 <div
                   key={s.clientId}
-                  className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 border-amber-300 bg-amber-50"
+                  className="flex flex-wrap xl:flex-nowrap items-center gap-2 rounded-lg border px-3 py-2 border-amber-300 bg-amber-50"
                 >
                   <select
                     value={s.from_status_id}
@@ -902,7 +903,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                 return (
                   <div
                     key={s.clientId}
-                    className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 border-amber-300 bg-amber-50"
+                    className="flex flex-wrap xl:flex-nowrap items-center gap-2 rounded-lg border px-3 py-2 border-amber-300 bg-amber-50"
                   >
                     <select
                       value={s.from_status_id}
@@ -995,7 +996,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                 statusesLoading
               }
             >
-              <table className="min-w-full text-sm">
+              <table className="min-w-[720px] w-full text-sm">
                 <thead className="bg-gray-50 text-left text-gray-600">
                   <tr>
                     <th className="w-10 px-2 py-2" aria-hidden />
