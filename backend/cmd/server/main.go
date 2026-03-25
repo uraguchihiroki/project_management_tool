@@ -97,6 +97,9 @@ func main() {
 	if err := appdb.MigrateStatusEntryUniqueIndex(db); err != nil {
 		log.Fatalf("failed migrate status entry unique index: %v", err)
 	}
+	if err := appdb.MigrateEnsureDefaultIssueEntryStatus(db); err != nil {
+		log.Fatalf("failed migrate ensure default issue entry status: %v", err)
+	}
 	if err := appdb.MigrateDropGroupTables(db); err != nil {
 		log.Fatalf("failed migrate drop group tables: %v", err)
 	}

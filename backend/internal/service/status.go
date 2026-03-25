@@ -205,7 +205,24 @@ func (s *statusService) Delete(id uuid.UUID) error {
 	if wfCount <= 2 {
 		return fmt.Errorf("ステータスはワークフロー内で最低2つ必要なため削除できません")
 	}
-	return s.statusRepo.Delete(id)
+	wasEntry := status.IsEntry
+	wfID := status.WorkflowID
+	if err := s.statusRepo.Delete(id); err != nil {
+		return err
+	}
+	if !wasEntry {
+		return nil
+	}
+	peers, err := s.statusRepo.FindByWorkflowID(wfID)
+	if err != nil {
+		return err
+	}
+	if len(peers) == 0 {
+		return nil
+	}
+	next := peers[0]
+	next.IsEntry = true
+	return s.statusRepo.PersistWithEntryExclusive(&next)
 }
 
 func (s *statusService) ReorderForWorkflow(workflowID uint, orderedIDs []uuid.UUID) error {

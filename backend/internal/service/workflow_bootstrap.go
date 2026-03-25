@@ -44,7 +44,7 @@ func CreateOrgIssueWorkflowWithDefaultStatuses(
 		{"完了", "#10B981", 3},
 	}
 	ids := make([]uuid.UUID, 0, len(defaultStatuses))
-	for _, ds := range defaultStatuses {
+	for i, ds := range defaultStatuses {
 		sid := uuid.New()
 		st := &model.Status{
 			ID:           sid,
@@ -53,6 +53,7 @@ func CreateOrgIssueWorkflowWithDefaultStatuses(
 			Name:         ds.Name,
 			Color:        ds.Color,
 			DisplayOrder: ds.Order,
+			IsEntry:      i == 0, // display_order 最小（先頭列）を開始にする
 		}
 		if err := statusRepo.Create(st); err != nil {
 			return 0, nil, err

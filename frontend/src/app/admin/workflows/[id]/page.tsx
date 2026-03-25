@@ -553,17 +553,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     console.log('[WorkflowTransitionDiagram] draw payload', transitionDiagramDebugPayload)
   }, [transitionDiagramDebugPayload])
 
-  const applyEntryStatus = (targetId: string | null) => {
-    const cur = visibleStatuses.find((s) => s.is_entry)
-    if (targetId === null) {
-      if (cur) {
-        patchStatusMutation.mutate({
-          statusId: cur.id,
-          data: { display_order: cur.display_order, is_entry: false },
-        })
-      }
-      return
-    }
+  const applyEntryStatus = (targetId: string) => {
     const tgt = visibleStatuses.find((s) => s.id === targetId)
     if (!tgt) return
     patchStatusMutation.mutate({
@@ -1147,65 +1137,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             )}
           </div>
         )}
-        {!orgMismatch && !statusesLoading && visibleStatuses.length > 0 && (
-          <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50/60 p-4">
-            <h3 className="text-sm font-semibold text-gray-900">開始・終了ステータス</h3>
-            <p className="mt-1 text-xs text-gray-600">
-              開始は1件まで（ラジオ）。終了は複数選べます（チェック）。
-            </p>
-            <div className="mt-3 overflow-x-auto">
-              <table className="min-w-[520px] w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 text-left text-gray-600">
-                    <th className="py-2 pr-3 font-medium">ステータス</th>
-                    <th className="py-2 pr-3 font-medium">開始</th>
-                    <th className="py-2 font-medium">終了</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-2 pr-3 text-gray-500">（なし）</td>
-                    <td className="py-2 pr-3">
-                      <input
-                        type="radio"
-                        name={entryRadioName}
-                        checked={!visibleStatuses.some((s) => s.is_entry)}
-                        onChange={() => applyEntryStatus(null)}
-                        disabled={patchStatusMutation.isPending}
-                        aria-label="開始ステータスを設定しない"
-                      />
-                    </td>
-                    <td className="py-2 text-gray-400">—</td>
-                  </tr>
-                  {visibleStatuses.map((s) => (
-                    <tr key={s.id} className="border-b border-gray-100">
-                      <td className="py-2 pr-3">{s.name}</td>
-                      <td className="py-2 pr-3">
-                        <input
-                          type="radio"
-                          name={entryRadioName}
-                          checked={s.is_entry === true}
-                          onChange={() => applyEntryStatus(s.id)}
-                          disabled={patchStatusMutation.isPending}
-                          aria-label={`${s.name} を開始にする`}
-                        />
-                      </td>
-                      <td className="py-2">
-                        <input
-                          type="checkbox"
-                          checked={s.is_terminal === true}
-                          onChange={() => toggleTerminalStatus(s)}
-                          disabled={patchStatusMutation.isPending || s.is_entry === true}
-                          aria-label={`${s.name} を終了にする`}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
         {orgMismatch && (
           <p className="text-sm text-gray-500">
             選択中の組織に属するワークフローのみ、遷移設定を表示・編集できます。
@@ -1500,6 +1431,12 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           )}
         </div>
 
+        {!orgMismatch && (
+          <p className="mb-3 text-xs text-gray-600">
+            開始は常に1件（ラジオで付け替え）。新規ワークフローの既定は表示順が最小の列。終了は複数（チェック）。並べ替えは左のハンドルをドラッグ。
+          </p>
+        )}
+
         {orgMismatch && (
           <p className="text-sm text-gray-500">
             選択中の組織に属するワークフローのみ、ステータス一覧を表示・編集できます。
@@ -1524,12 +1461,14 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                 statusesLoading
               }
             >
-              <table className="min-w-[560px] w-full text-sm">
+              <table className="min-w-[720px] w-full text-sm">
                 <thead className="bg-gray-50 text-left text-gray-600">
                   <tr>
                     <th className="w-10 px-2 py-2" aria-hidden />
                     <th className="px-3 py-2 font-medium">名前</th>
                     <th className="px-3 py-2 font-medium">色</th>
+                    <th className="px-3 py-2 font-medium w-24">開始</th>
+                    <th className="px-3 py-2 font-medium w-24">終了</th>
                     <th className="px-3 py-2 font-medium w-28">操作</th>
                   </tr>
                 </thead>
@@ -1560,6 +1499,25 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                           title={s.color}
                         />
                         <span className="ml-2 text-gray-600 font-mono text-xs">{s.color}</span>
+                      </td>
+                      <td className="px-3 py-2 align-middle">
+                        <input
+                          type="radio"
+                          name={entryRadioName}
+                          checked={s.is_entry === true}
+                          onChange={() => applyEntryStatus(s.id)}
+                          disabled={patchStatusMutation.isPending}
+                          aria-label={`${s.name} を開始にする`}
+                        />
+                      </td>
+                      <td className="px-3 py-2 align-middle">
+                        <input
+                          type="checkbox"
+                          checked={s.is_terminal === true}
+                          onChange={() => toggleTerminalStatus(s)}
+                          disabled={patchStatusMutation.isPending || s.is_entry === true}
+                          aria-label={`${s.name} を終了にする`}
+                        />
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1">

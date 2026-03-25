@@ -2,6 +2,7 @@ package test
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"testing"
 )
@@ -168,4 +169,53 @@ func TestWorkflowStatuses_EntryTerminalMarkers(t *testing.T) {
 		})
 		assertStatus(t, sb, http.StatusOK, "terminal Gamma")
 	})
+}
+
+// 組織Issueブートストラップの3ステータスでは display_order 最小の1件だけ is_entry になる。
+func TestOrgIssueWorkflow_DefaultEntryIsMinDisplayOrder(t *testing.T) {
+	ts := newTestServer(t)
+	st, wfListResp := ts.req(t, "GET", "/api/v1/workflows?org_id="+testOrgID, nil)
+	assertStatus(t, st, http.StatusOK, "list workflows")
+	workflows := mustGetArray(t, wfListResp, "data")
+	var issueWfID string
+	for _, w := range workflows {
+		m := w.(map[string]interface{})
+		if m["name"].(string) == "組織Issue" {
+			issueWfID = fmt.Sprintf("%.0f", m["id"].(float64))
+			break
+		}
+	}
+	if issueWfID == "" {
+		t.Fatal("組織Issue workflow not found")
+	}
+	st2, statResp := ts.req(t, "GET", "/api/v1/workflows/"+issueWfID+"/statuses", nil)
+	assertStatus(t, st2, http.StatusOK, "GET 組織Issue statuses")
+	arr := mustGetArray(t, statResp, "data")
+	if len(arr) != 3 {
+		t.Fatalf("組織Issue は3ステータス想定, got %d", len(arr))
+	}
+	minDO := math.MaxFloat64
+	entryCount := 0
+	var entryName string
+	for _, x := range arr {
+		m := x.(map[string]interface{})
+		do := m["display_order"].(float64)
+		if do < minDO {
+			minDO = do
+		}
+		ie, ok := m["is_entry"].(bool)
+		if !ok {
+			t.Fatalf("is_entry missing or not bool: %v", m)
+		}
+		if ie {
+			entryCount++
+			entryName = m["name"].(string)
+		}
+	}
+	if entryCount != 1 {
+		t.Fatalf("is_entry true は 1 件期待, got %d", entryCount)
+	}
+	if entryName != "未着手" {
+		t.Fatalf("開始は未着手（display_order 最小）期待, got name=%q minDO=%v", entryName, minDO)
+	}
 }

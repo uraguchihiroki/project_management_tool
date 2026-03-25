@@ -113,6 +113,9 @@ func newTestServer(t *testing.T) *testServer {
 	if err := appdb.MigrateStatusEntryUniqueIndex(db); err != nil {
 		t.Fatalf("failed migrate status entry unique index: %v", err)
 	}
+	if err := appdb.MigrateEnsureDefaultIssueEntryStatus(db); err != nil {
+		t.Fatalf("failed migrate ensure default issue entry status: %v", err)
+	}
 	if err := appdb.MigrateDropGroupTables(db); err != nil {
 		t.Fatalf("failed migrate drop group tables: %v", err)
 	}

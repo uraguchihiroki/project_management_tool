@@ -175,7 +175,7 @@ statuses（Issue 専用。常に workflow_id 必須。Workflow / workflow_transi
 ├── color (HEX)
 ├── order
 ├── status_key (nullable) — 拡張用。任意のユーザーキー
-├── is_entry (BOOLEAN) — 当該ワークフローで「開始」として高々1件（部分一意インデックス・論理削除除外）
+├── is_entry (BOOLEAN) — 当該ワークフローで「開始」として高々1件（部分一意インデックス・論理削除除外）。ブートストラップ既定は `display_order` 最小。0件ワークフローは起動時マイグレーションで同様に補正
 ├── is_terminal (BOOLEAN) — 「終了」として複数可
 └── deleted_at
 

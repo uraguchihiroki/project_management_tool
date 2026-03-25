@@ -101,8 +101,8 @@ http://localhost:8080/api/v1
 
 | Method | Path | 説明 |
 |--------|------|------|
-| PUT | /statuses/:id | 更新（body: `name`, `color`, `display_order`、省略可: `is_entry`, `is_terminal`）。**同一ステータスで `is_entry` と `is_terminal` を同時に true にできない**（400）。`is_entry: true` のとき同一ワークフロー他行の `is_entry` はサーバが false に寄せる |
-| DELETE | /statuses/:id | 削除。**許可遷移**（`workflow_transitions` の from/to）で参照中は **400**。削除後に当該ワークフロー内の有効ステータスが **2 未満**になる場合も **400**（メッセージで理由を返す） |
+| PUT | /statuses/:id | 更新（body: `name`, `color`, `display_order`、省略可: `is_entry`, `is_terminal`）。**同一ステータスで `is_entry` と `is_terminal` を同時に true にできない**（400）。`is_entry: true` のとき同一ワークフロー他行の `is_entry` はサーバが false に寄せる。**新規ブートストラップ**（組織Issue用3ステータス等）では `display_order` 最小が既定で `is_entry`。**起動時マイグレーション**で、同一ワークフローに `is_entry=true` が0件のときは `display_order` 最小の1行に付与する |
+| DELETE | /statuses/:id | 削除。**許可遷移**（`workflow_transitions` の from/to）で参照中は **400**。削除後に当該ワークフロー内の有効ステータスが **2 未満**になる場合も **400**（メッセージで理由を返す）。**削除行が `is_entry` のとき**は削除後、残りの有効ステータスのうち **`display_order` 最小**の1行に `is_entry` を付け替える |
 
 > **UI導線:** 管理画面では `/admin/statuses` はレガシー導線として `/admin/workflows` へリダイレクトし、実際の編集は `/admin/workflows/:id` の **共通ダイアログ（新規/編集）** で行う。
 
