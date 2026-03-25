@@ -57,6 +57,12 @@ func TestOrganization_Create(t *testing.T) {
 		if names[0] != "未着手" || names[1] != "進行" || names[2] != "完了" {
 			t.Fatalf("default status names = %v, want [未着手 進行 完了]", names)
 		}
+		st3, transResp := ts.req(t, "GET", "/api/v1/workflows/"+issueWfID+"/transitions", nil)
+		assertStatus(t, st3, http.StatusOK, "GET transitions for 組織Issue")
+		transitions := mustGetArray(t, transResp, "data")
+		if len(transitions) != 4 {
+			t.Fatalf("expected 4 default workflow transitions, got %d", len(transitions))
+		}
 	})
 }
 

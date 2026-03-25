@@ -115,8 +115,12 @@ func newTestServer(t *testing.T) *testServer {
 	statusRepo := repository.NewStatusRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
 	transitionRepo := repository.NewWorkflowTransitionRepository(db)
-	if _, _, err := service.CreateWorkflowWithIssueStatuses(workflowRepo, statusRepo, frsOrg.ID, "組織Issue"); err != nil {
+	orgIssueWfID, orgIssueStatusIDs, err := service.CreateOrgIssueWorkflowWithDefaultStatuses(workflowRepo, statusRepo, frsOrg.ID, "組織Issue")
+	if err != nil {
 		t.Fatalf("seed 組織Issue workflow: %v", err)
+	}
+	if err := service.SeedDefaultIssueWorkflowTransitions(transitionRepo, orgIssueWfID, orgIssueStatusIDs); err != nil {
+		t.Fatalf("seed 組織Issue workflow transitions: %v", err)
 	}
 
 	userRepo := repository.NewUserRepository(db)
@@ -137,14 +141,16 @@ func newTestServer(t *testing.T) *testServer {
 	projectStatusRepo := repository.NewProjectStatusRepository(db)
 	projectStatusTransitionRepo := repository.NewProjectStatusTransitionRepository(db)
 
+	issueWFProv := service.NewIssueWorkflowProvisioner(projectRepo, workflowRepo, statusRepo, transitionRepo)
+
 	userSvc := service.NewUserService(userRepo, orgRepo)
-	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, projectStatusRepo)
+	projectSvc := service.NewProjectService(projectRepo, statusRepo, projectStatusRepo, projectStatusTransitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, issueWFProv)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
 	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
 	alertEval := &service.TransitionAlertEvaluator{Rules: alertRuleRepo, UG: userGroupRepo}
-	issueSvc := service.NewIssueService(issueRepo, projectRepo, statusRepo, workflowRepo, transitionRepo, issueEventRepo, groupRepo, issueGroupRepo, alertEval)
+	issueSvc := service.NewIssueService(issueRepo, projectRepo, statusRepo, workflowRepo, transitionRepo, issueEventRepo, groupRepo, issueGroupRepo, alertEval, issueWFProv)
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo)
@@ -153,7 +159,7 @@ func newTestServer(t *testing.T) *testServer {
 	groupSvc := service.NewGroupService(groupRepo, userGroupRepo)
 
 	userH := handler.NewUserHandler(userSvc)
-	projectH := handler.NewProjectHandler(projectSvc)
+	projectH := handler.NewProjectHandler(projectSvc, issueWFProv)
 	issueH := handler.NewIssueHandler(issueSvc, projectSvc)
 	commentH := handler.NewCommentHandler(commentSvc)
 	roleH := handler.NewRoleHandler(roleSvc, userSvc)
@@ -243,6 +249,7 @@ func newTestServer(t *testing.T) *testServer {
 	api.PUT("/statuses/:id", statusH.Update)
 	api.DELETE("/statuses/:id", statusH.Delete)
 	api.POST("/projects", projectH.Create)
+	api.POST("/projects/:id/default-issue-workflow", projectH.EnsureDefaultIssueWorkflow)
 	api.PUT("/projects/reorder", projectH.Reorder)
 	api.GET("/projects/:id", projectH.Get)
 	api.PUT("/projects/:id", projectH.Update)
@@ -409,7 +416,10 @@ func createTestProject(t *testing.T, ts *testServer, key, name, ownerID string) 
 		"organization_id": testOrgID,
 	})
 	assertStatus(t, status, http.StatusCreated, fmt.Sprintf("createProject(%s)", key))
-	return mustGetString(t, resp, "data", "id")
+	projectID := mustGetString(t, resp, "data", "id")
+	st2, _ := ts.req(t, "POST", "/api/v1/projects/"+projectID+"/default-issue-workflow", nil)
+	assertStatus(t, st2, http.StatusOK, "default-issue-workflow after createTestProject")
+	return projectID
 }
 
 // getFirstStatusID はプロジェクトの最初のステータスIDを返します

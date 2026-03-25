@@ -84,15 +84,29 @@ func TestProject_Create(t *testing.T) {
 		assertField(t, mustGetString(t, resp, "data", "name"), "テストプロジェクト", "name")
 	})
 
-	t.Run("正常系: 作成時にデフォルトステータスが自動生成される", func(t *testing.T) {
+	t.Run("正常系: 作成時にプロジェクト進行の初期状態が付く", func(t *testing.T) {
 		status, resp := ts.req(t, "POST", "/api/v1/projects", map[string]string{
 			"key": "AUTO", "name": "ステータス確認", "owner_id": ownerID, "organization_id": testOrgID,
 		})
-		assertStatus(t, status, http.StatusCreated, "POST /projects (statuses)")
+		assertStatus(t, status, http.StatusCreated, "POST /projects (project progress)")
 		data := resp["data"].(map[string]interface{})
+		if data["project_status_id"] == nil || data["project_status_id"] == "" {
+			t.Error("project creation should set project_status_id (project progress)")
+		}
+	})
+
+	t.Run("正常系: default-issue-workflow で Issue カンバン列が付く", func(t *testing.T) {
+		status, resp := ts.req(t, "POST", "/api/v1/projects", map[string]string{
+			"key": "ISU", "name": "IssueWF確認", "owner_id": ownerID, "organization_id": testOrgID,
+		})
+		assertStatus(t, status, http.StatusCreated, "POST /projects")
+		projectID := mustGetString(t, resp, "data", "id")
+		st2, provResp := ts.req(t, "POST", "/api/v1/projects/"+projectID+"/default-issue-workflow", nil)
+		assertStatus(t, st2, http.StatusOK, "POST default-issue-workflow")
+		data := provResp["data"].(map[string]interface{})
 		statuses, ok := data["statuses"].([]interface{})
-		if !ok || len(statuses) == 0 {
-			t.Error("project creation should generate default statuses")
+		if !ok || len(statuses) != 3 {
+			t.Fatalf("want 3 issue statuses after provision, got %#v", data["statuses"])
 		}
 	})
 

@@ -47,6 +47,15 @@
 
 ---
 
+## Bootstrap・初期投入（`*_bootstrap.go`）の規約
+
+- **`workflow_bootstrap.go`** … 組織スコープの **Issue 用** `workflows` / `statuses`（および呼び出し側で付ける遷移シード）のみ。`projects` 行や `default_workflow_id` は更新しない。
+- **`project_status_bootstrap.go`** … **プロジェクト進行**用の `project_statuses` のみ。
+- **同一の `*_bootstrap.go` に Issue 用とプロジェクト進行用を混在させない**（別ファイルに分ける）。
+- **`ProjectService`** は Issue ワークフロー行の作成・`default_workflow_id` の設定を行わない。プロジェクトにデフォルト Issue ワークフローを紐付けるのは **`IssueWorkflowProvisioner`**（`issue_workflow_provision.go`）、**`POST /projects/:id/default-issue-workflow`**、または **`IssueService.Create` 前段の lazy 確保**（実装参照）。
+
+---
+
 ## seed.sql の扱い
 
 - **実行**: `Get-Content backend/seed.sql | docker exec -i pmt_db psql -U pmt_user -d pmt_db`

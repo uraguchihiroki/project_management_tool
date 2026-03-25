@@ -128,14 +128,15 @@ http://localhost:8080/api/v1
 | Method | Path | 説明 |
 |--------|------|------|
 | GET | /projects | プロジェクト一覧取得（org_id クエリでフィルタ可） |
-| POST | /projects | プロジェクト作成 |
+| POST | /projects | プロジェクト作成。**Issue 用ワークフローは作らない**（応答の `default_workflow_id` / `statuses` は未設定のことがある）。プロジェクト進行用の初期 `project_status_id` は設定される。 |
+| POST | /projects/:id/default-issue-workflow | 未設定時のみ、デフォルト Issue 用ワークフロー（未着手・進行・完了＋許可遷移 4 本）を作成し `default_workflow_id` を紐付ける（**冪等**、200 + 更新後の project） |
 | GET | /projects/:id | プロジェクト詳細取得 |
 | GET | /projects/:id/project-statuses | 当該プロジェクトの **進行用** `project_statuses` 一覧（JWT の組織と一致しないプロジェクトは 404） |
 | PUT | /projects/:id/project-statuses/:statusId | 進行ステータス更新。body: `name`, `color`（#RRGGBB）, `order`。当該行がこのプロジェクトに属することを検証。`status_key` が sts_start / sts_goal の行は変更不可 |
 | PUT | /projects/:id | プロジェクト更新（任意: `project_status_id` で進行変更。許可遷移は `project_status_transitions` で検証） |
 | DELETE | /projects/:id | プロジェクト削除 |
 
-> **Note:** GET /projects/:id の `statuses` は **Issue 用**（`default_workflow_id` の列）。`project_status` は現在のプロジェクト進行。進行の一覧は GET /projects/:id/project-statuses。
+> **Note:** GET /projects/:id の `statuses` は **Issue 用**（`default_workflow_id` の列）。**POST /projects 直後は未プロビジョンのため空や未設定になりうる**。カンバンを使う前に POST …/default-issue-workflow または初回 Issue 作成で確保する。`project_status` は現在のプロジェクト進行。進行の一覧は GET /projects/:id/project-statuses。
 
 ### Groups（グループ）
 

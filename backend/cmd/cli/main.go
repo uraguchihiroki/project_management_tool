@@ -146,7 +146,9 @@ func main() {
 	issueRepo := repository.NewIssueRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
 	projectStatusRepo := repository.NewProjectStatusRepository(db)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, projectStatusRepo)
+	transitionRepo := repository.NewWorkflowTransitionRepository(db)
+	issueWFProv := service.NewIssueWorkflowProvisioner(projectRepo, workflowRepo, statusRepo, transitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, issueWFProv)
 
 	var seedErr error
 	if *seedAll {

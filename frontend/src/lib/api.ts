@@ -206,6 +206,10 @@ export const createProject = (data: {
   end_date?: string
 }) => api.post<ApiResponse<Project>>('/projects', data).then((r) => r.data.data)
 
+/** 未設定時のみデフォルト Issue 用ワークフローとカンバン列を紐付ける（冪等） */
+export const ensureDefaultIssueWorkflow = (projectId: string) =>
+  api.post<ApiResponse<Project>>(`/projects/${projectId}/default-issue-workflow`).then((r) => r.data.data)
+
 export const updateProject = (
   id: string,
   data: {

@@ -61,6 +61,7 @@ type issueService struct {
 	groupRepo      repository.GroupRepository
 	issueGroupRepo repository.IssueGroupRepository
 	alertEval      *TransitionAlertEvaluator
+	issueWFProv    *IssueWorkflowProvisioner
 }
 
 func NewIssueService(
@@ -73,6 +74,7 @@ func NewIssueService(
 	groupRepo repository.GroupRepository,
 	issueGroupRepo repository.IssueGroupRepository,
 	alertEval *TransitionAlertEvaluator,
+	issueWFProv *IssueWorkflowProvisioner,
 ) IssueService {
 	return &issueService{
 		issueRepo:      issueRepo,
@@ -84,6 +86,7 @@ func NewIssueService(
 		groupRepo:      groupRepo,
 		issueGroupRepo: issueGroupRepo,
 		alertEval:      alertEval,
+		issueWFProv:    issueWFProv,
 	}
 }
 
@@ -205,6 +208,15 @@ func (s *issueService) Create(projectID uuid.UUID, input CreateIssueInput) (*mod
 	project, err := s.projectRepo.FindByID(projectID)
 	if err != nil {
 		return nil, err
+	}
+	if project.DefaultWorkflowID == nil {
+		if err := s.issueWFProv.EnsureDefaultForProject(projectID); err != nil {
+			return nil, err
+		}
+		project, err = s.projectRepo.FindByID(projectID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	orgID := project.OrganizationID
 	// 採番

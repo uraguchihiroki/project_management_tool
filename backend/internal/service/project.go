@@ -45,29 +45,23 @@ type ProjectService interface {
 }
 
 type projectService struct {
-	projectRepo    repository.ProjectRepository
-	statusRepo     repository.StatusRepository
-	workflowRepo   repository.WorkflowRepository
-	transitionRepo repository.WorkflowTransitionRepository
-	psRepo         repository.ProjectStatusRepository
-	pstRepo        repository.ProjectStatusTransitionRepository
+	projectRepo repository.ProjectRepository
+	statusRepo  repository.StatusRepository
+	psRepo      repository.ProjectStatusRepository
+	pstRepo     repository.ProjectStatusTransitionRepository
 }
 
 func NewProjectService(
 	projectRepo repository.ProjectRepository,
 	statusRepo repository.StatusRepository,
-	workflowRepo repository.WorkflowRepository,
-	transitionRepo repository.WorkflowTransitionRepository,
 	psRepo repository.ProjectStatusRepository,
 	pstRepo repository.ProjectStatusTransitionRepository,
 ) ProjectService {
 	return &projectService{
-		projectRepo:    projectRepo,
-		statusRepo:     statusRepo,
-		workflowRepo:   workflowRepo,
-		transitionRepo: transitionRepo,
-		psRepo:         psRepo,
-		pstRepo:        pstRepo,
+		projectRepo: projectRepo,
+		statusRepo:  statusRepo,
+		psRepo:      psRepo,
+		pstRepo:     pstRepo,
 	}
 }
 
@@ -119,13 +113,6 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 	if err := s.projectRepo.Create(project); err != nil {
 		return nil, err
 	}
-
-	wfName := input.Name + " - Issue"
-	wfID, _, err := CreateWorkflowWithIssueStatuses(s.workflowRepo, s.statusRepo, input.OrganizationID, wfName)
-	if err != nil {
-		return nil, err
-	}
-	project.DefaultWorkflowID = &wfID
 
 	firstPS, err := SeedDefaultProjectStatuses(s.psRepo, project.ID)
 	if err != nil {

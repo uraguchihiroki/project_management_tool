@@ -12,7 +12,6 @@ func TestIssueEvents_ImprintOnStatusChange(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "iev@example.com")
 	projectID := createTestProject(t, ts, "IEV", "インプリントテスト", ownerID)
-	ensureLinearIssueWorkflowTransitions(t, ts, projectID)
 	statusID := getFirstStatusID(t, ts, projectID)
 	statusIDs := getStatusIDs(t, ts, projectID)
 	if len(statusIDs) < 2 {
@@ -78,7 +77,6 @@ func TestIssueEvents_ListByOrganization(t *testing.T) {
 	ts := newTestServer(t)
 	ownerID := createTestUser(t, ts, "オーナー", "ieo@example.com")
 	projectID := createTestProject(t, ts, "IEO", "組織イベント", ownerID)
-	ensureLinearIssueWorkflowTransitions(t, ts, projectID)
 	statusID := getFirstStatusID(t, ts, projectID)
 	statusIDs := getStatusIDs(t, ts, projectID)
 	number := createTestIssue(t, ts, projectID, statusID, ownerID, "組織一覧用")
