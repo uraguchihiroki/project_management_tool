@@ -8,6 +8,7 @@ import dagre from 'dagre'
 import { ChevronLeft, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { SortableDndProvider, SortableList, SortableTbody, DragHandle } from '@/components/SortableList'
 import { useAuth } from '@/context/AuthContext'
+import { useWorkflowEditorUnsaved } from '@/context/AdminWorkflowEditorUnsavedContext'
 import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
 import type { Status, Workflow, WorkflowTransition } from '@/types'
 import {
@@ -158,6 +159,12 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     if (!editorBaseline || !editorDraft) return false
     return serializeEditorSnapshot(editorBaseline) !== serializeEditorSnapshot(editorDraft)
   }, [editorBaseline, editorDraft])
+
+  const { setWorkflowEditorUnsaved } = useWorkflowEditorUnsaved()
+  useEffect(() => {
+    setWorkflowEditorUnsaved(!!(isDraftDirty && orgMatches))
+    return () => setWorkflowEditorUnsaved(false)
+  }, [isDraftDirty, orgMatches, setWorkflowEditorUnsaved])
 
   useEffect(() => {
     setEditorBaseline(null)

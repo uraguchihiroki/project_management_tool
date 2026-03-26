@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { FolderKanban, User, LogOut, ArrowLeft, Settings, Building2, ChevronDown, Check } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { useWorkflowEditorLeaveConfirmHandler } from '@/context/AdminWorkflowEditorUnsavedContext'
 import { getUserOrganizations } from '@/lib/api'
 import type { Organization } from '@/types'
 
@@ -15,6 +16,7 @@ interface HeaderProps {
 
 export default function Header({ backHref, title, actions }: HeaderProps) {
   const { currentUser, currentOrg, logout, selectOrg } = useAuth()
+  const onWorkflowLeaveClick = useWorkflowEditorLeaveConfirmHandler()
   const [orgs, setOrgs] = useState<Organization[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -53,7 +55,12 @@ export default function Header({ backHref, title, actions }: HeaderProps) {
         {/* 左側: ロゴ / 戻るボタン + タイトル */}
         <div className="flex items-center gap-4 min-w-0">
           {backHref ? (
-            <Link href={backHref} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+            <Link
+              href={backHref}
+              onClick={onWorkflowLeaveClick}
+              className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+              aria-label="プロジェクト一覧へ戻る"
+            >
               <ArrowLeft className="w-5 h-5" />
             </Link>
           ) : (
@@ -119,6 +126,7 @@ export default function Header({ backHref, title, actions }: HeaderProps) {
               {currentUser.is_admin && (
                 <Link
                   href="/admin"
+                  onClick={onWorkflowLeaveClick}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                   title="管理画面"
                 >
