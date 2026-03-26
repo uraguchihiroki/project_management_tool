@@ -303,6 +303,18 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     return transitionsFromDraft(editorDraft)
   }, [editorDraft])
 
+  /** 出発/到着のいずれかが現在のステータス一覧に解決できない遷移（図では描画しない） */
+  const unresolvedTransitionStrapCount = useMemo(() => {
+    if (!editorDraft) return 0
+    let n = 0
+    for (const t of editorDraft.transitions) {
+      const fromOk = visibleStatuses.some((s) => normUuid(s.id) === normUuid(t.from_ref))
+      const toOk = visibleStatuses.some((s) => normUuid(s.id) === normUuid(t.to_ref))
+      if (!fromOk || !toOk) n++
+    }
+    return n
+  }, [editorDraft, visibleStatuses])
+
   const transitionDiagram = useMemo(() => {
     if (!editorDraft) {
       const nodeWidth = 170
@@ -352,8 +364,10 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     })
     const edgeCandidates = persistedEdges
 
-    const visibleNodeIds = new Set(visibleStatuses.map((s) => s.id))
-    const edges = edgeCandidates.filter((e) => visibleNodeIds.has(e.from) && visibleNodeIds.has(e.to))
+    const visibleNodeIdsNorm = new Set(visibleStatuses.map((s) => normUuid(s.id)))
+    const edges = edgeCandidates.filter(
+      (e) => visibleNodeIdsNorm.has(normUuid(e.from)) && visibleNodeIdsNorm.has(normUuid(e.to))
+    )
 
     const degreeById = new Map<string, number>()
     for (const s of visibleStatuses) degreeById.set(s.id, 0)
@@ -420,7 +434,10 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
 
     const nodes = [...connectedNodes, ...disconnectedNodes]
     const nodeById = new Map(nodes.map((n) => [n.id, n]))
-    const drawnEdges = edges.filter((e) => nodeById.has(e.from) && nodeById.has(e.to))
+    const nodeIdsNorm = new Set(nodes.map((n) => normUuid(n.id)))
+    const drawnEdges = edges.filter(
+      (e) => nodeIdsNorm.has(normUuid(e.from)) && nodeIdsNorm.has(normUuid(e.to))
+    )
 
     // Curves can extend beyond node bounds. Reserve vertical padding and shift the whole drawing down if needed.
     const hasLoop = drawnEdges.some((e) => e.from === e.to)
@@ -498,6 +515,9 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       })),
       bidirectionalPairsInDraw,
       edgesDrawn,
+      unresolvedStrapCount: unresolvedTransitionStrapCount,
+      strapsInDraft: editorDraft?.transitions.length ?? 0,
+      edgesInDiagram: transitionDiagram.edges.length,
       nodesForDraw: transitionDiagram.nodes.map((n) => ({
         id: n.id,
         name: n.name,
@@ -506,7 +526,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       })),
       svg: { width: transitionDiagram.width, height: transitionDiagram.height },
     }
-  }, [transitionDiagram, visibleStatuses, editorDraft?.transitions])
+  }, [transitionDiagram, visibleStatuses, editorDraft?.transitions, unresolvedTransitionStrapCount])
 
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return
@@ -849,6 +869,22 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50/60 p-4">
             <h3 className="text-sm font-semibold text-gray-900">遷移図</h3>
             <p className="mt-1 text-xs text-gray-600">現在の許可遷移を図で表示しています。</p>
+            {unresolvedTransitionStrapCount > 0 && (
+              <div
+                className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+                role="status"
+              >
+                <p className="font-medium text-amber-900">
+                  参照切れの遷移が {unresolvedTransitionStrapCount} 件あります
+                </p>
+                <p className="mt-1 text-amber-900/95">
+                  出発または到着のステータス ID が、このワークフローのステータス一覧に無いため遷移図には描画されません（下のストラップ一覧には出ます。選択が意図とずれる行がある場合は同じ理由です）。DB
+                  の件数が多いときは、同一 <code className="rounded bg-amber-100/80 px-1">workflow_id</code>{' '}
+                  で絞っているか、論理削除{' '}
+                  <code className="rounded bg-amber-100/80 px-1">deleted_at</code> が付いた行を数えていないかを確認してください。
+                </p>
+              </div>
+            )}
             {(statusesLoading || transitionsLoading) && (
               <p className="mt-3 text-sm text-gray-500">遷移図を読み込み中...</p>
             )}
@@ -890,6 +926,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                     </marker>
                   </defs>
 
+                  {/* SVG 描画順: 先に edges、後に nodes。後から描いたノードが手前（Z 上）になる。順序を入れ替えないこと。 */}
+                  <g data-layer="edges">
                   {transitionDiagram.edges.map((edge, idx) => {
                     const from = transitionDiagram.nodeById.get(edge.from)
                     const to = transitionDiagram.nodeById.get(edge.to)
@@ -978,15 +1016,15 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       const basePerp = samePair.length > 1 ? pairOffset : 0
                       const obstaclePad = 8
                       const avoidStep = 20
-                      const avoidMaxK = 32
+                      const nw = transitionDiagram.nodeWidth
+                      const nh = transitionDiagram.nodeHeight
+                      const avoidMaxK = Math.max(32, Math.ceil((4 * nh) / avoidStep))
 
                       const blockers = transitionDiagram.nodes.filter(
                         (n) =>
                           normUuid(n.id) !== normUuid(edge.from) &&
                           normUuid(n.id) !== normUuid(edge.to)
                       )
-                      const nw = transitionDiagram.nodeWidth
-                      const nh = transitionDiagram.nodeHeight
 
                       const hitsObstacle = (perpMag: number) => {
                         const px1 = startX + nx * perpMag
@@ -1007,7 +1045,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
 
                       let chosenPerp = basePerp
                       if (hitsObstacle(chosenPerp)) {
-                        let best: number | null = null
+                        let bestPerp: number | null = null
                         let bestAbs = Number.POSITIVE_INFINITY
                         for (let k = 1; k <= avoidMaxK; k++) {
                           for (const s of [1, -1] as const) {
@@ -1016,19 +1054,68 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                               const ad = Math.abs(tryPerp - basePerp)
                               if (ad < bestAbs) {
                                 bestAbs = ad
-                                best = tryPerp
+                                bestPerp = tryPerp
                               }
                             }
                           }
                         }
-                        if (best !== null) chosenPerp = best
+                        if (bestPerp !== null) chosenPerp = bestPerp
                       }
 
-                      const sx1 = startX + nx * chosenPerp
-                      const sy1 = startY + ny * chosenPerp
-                      const ex1 = endX + nx * chosenPerp
-                      const ey1 = endY + ny * chosenPerp
-                      path = `M ${sx1} ${sy1} L ${ex1} ${ey1}`
+                      const stillBlocked = hitsObstacle(chosenPerp)
+                      if (!stillBlocked) {
+                        const sx1 = startX + nx * chosenPerp
+                        const sy1 = startY + ny * chosenPerp
+                        const ex1 = endX + nx * chosenPerp
+                        const ey1 = endY + ny * chosenPerp
+                        path = `M ${sx1} ${sy1} L ${ex1} ${ey1}`
+                      } else {
+                        // 諦めモード: 三次ベジェ（ノード矩形との交差は検査しない。Z 順でノードが手前）
+                        const fromNodeCx = from.x + nw / 2
+                        let anchor: (typeof transitionDiagram.nodes)[number] | null = null
+                        let minAnchorCx = Number.POSITIVE_INFINITY
+                        for (const n of transitionDiagram.nodes) {
+                          if (
+                            normUuid(n.id) === normUuid(edge.from) ||
+                            normUuid(n.id) === normUuid(edge.to)
+                          ) {
+                            continue
+                          }
+                          const cx = n.x + nw / 2
+                          if (cx > fromNodeCx && cx < minAnchorCx) {
+                            minAnchorCx = cx
+                            anchor = n
+                          }
+                        }
+                        const midX = (startX + endX) / 2
+                        const midY = (startY + endY) / 2
+                        const bulgeSign =
+                          (idx + Math.round(pairOffset / 17)) % 2 === 0 ? 1 : -1
+                        const bulgeY = bulgeSign * nh
+                        let c1x = startX + (endX - startX) * 0.33
+                        let c1y = startY + (endY - startY) * 0.33 + bulgeY
+                        let c2x = startX + (endX - startX) * 0.67
+                        let c2y = startY + (endY - startY) * 0.67 + bulgeY
+                        if (anchor) {
+                          const ax = anchor.x + nw / 2
+                          const ay = anchor.y + nh / 2
+                          const pull = 0.22
+                          c1x = c1x * (1 - pull) + ax * pull
+                          c1y = c1y * (1 - pull) + ay * pull
+                          c2x = c2x * (1 - pull) + ax * pull
+                          c2y = c2y * (1 - pull) + ay * pull
+                        } else {
+                          const fx = midX
+                          const fy = midY + bulgeY
+                          const pull = 0.35
+                          c1x = c1x * (1 - pull) + fx * pull
+                          c1y = c1y * (1 - pull) + fy * pull
+                          c2x = c2x * (1 - pull) + fx * pull
+                          c2y = c2y * (1 - pull) + fy * pull
+                        }
+                        const r = (v: number) => Math.round(v * 10) / 10
+                        path = `M ${r(startX)} ${r(startY)} C ${r(c1x)} ${r(c1y)} ${r(c2x)} ${r(c2y)} ${r(endX)} ${r(endY)}`
+                      }
                     }
 
                     return (
@@ -1038,12 +1125,16 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                         fill="none"
                         stroke={edge.invalid ? '#D97706' : '#94A3B8'}
                         strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                         strokeDasharray={edge.invalid ? '5 4' : undefined}
                         markerEnd={edge.invalid ? 'url(#transition-arrow-invalid)' : 'url(#transition-arrow)'}
                       />
                     )
                   })}
+                  </g>
 
+                  <g data-layer="nodes">
                   {transitionDiagram.nodes.map((node) => (
                     <g key={node.id}>
                       <rect
@@ -1092,6 +1183,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                       )}
                     </g>
                   ))}
+                  </g>
                 </svg>
                 {transitionDiagram.edges.length === 0 && (
                   <p className="mt-2 text-xs text-gray-500">遷移はまだありません。下の「ストラップを追加」から作成できます。</p>
