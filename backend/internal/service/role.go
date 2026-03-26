@@ -1,12 +1,14 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"gorm.io/gorm"
 )
 
 type RoleService interface {
@@ -40,6 +42,19 @@ func (s *roleService) GetRole(id uint) (*model.Role, error) {
 }
 
 func (s *roleService) CreateRole(name string, level int, description string, orgID *uuid.UUID) (*model.Role, error) {
+	if orgID != nil {
+		if _, err := s.roleRepo.FindByOrgAndName(*orgID, name); err == nil {
+			return nil, ErrDuplicateRoleName
+		} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	} else {
+		if _, err := s.roleRepo.FindGlobalByName(name); err == nil {
+			return nil, ErrDuplicateRoleName
+		} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
 	maxOrder, err := s.roleRepo.GetMaxOrder(orgID)
 	if err != nil {
 		return nil, err
@@ -72,6 +87,25 @@ func (s *roleService) UpdateRole(id uint, name string, level int, description st
 	role, err := s.roleRepo.FindByID(id)
 	if err != nil {
 		return nil, err
+	}
+	if role.Name != name {
+		if role.OrganizationID != nil {
+			other, err := s.roleRepo.FindByOrgAndName(*role.OrganizationID, name)
+			if err == nil && other.ID != id {
+				return nil, ErrDuplicateRoleName
+			}
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, err
+			}
+		} else {
+			other, err := s.roleRepo.FindGlobalByName(name)
+			if err == nil && other.ID != id {
+				return nil, ErrDuplicateRoleName
+			}
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, err
+			}
+		}
 	}
 	role.Name = name
 	role.Level = level

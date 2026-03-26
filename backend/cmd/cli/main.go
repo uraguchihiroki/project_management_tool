@@ -89,13 +89,21 @@ func main() {
 		log.Fatalf("failed to migrate issue/project status split (pre): %v", err)
 	}
 
+	if err := appdb.MigrateRenameDepartmentsToGroups(db); err != nil {
+		log.Fatalf("failed migrate rename departments to groups: %v", err)
+	}
+
+	if err := appdb.MigrateJunctionTablesSurrogatePK(db); err != nil {
+		log.Fatalf("failed to migrate junction tables surrogate PK: %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
 		&model.Role{},
 		&model.User{},
-		&model.Department{},
-		&model.OrganizationUserDepartment{},
+		&model.Group{},
+		&model.OrganizationUserGroup{},
 		&model.Project{},
 		&model.Status{},
 		&model.WorkflowTransition{},
@@ -106,33 +114,51 @@ func main() {
 		&model.Comment{},
 		&model.IssueTemplate{},
 		&model.IssueEvent{},
-		&model.Group{},
-		&model.UserGroup{},
-		&model.IssueGroup{},
 		&model.TransitionAlertRule{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
+	}
+
+	if err := appdb.MigrateDropLegacyBusinessUniqueIndexes(db); err != nil {
+		log.Fatalf("failed to drop legacy unique indexes: %v", err)
 	}
 
 	if err := appdb.MigrateProjectStatusSeed(db); err != nil {
 		log.Fatalf("failed to migrate project status seed: %v", err)
 	}
 
-	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
-		log.Fatalf("failed to migrate status dedupe / unique index: %v", err)
+	if err := appdb.MigrateStatusOrderToDisplayOrder(db); err != nil {
+		log.Fatalf("failed migrate status order column: %v", err)
+	}
+
+	if err := appdb.MigrateWorkflowTransitionDisplayOrder(db); err != nil {
+		log.Fatalf("failed migrate workflow transition display_order: %v", err)
+	}
+
+	if err := appdb.MigrateStatusDedupe(db); err != nil {
+		log.Fatalf("failed to migrate status dedupe: %v", err)
+	}
+	if err := appdb.MigrateJunctionOrganizationID(db); err != nil {
+		log.Fatalf("failed migrate junction organization_id: %v", err)
+	}
+	if err := appdb.MigrateDropGroupTables(db); err != nil {
+		log.Fatalf("failed migrate drop group tables: %v", err)
+	}
+	if err := appdb.MigrateDropApprovalTables(db); err != nil {
+		log.Fatalf("failed migrate drop approval tables: %v", err)
 	}
 
 	orgRepo := repository.NewOrganizationRepository(db)
 	statusRepo := repository.NewStatusRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
-	departmentRepo := repository.NewDepartmentRepository(db)
+	groupRepo := repository.NewGroupRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
 	workflowRepo := repository.NewWorkflowRepository(db)
-	transitionRepo := repository.NewWorkflowTransitionRepository(db)
 	projectStatusRepo := repository.NewProjectStatusRepository(db)
-	projectStatusTransitionRepo := repository.NewProjectStatusTransitionRepository(db)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
+	transitionRepo := repository.NewWorkflowTransitionRepository(db)
+	issueWFProv := service.NewIssueWorkflowProvisioner(projectRepo, workflowRepo, statusRepo, transitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, groupRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, issueWFProv)
 
 	var seedErr error
 	if *seedAll {

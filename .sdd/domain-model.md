@@ -12,35 +12,25 @@
 
 - **プロジェクト**を持つ（1:N、プロジェクトテーブルのマスタ）
 - **ユーザー**を持つ（users.organization_id 経由、1:N。1ユーザー＝1組織）
-- **部署**を持つ（1:N）
-- **Group** を持つ（1:N、開示・共同文脈・通知・タグ用途。詳細は [db-schema.md](db-schema.md)）
-- **役職（roles）**は補助・既存互換。Issue 文脈の主たる単位は **Group**（[transition-permissions.md](transition-permissions.md) §5–§7）
+- **グループ**を持つ（1:N）
+- **役職（roles）**は補助・既存互換
 - **Issue**を持つ（1:N、会社に直接紐づく想定）
 
 ---
 
-## Group（グループ）
-
-- 組織に紐づく（`organization_id`）
-- **ユーザー**と **多対多**（`user_groups`）。兼務・通知宛先・「このチームだけ」を表現。
-- **Issue**と **多対多**（`issue_groups`）。単一部門だけ／複数部門共同などの**文脈**を表現。
-- 稟議システムのような **ディレクトリサービス完全同期**を前提にしない。**Issue 主体で自由に作れる**グループを優先する。
-
----
-
-## 部署（Department）
+## グループ（Group）
 
 - 会社に紐づく（organization_id）
 - 例: 開発部、営業部、経理部 / 予算委員会、教育委員会
-- **ユーザー**を持つ（組織内でユーザーが部署に所属。1ユーザーが複数部署に所属可能 → N:M）
+- **ユーザー**を持つ（組織内でユーザーがグループに所属。1ユーザーが複数グループに所属可能 → N:M）
 
-> **Note:** 部署は組織構造のための概念。**「営業部の課長のみを想定アクターとする」**のような **部署スコープ付きの表現**は **遷移アラート**や想定の整理に重要になりうる（詳細は [transition-permissions.md](transition-permissions.md)）。役職／グループとの関係も同ドキュメントで整理する。
+> **Note:** グループは組織構造のための概念。**「営業部の課長のみを想定アクターとする」**のような **グループスコープ付きの表現**は **遷移アラート**や想定の整理に重要になりうる（詳細は [transition-permissions.md](transition-permissions.md)）。
 
 ---
 
 ## プロジェクト（Project）
 
-- **Issue の一要素**としてのみ存在。Issue 以外のエンティティ（会社、部署、ユーザーなど）と**不必要に**直接結び付く設計は避ける。
+- **Issue の一要素**としてのみ存在。Issue 以外のエンティティ（会社、グループ、ユーザーなど）と**不必要に**直接結び付く設計は避ける。
 - **期間**を持つ
   - 開始日（start_date）
   - 終了日（end_date）
@@ -56,7 +46,7 @@
 - **会社**に所属する（users.organization_id、1:1。1ユーザー＝1組織）
   - 同一人物が複数社に所属する場合は、組織ごとに別ユーザーレコード
   - ログイン後の会社切替は、内部的には別ユーザーIDに切替
-- **部署**に所属する（組織ごとに。organization_user_departments 経由、N:M）
+- **グループ**に所属する（組織ごとに。organization_user_groups 経由、N:M）
   - 例: 同一組織内で「開発部」と「予算委員会」の両方に所属
 
 ---
@@ -64,7 +54,13 @@
 ## ステータス（Status）と Issue
 
 - Issue は **`status_id`** を持ち、Status がカンバンの**列**を定義する。
-- **ステータス遷移**（経路の形・**遷移アラート**・インプリントによる監査）は、**承認フローとは独立**に設計する。候補・用語・ルールは [transition-permissions.md](transition-permissions.md)。
+- **ステータス遷移**（経路の形・**遷移アラート**・インプリントによる監査）は、稟議・承認とは独立に設計する。候補・用語・ルールは [transition-permissions.md](transition-permissions.md)。
+
+### Issue 用ワークフローにおける「最低2つの遷移」とは
+
+文書・実装・会話では次を**同じ意味**として扱う: **Issue 用ワークフローに最低 2 つのステータスがあり、その 2 つ（以上）の間を行き来する遷移（`workflow_transitions` 等）を運用の前提とする**。「遷移ルールがちょうど2本必要」という数え方ではなく、**ステータス数を 2 未満にしない**ことと、**許可遷移に沿ったステータス変更**で運用することを指す。ステータスが 1 つだけの Issue 用ワークフローは想定しない。
+
+新規組織の **組織Issue** ワークフローおよび、プロジェクト単位で確保する **「{プロジェクト名} - Issue」** デフォルトワークフローは、表示名 **未着手・進行・完了** の 3 ステータスまでとする。**プロジェクトの API 作成（POST /projects）と同時には Issue ワークフローを作らない**（プロジェクト進行用 `project_statuses` のみ同時投入）。デフォルト Issue ワークフローは **`POST /projects/:id/default-issue-workflow`**・**初回 Issue 作成前の lazy 確保**・**組織シードの明示ステップ**などで別途紐付ける。**このデフォルト Issue ワークフローに限り**、`workflow_transitions` として **未着手↔進行・進行↔完了**の **4 本**の許可遷移を投入する（未着手→完了の直送は含めない）。**追加の許可遷移**は API／管理画面で都度追加する。プロジェクト進行用の `project_statuses` も同様に、デフォルト列のみ投入し **`project_status_transitions` は初期投入しない**。
 
 ---
 
@@ -111,7 +107,7 @@
 erDiagram
     Organization ||--o{ Project : "has master"
     Organization ||--o{ User : has
-    Organization ||--o{ Department : has
+    Organization ||--o{ Group : has
     Organization ||--o{ Role : has
     Organization ||--o{ Issue : has
 
@@ -122,20 +118,20 @@ erDiagram
     Issue ||--o{ Comment : has
 
     Project ||--o{ Status : has
-    User }o--o{ Department : "belongs via org_user_depts"
+    User }o--o{ Group : "belongs via org_user_groups"
     User }o--o{ Role : "has via user_roles"
 ```
 
 ---
 
-## 部署（Department）の設計詳細
+## グループ（Group）の設計詳細
 
 | 項目 | 内容 |
 |------|------|
-| テーブル | departments (id, organization_id, name, order?, created_at) |
-| 中間テーブル | organization_user_departments (organization_id, user_id, department_id) |
-| ユーザー・部署 | 組織内で N:M（1人が複数部署に所属可能） |
-| 組織との関係 | 組織に紐づく（組織をまたいだ部署の共有はしない） |
+| テーブル | groups (id, organization_id, name, order?, created_at) |
+| 中間テーブル | organization_user_groups (organization_id, user_id, group_id) |
+| ユーザー・グループ | 組織内で N:M（1人が複数グループに所属可能） |
+| 組織との関係 | 組織に紐づく（組織をまたいだグループの共有はしない） |
 
 ---
 
@@ -143,6 +139,6 @@ erDiagram
 
 | 項目 | メモ |
 |------|------|
-| Department | 設計上は上記。実装の有無は [db-schema.md](db-schema.md) およびコードを参照。 |
-| Workflow / IssueApproval 等 | **Issue 管理の正規ドメインから除外**。コードに残る場合はレガシーとして移行・削除を検討。 |
+| Group | 設計上は上記。実装の有無は [db-schema.md](db-schema.md) およびコードを参照。 |
+| 承認ステップ系（workflow_steps/approval_objects/issue_approvals） | **Issue 管理の正規ドメインから除外**。レガシーとして移行・削除を検討。 |
 | Issue の organization_id | 設計上は会社に直接紐づく想定。実装との整合は db-schema を参照。 |

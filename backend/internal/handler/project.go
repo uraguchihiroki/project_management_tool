@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -11,10 +12,11 @@ import (
 
 type ProjectHandler struct {
 	projectService service.ProjectService
+	issueWFProv    *service.IssueWorkflowProvisioner
 }
 
-func NewProjectHandler(projectService service.ProjectService) *ProjectHandler {
-	return &ProjectHandler{projectService: projectService}
+func NewProjectHandler(projectService service.ProjectService, issueWFProv *service.IssueWorkflowProvisioner) *ProjectHandler {
+	return &ProjectHandler{projectService: projectService, issueWFProv: issueWFProv}
 }
 
 func (h *ProjectHandler) List(c echo.Context) error {
@@ -124,9 +126,39 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 		EndDate:        endDate,
 	})
 	if err != nil {
+		if errors.Is(err, service.ErrDuplicateProjectKey) {
+			return echo.NewHTTPError(http.StatusConflict, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": project})
+}
+
+// EnsureDefaultIssueWorkflow は未設定のときだけデフォルト Issue 用ワークフローと許可遷移を作成し default_workflow_id を紐付ける（冪等）。
+func (h *ProjectHandler) EnsureDefaultIssueWorkflow(c echo.Context) error {
+	orgScope, isSuperAdmin, authErr := requireClaims(c)
+	if authErr != nil {
+		return authErr
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid project id")
+	}
+	existing, err := h.projectService.Get(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	}
+	if !isSuperAdmin && (orgScope == nil || existing.OrganizationID != *orgScope) {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	}
+	if err := h.issueWFProv.EnsureDefaultForProject(id); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	project, err := h.projectService.Get(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "project not found")
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": project})
 }
 
 func (h *ProjectHandler) Update(c echo.Context) error {
@@ -146,11 +178,11 @@ func (h *ProjectHandler) Update(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "project not found")
 	}
 	type Request struct {
-		Name              *string `json:"name"`
-		Description       *string `json:"description"`
-		StartDate         string  `json:"start_date"`
-		EndDate           string  `json:"end_date"`
-		ProjectStatusID   *string `json:"project_status_id"`
+		Name            *string `json:"name"`
+		Description     *string `json:"description"`
+		StartDate       string  `json:"start_date"`
+		EndDate         string  `json:"end_date"`
+		ProjectStatusID *string `json:"project_status_id"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {

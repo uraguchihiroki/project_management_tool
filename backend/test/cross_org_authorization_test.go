@@ -50,7 +50,7 @@ func TestCrossOrganizationAuthorization(t *testing.T) {
 		t.Fatalf("create owner2: %v", err)
 	}
 
-	// 各組織にプロジェクト作成（プロジェクト作成時に Issue 用ワークフロー・ステータスが付く）
+	// 各組織にプロジェクト作成（Issue カンバン列は default-issue-workflow で別途確保）
 	_, _ = ts.req(t, http.MethodPost, "/api/v1/projects", map[string]interface{}{
 		"key":             "ORG1",
 		"name":            "Project Org1",
@@ -64,6 +64,8 @@ func TestCrossOrganizationAuthorization(t *testing.T) {
 		"organization_id": org2ID,
 	})
 	org2ProjectID := mustGetString(t, org2ProjectResp, "data", "id")
+	stProv, _ := ts.req(t, http.MethodPost, "/api/v1/projects/"+org2ProjectID+"/default-issue-workflow", nil)
+	assertStatus(t, stProv, http.StatusOK, "default-issue-workflow org2 project")
 	org2StatusID := getFirstStatusID(t, ts, org2ProjectID)
 
 	// org2 に issue 作成（ステータスはプロジェクトのデフォルトワークフローに属するものを使う）

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
+	"gorm.io/gorm"
 )
 
 var projectStatusColorRegex = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
@@ -43,29 +45,23 @@ type ProjectService interface {
 }
 
 type projectService struct {
-	projectRepo    repository.ProjectRepository
-	statusRepo     repository.StatusRepository
-	workflowRepo   repository.WorkflowRepository
-	transitionRepo repository.WorkflowTransitionRepository
-	psRepo         repository.ProjectStatusRepository
-	pstRepo        repository.ProjectStatusTransitionRepository
+	projectRepo repository.ProjectRepository
+	statusRepo  repository.StatusRepository
+	psRepo      repository.ProjectStatusRepository
+	pstRepo     repository.ProjectStatusTransitionRepository
 }
 
 func NewProjectService(
 	projectRepo repository.ProjectRepository,
 	statusRepo repository.StatusRepository,
-	workflowRepo repository.WorkflowRepository,
-	transitionRepo repository.WorkflowTransitionRepository,
 	psRepo repository.ProjectStatusRepository,
 	pstRepo repository.ProjectStatusTransitionRepository,
 ) ProjectService {
 	return &projectService{
-		projectRepo:    projectRepo,
-		statusRepo:     statusRepo,
-		workflowRepo:   workflowRepo,
-		transitionRepo: transitionRepo,
-		psRepo:         psRepo,
-		pstRepo:        pstRepo,
+		projectRepo: projectRepo,
+		statusRepo:  statusRepo,
+		psRepo:      psRepo,
+		pstRepo:     pstRepo,
 	}
 }
 
@@ -92,6 +88,11 @@ func (s *projectService) Get(id uuid.UUID) (*model.Project, error) {
 }
 
 func (s *projectService) Create(input CreateProjectInput) (*model.Project, error) {
+	if _, err := s.projectRepo.FindByOrgAndKey(input.OrganizationID, input.Key); err == nil {
+		return nil, ErrDuplicateProjectKey
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	orgID := &input.OrganizationID
 	maxOrder, err := s.projectRepo.GetMaxOrder(orgID)
 	if err != nil {
@@ -113,14 +114,7 @@ func (s *projectService) Create(input CreateProjectInput) (*model.Project, error
 		return nil, err
 	}
 
-	wfName := input.Name + " - Issue"
-	wfID, _, err := CreateWorkflowWithIssueStatuses(s.workflowRepo, s.statusRepo, s.transitionRepo, input.OrganizationID, wfName)
-	if err != nil {
-		return nil, err
-	}
-	project.DefaultWorkflowID = &wfID
-
-	firstPS, err := SeedDefaultProjectStatuses(s.psRepo, s.pstRepo, project.ID)
+	firstPS, err := SeedDefaultProjectStatuses(s.psRepo, project.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -212,9 +206,6 @@ func (s *projectService) UpdateProjectStatus(projectID, statusID uuid.UUID, name
 	}
 	if ps.ProjectID != projectID {
 		return nil, fmt.Errorf("project status does not belong to this project")
-	}
-	if ps.StatusKey == "sts_start" || ps.StatusKey == "sts_goal" {
-		return nil, fmt.Errorf("システムステータスは変更できません")
 	}
 	ps.Name = name
 	ps.Color = color

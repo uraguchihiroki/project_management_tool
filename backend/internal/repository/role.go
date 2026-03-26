@@ -12,6 +12,7 @@ type RoleRepository interface {
 	FindAll() ([]model.Role, error)
 	FindByOrg(orgID uuid.UUID) ([]model.Role, error)
 	FindByOrgAndName(orgID uuid.UUID, name string) (*model.Role, error)
+	FindGlobalByName(name string) (*model.Role, error)
 	FindByID(id uint) (*model.Role, error)
 	Create(role *model.Role) error
 	Update(role *model.Role) error
@@ -51,6 +52,15 @@ func (r *roleRepository) FindByOrgAndName(orgID uuid.UUID, name string) (*model.
 	return &role, nil
 }
 
+func (r *roleRepository) FindGlobalByName(name string) (*model.Role, error) {
+	var role model.Role
+	err := r.db.Where("organization_id IS NULL AND name = ?", name).First(&role).Error
+	if err != nil {
+		return nil, err
+	}
+	return &role, nil
+}
+
 func (r *roleRepository) FindByID(id uint) (*model.Role, error) {
 	var role model.Role
 	err := r.db.First(&role, id).Error
@@ -81,21 +91,33 @@ func (r *roleRepository) Delete(id uint) error {
 }
 
 func (r *roleRepository) AssignRolesToUser(userID uuid.UUID, roleIDs []uint) error {
-	if err := r.db.Where("user_id = ?", userID).Delete(&model.UserRole{}).Error; err != nil {
-		return err
-	}
-	for _, roleID := range roleIDs {
-		key := fmt.Sprintf("%s-%d", userID.String(), roleID)
-		ur := &model.UserRole{
-			UserID: userID,
-			RoleID: roleID,
-			Key:    key,
-		}
-		if err := r.db.Create(ur).Error; err != nil {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var u model.User
+		if err := tx.First(&u, "id = ?", userID).Error; err != nil {
 			return err
 		}
-	}
-	return nil
+		if err := tx.Where("user_id = ? AND organization_id = ?", userID, u.OrganizationID).Delete(&model.UserRole{}).Error; err != nil {
+			return err
+		}
+		seen := map[uint]struct{}{}
+		for _, roleID := range roleIDs {
+			if _, dup := seen[roleID]; dup {
+				continue
+			}
+			seen[roleID] = struct{}{}
+			ur := &model.UserRole{
+				ID:             uuid.New(),
+				OrganizationID: u.OrganizationID,
+				UserID:         userID,
+				RoleID:         roleID,
+				Key:            fmt.Sprintf("%s-%d", userID.String(), roleID),
+			}
+			if err := tx.Create(ur).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *roleRepository) FindRolesByUserID(userID uuid.UUID) ([]model.Role, error) {

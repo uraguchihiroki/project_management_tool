@@ -68,6 +68,8 @@ func (h *IssueHandler) Create(c echo.Context) error {
 **判断基準：「このコードを CLI から呼び出したとき、意味をなすか？」**
 → YES なら Service に書くべきロジック。
 
+**Project と Issue ワークフロー:** `ProjectService` はプロジェクト行とプロジェクト進行（`project_statuses`）に限定し、Issue 用 `workflows` / `statuses` の作成や `projects.default_workflow_id` の設定は行わない。`*_bootstrap.go` はドメインごとにファイルを分ける（Issue 用とプロジェクト進行用を同一ファイルにまとめない）。詳細は [dev-guide.md](dev-guide.md) の「Bootstrap・初期投入」。
+
 ```go
 // Service の正しい姿（HTTP を一切知らない）
 func (s *IssueService) CreateIssue(projectID uuid.UUID, input CreateIssueInput) (*model.Issue, error) {

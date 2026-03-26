@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -68,6 +69,9 @@ func (h *SuperAdminHandler) CreateOrganization(c echo.Context) error {
 	}
 	org, err := h.orgService.Create(req.Name, req.AdminEmail, req.AdminName)
 	if err != nil {
+		if errors.Is(err, service.ErrDuplicateOrganizationName) {
+			return echo.NewHTTPError(http.StatusConflict, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": org})

@@ -6,101 +6,153 @@ import (
 	"testing"
 )
 
-func TestGroup_CRUD_and_IssueGroupIDs(t *testing.T) {
+func TestGroup_Create(t *testing.T) {
 	ts := newTestServer(t)
-	ownerID := createTestUser(t, ts, "Gオーナー", "grp-owner@example.com")
-	projectID := createTestProject(t, ts, "GRP", "グループテスト", ownerID)
-	statusID := getFirstStatusID(t, ts, projectID)
-
-	// POST /organizations/:orgId/groups
-	st, createG := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/groups", map[string]interface{}{
-		"name": "通知チーム",
-		"kind": "notification",
+	status, resp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/groups", map[string]interface{}{
+		"name": "開発部",
 	})
-	assertStatus(t, st, http.StatusCreated, "POST group")
-	groupID := mustGetString(t, createG, "data", "id")
+	assertStatus(t, status, http.StatusCreated, "create group")
+	id := mustGetString(t, resp, "data", "id")
+	assertNotEmpty(t, id, "id")
+	assertField(t, mustGetString(t, resp, "data", "name"), "開発部", "name")
+}
 
-	st, listG := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/groups", nil)
-	assertStatus(t, st, http.StatusOK, "GET groups")
-	arr := mustGetArray(t, listG, "data")
-	if len(arr) < 1 {
-		t.Fatal("want at least 1 group")
+func TestGroup_List(t *testing.T) {
+	ts := newTestServer(t)
+	status, resp := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/groups", nil)
+	assertStatus(t, status, http.StatusOK, "list groups")
+	_ = mustGetArray(t, resp, "data")
+}
+
+func TestGroup_Update(t *testing.T) {
+	ts := newTestServer(t)
+	_, createResp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/groups", map[string]interface{}{
+		"name": "営業部",
+	})
+	id := mustGetString(t, createResp, "data", "id")
+
+	status, resp := ts.req(t, "PUT", "/api/v1/organizations/"+testOrgID+"/groups/"+id, map[string]interface{}{
+		"name": "営業本部",
+	})
+	assertStatus(t, status, http.StatusOK, "update group")
+	assertField(t, mustGetString(t, resp, "data", "name"), "営業本部", "name")
+}
+
+func TestGroup_Delete(t *testing.T) {
+	ts := newTestServer(t)
+	_, createResp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/groups", map[string]interface{}{
+		"name": "経理部",
+	})
+	id := mustGetString(t, createResp, "data", "id")
+
+	status, _ := ts.req(t, "DELETE", "/api/v1/organizations/"+testOrgID+"/groups/"+id, nil)
+	assertStatus(t, status, http.StatusNoContent, "delete group")
+}
+
+// TestGroup_NormalFlow はグループ管理の正常系ブラックボックステスト（一覧→作成→一覧反映→更新→削除）
+func TestGroup_NormalFlow(t *testing.T) {
+	ts := newTestServer(t)
+
+	// 1. 一覧取得（初期は空）
+	status, listResp := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/groups", nil)
+	assertStatus(t, status, http.StatusOK, "list groups (initial)")
+	arr := mustGetArray(t, listResp, "data")
+	if len(arr) != 0 {
+		t.Errorf("expected 0 groups initially, got %d", len(arr))
 	}
 
-	// メンバー置換
-	st, _ = ts.req(t, "PUT", "/api/v1/groups/"+groupID+"/members", map[string]interface{}{
-		"user_ids": []string{ownerID},
+	// 2. 作成
+	status, createResp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/groups", map[string]interface{}{
+		"name": "取締役",
 	})
-	assertStatus(t, st, http.StatusOK, "PUT group members")
+	assertStatus(t, status, http.StatusCreated, "create group")
+	id := mustGetString(t, createResp, "data", "id")
+	assertNotEmpty(t, id, "id")
+	assertField(t, mustGetString(t, createResp, "data", "name"), "取締役", "name")
 
-	// Issue 作成時に group_ids
-	st, issueResp := ts.req(t, "POST", fmt.Sprintf("/api/v1/projects/%s/issues", projectID), map[string]interface{}{
-		"title":       "グループ付きIssue",
-		"status_id":   statusID,
-		"reporter_id": ownerID,
-		"group_ids":   []string{groupID},
+	// 3. 一覧に反映されていること
+	status, listResp = ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/groups", nil)
+	assertStatus(t, status, http.StatusOK, "list groups (after create)")
+	arr = mustGetArray(t, listResp, "data")
+	if len(arr) != 1 {
+		t.Errorf("expected 1 group after create, got %d", len(arr))
+	}
+	assertField(t, mustGetString(t, arr[0].(map[string]interface{}), "name"), "取締役", "list[0].name")
+
+	// 4. 更新
+	status, updateResp := ts.req(t, "PUT", "/api/v1/organizations/"+testOrgID+"/groups/"+id, map[string]interface{}{
+		"name": "取締役会",
 	})
-	assertStatus(t, st, http.StatusCreated, "create issue with groups")
-	num := mustGetFloat(t, issueResp, "data", "number")
+	assertStatus(t, status, http.StatusOK, "update group")
+	assertField(t, mustGetString(t, updateResp, "data", "name"), "取締役会", "name after update")
 
-	st, getIssue := ts.req(t, "GET", fmt.Sprintf("/api/v1/projects/%s/issues/%d", projectID, int(num)), nil)
-	assertStatus(t, st, http.StatusOK, "GET issue")
-	data := getIssue["data"].(map[string]interface{})
-	gs, ok := data["groups"].([]interface{})
-	if !ok || len(gs) != 1 {
-		t.Fatalf("want 1 group on issue, got %+v", data["groups"])
+	// 5. 一覧で更新が反映されていること
+	status, listResp = ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/groups", nil)
+	assertStatus(t, status, http.StatusOK, "list groups (after update)")
+	arr = mustGetArray(t, listResp, "data")
+	if len(arr) != 1 {
+		t.Errorf("expected 1 group after update, got %d", len(arr))
 	}
-	g0 := gs[0].(map[string]interface{})
-	if g0["id"] != groupID {
-		t.Fatalf("group id: got %v", g0["id"])
-	}
+	assertField(t, mustGetString(t, arr[0].(map[string]interface{}), "name"), "取締役会", "list[0].name after update")
 
-	// GET /projects/:id/issues?group_id=
-	st, listIss := ts.req(t, "GET", fmt.Sprintf("/api/v1/projects/%s/issues?group_id=%s", projectID, groupID), nil)
-	assertStatus(t, st, http.StatusOK, "list issues by group")
-	list := mustGetArray(t, listIss, "data")
-	if len(list) < 1 {
-		t.Fatal("want at least 1 issue in filtered list")
-	}
+	// 6. 削除
+	status, _ = ts.req(t, "DELETE", "/api/v1/organizations/"+testOrgID+"/groups/"+id, nil)
+	assertStatus(t, status, http.StatusNoContent, "delete group")
 
-	// PUT issue groups（置換）
-	st, _ = ts.req(t, "PUT", fmt.Sprintf("/api/v1/projects/%s/issues/%d/groups", projectID, int(num)), map[string]interface{}{
-		"group_ids": []string{},
-	})
-	assertStatus(t, st, http.StatusOK, "clear issue groups")
-
-	st, getIssue2 := ts.req(t, "GET", fmt.Sprintf("/api/v1/projects/%s/issues/%d", projectID, int(num)), nil)
-	assertStatus(t, st, http.StatusOK, "GET issue after clear groups")
-	data2 := getIssue2["data"].(map[string]interface{})
-	if g2, ok := data2["groups"].([]interface{}); ok && len(g2) > 0 {
-		t.Fatalf("want no groups, got %v", g2)
+	// 7. 一覧が空に戻ること
+	status, listResp = ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/groups", nil)
+	assertStatus(t, status, http.StatusOK, "list groups (after delete)")
+	arr = mustGetArray(t, listResp, "data")
+	if len(arr) != 0 {
+		t.Errorf("expected 0 groups after delete, got %d", len(arr))
 	}
 }
 
-func TestGroup_Get_and_UserGroups(t *testing.T) {
+func TestGroup_Reorder(t *testing.T) {
 	ts := newTestServer(t)
-	userID := createTestUser(t, ts, "GU", "grp-user@example.com")
+	_, r1 := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/groups", map[string]interface{}{"name": "開発部"})
+	_, r2 := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/groups", map[string]interface{}{"name": "営業部"})
+	id1 := mustGetString(t, r1, "data", "id")
+	id2 := mustGetString(t, r2, "data", "id")
 
-	st, createG := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/groups", map[string]interface{}{
-		"name": "ユーザーグループ",
+	status, _ := ts.req(t, "PUT", "/api/v1/organizations/"+testOrgID+"/groups/reorder", map[string]interface{}{
+		"ids": []string{id2, id1},
 	})
-	assertStatus(t, st, http.StatusCreated, "POST group")
-	groupID := mustGetString(t, createG, "data", "id")
+	assertStatus(t, status, http.StatusNoContent, "reorder groups")
 
-	ts.req(t, "PUT", "/api/v1/groups/"+groupID+"/members", map[string]interface{}{
-		"user_ids": []string{userID},
-	})
-
-	st, getG := ts.req(t, "GET", "/api/v1/groups/"+groupID, nil)
-	assertStatus(t, st, http.StatusOK, "GET group")
-	if mustGetString(t, getG, "data", "name") != "ユーザーグループ" {
-		t.Fatal("group name mismatch")
+	status, listResp := ts.req(t, "GET", "/api/v1/organizations/"+testOrgID+"/groups", nil)
+	assertStatus(t, status, http.StatusOK, "list after reorder")
+	arr := mustGetArray(t, listResp, "data")
+	if len(arr) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(arr))
 	}
+	assertField(t, mustGetString(t, arr[0].(map[string]interface{}), "name"), "営業部", "first after reorder")
+	assertField(t, mustGetString(t, arr[1].(map[string]interface{}), "name"), "開発部", "second after reorder")
+}
 
-	st, ug := ts.req(t, "GET", "/api/v1/users/"+userID+"/groups", nil)
-	assertStatus(t, st, http.StatusOK, "GET user groups")
-	ugArr := mustGetArray(t, ug, "data")
-	if len(ugArr) != 1 {
-		t.Fatalf("want 1 user group, got %d", len(ugArr))
+func TestGroup_UserGroups(t *testing.T) {
+	ts := newTestServer(t)
+	userID := createTestUser(t, ts, "User1", "user1@example.com")
+	ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/users", map[string]interface{}{
+		"user_id":      userID,
+		"is_org_admin": false,
+	})
+
+	_, groupResp := ts.req(t, "POST", "/api/v1/organizations/"+testOrgID+"/groups", map[string]interface{}{
+		"name": "開発部",
+	})
+	groupID := mustGetString(t, groupResp, "data", "id")
+
+	status, _ := ts.req(t, "PUT", fmt.Sprintf("/api/v1/users/%s/groups?org_id=%s", userID, testOrgID), map[string]interface{}{
+		"group_ids": []string{groupID},
+	})
+	assertStatus(t, status, http.StatusOK, "set user groups")
+
+	status, getResp := ts.req(t, "GET", fmt.Sprintf("/api/v1/users/%s/groups?org_id=%s", userID, testOrgID), nil)
+	assertStatus(t, status, http.StatusOK, "get user groups")
+	arr := mustGetArray(t, getResp, "data")
+	if len(arr) != 1 {
+		t.Errorf("expected 1 group, got %d", len(arr))
 	}
 }
+

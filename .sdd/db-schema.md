@@ -1,6 +1,6 @@
 # データベース設計
 
-本ドキュメントは **Issue 管理システム**を正とする設計へ寄せて更新する。稟議・承認ワークフロー向けのテーブルは **廃止方向**（実装に残る場合は [transition-permissions.md](transition-permissions.md) のレガシー扱い）。
+本ドキュメントは **Issue 管理システム**を正とする設計へ寄せて更新する。稟議・承認向けのテーブルは **廃止方向**（実装に残る場合は [transition-permissions.md](transition-permissions.md) のレガシー扱い）。
 
 ## Key カラム（全テーブル共通）
 
@@ -8,6 +8,26 @@
 
 - 意味のある値がある場合: スラッグや識別子を格納（例: projects.key, statuses.status_key）
 - 書き込む内容がない場合: PK の UID を格納（UUID の文字列、または `prefix-{id}` 形式）
+
+---
+
+## organization_id カラム（全テーブル共通ルール）
+
+**業務テーブルは `organization_id` を必須とする（絶対ルール）。**  
+目的はテナント境界の強制だけでなく、契約終了時に「`organization_id = <tenant>` で削除対象を説明・特定できる状態」を維持すること。
+
+- 直接親を辿れば組織が分かるテーブル（中間テーブルを含む）でも、**説明責任のため `organization_id` を保持する**。
+- 結合テーブル（`user_roles`, `organization_user_groups`）も例外にしない。
+
+---
+
+## DB における一意性（PK のみ）
+
+**スキーマ上の一意制約は主キーに限定する。** 組織名・メール・(organization_id, email)・(organization_id, key)・(name, organization_id) on roles・同一ワークフロー内の (name, display_order)（未削除行）・空でない `status_key` の重複禁止などは、**Service 層で保証する**。検索用には必要に応じて **非一意** のインデックスを張ってよい。
+
+**結合テーブル**（`user_roles`, `organization_user_groups`）は **複合主キーは使わず**、**`id`（UUID）単独 PK** とする。`(user_id, role_id)` などの「有効行としての1組み合わせ1件」は **DB UNIQUE ではなく Service/Repository** で保証する。旧複合 PK の PostgreSQL DB は起動時 `MigrateJunctionTablesSurrogatePK`（`internal/db/migrate_junction_surrogate_pk.go`）で移行する。
+
+方針の根拠は [principles.md](principles.md)「データベースの一意制約（PK のみ）」。
 
 ---
 
@@ -25,6 +45,8 @@
 | deleted_at | TIMESTAMP | NULL = 有効、日時が入っている = 削除済み |
 
 > **Note:** 実装時は各テーブルに `deleted_at` を追加し、Repository 層で削除時は物理削除ではなく `UPDATE ... SET deleted_at = NOW()` とする。一覧取得・検索時は `deleted_at IS NULL` を条件に含める。
+
+**実装（Go / GORM）:** モデルに `gorm.DeletedAt` を付与し、業務経路の `Delete` は原則ソフト削除とする。**起動時マイグレーション**（`internal/db` の重複除去・レガシー除去など）では意図的に生 `DELETE` や **`Unscoped().Delete`** が残る（業務 API とは別ルール）。多対多の結合テーブル（`user_roles` 等）は **代理 PK（UUID）** により、付け替えは **既存有効行の論理削除のうえ新行 `Create`** とする。**`project_status_transitions`** の行は **プロジェクト作成時には自動で作らない**（運用で API から追加）。**`workflow_transitions`** は **未着手・進行・完了** のデフォルト Issue ワークフロー（組織Issueおよび各プロジェクトの Issue 用ワークフロー）作成時に限り、**4 本**（未着手↔進行・進行↔完了の往復）をアプリシードで投入する。それ以外のワークフローでは **作成時に自動投入しない**。**差し替え・再構築**する Repository 経路では、当該スコープの **有効行をソフト削除したうえで** 必要な行を **`Create`** してよい（履歴として `deleted_at` 付き行が残りうる）。業務 API 経路では **`Unscoped` に依存しない**。
 
 ---
 
@@ -47,6 +69,7 @@
 | **時刻（属性）** | 各インプリントに **`occurred_at`**。PostgreSQL では **`TIMESTAMPTZ`**（タイムゾーン付き）を推奨。UTC 格納・表示時変換。 |
 | **エンティティの時刻** | 通常レコードの作成・更新は `created_at` / `updated_at`（**インプリント**とは別物。`updated_at` だけでは監査に代えない）。 |
 | **インデックス** | よく使う絞り込み軸に **`(organization_id, occurred_at)`**、**`(issue_id, occurred_at)`** など複合インデックスを検討する。 |
+| **deleted_at** | インプリントは追記のみを業務ルールとするが、**テナント／契約終了時**に全データを一括論理削除し、システムに異常がないか確認してから物理削除する運用に備え、行に `deleted_at` を持てるようにする（通常運用では削除 API を使わない想定）。 |
 
 ---
 
@@ -92,7 +115,7 @@ issue_events（名称は実装で確定）
 organizations（グローバル）
 ├── id (PK)
 ├── key (VARCHAR(255), NOT NULL)
-├── name (UNIQUE)
+├── name（アプリで一意）
 ├── admin_email
 └── created_at
 
@@ -100,7 +123,7 @@ super_admins（グローバル）
 ├── id (PK)
 ├── key (VARCHAR(255), NOT NULL)
 ├── name
-├── email (UNIQUE)
+├── email（アプリで一意）
 └── created_at
 
 users（1ユーザー＝1組織）
@@ -108,7 +131,7 @@ users（1ユーザー＝1組織）
 ├── key (VARCHAR(255), NOT NULL)
 ├── organization_id (FK → organizations.id, NOT NULL)
 ├── name
-├── email（組織内UNIQUE: (organization_id, email)）
+├── email（組織内はアプリで一意: (organization_id, email)）
 ├── avatar_url (nullable)
 ├── is_admin
 ├── is_org_admin
@@ -118,20 +141,23 @@ users（1ユーザー＝1組織）
 roles
 ├── id (PK, auto)
 ├── key (VARCHAR(255), NOT NULL)
-├── name
+├── name（同一 organization_id 内はアプリで一意）
 ├── level
 ├── description
 ├── organization_id (FK → organizations.id, nullable)
 └── created_at
 
 user_roles (中間テーブル, many2many)
+├── id (PK, UUID)
+├── organization_id (FK → organizations.id, NOT NULL)
 ├── user_id (FK → users.id)
 ├── role_id (FK → roles.id)
-└── key (VARCHAR(255), NOT NULL)
+├── key (VARCHAR(255), NOT NULL)
+└── deleted_at
 
 projects
 ├── id (PK)
-├── key（組織内UNIQUE: (organization_id, key)）
+├── key（組織内はアプリで一意: (organization_id, key)）
 ├── name
 ├── description (nullable)
 ├── owner_id (FK → users.id)
@@ -148,7 +174,9 @@ statuses（Issue 専用。常に workflow_id 必須。Workflow / workflow_transi
 ├── name
 ├── color (HEX)
 ├── order
-├── status_key (nullable) — 例: sts_start, sts_goal
+├── status_key (nullable) — 拡張用。任意のユーザーキー
+├── is_entry (BOOLEAN) — 当該ワークフローで「開始」として高々1件（部分一意インデックス・論理削除除外）。ブートストラップ既定は `display_order` 最小。0件ワークフローは起動時マイグレーションで同様に補正
+├── is_terminal (BOOLEAN) — 「終了」として複数可
 └── deleted_at
 
 project_statuses（プロジェクト進行。Workflow は使用しない）
@@ -193,25 +221,6 @@ comments
 ├── created_at
 └── updated_at
 
-groups（組織スコープ。部署コピー・タグ・通知用など用途を `kind` 等で区別）
-├── id (PK)
-├── key (VARCHAR(255), NOT NULL)
-├── organization_id (FK → organizations.id, NOT NULL)
-├── name
-├── kind (nullable)                     # 例: team / tag / notification / sync_from_hr 等・実装で確定
-└── created_at
-
-user_groups（ユーザー ↔ Group 多対多）
-├── user_id (FK → users.id)
-├── group_id (FK → groups.id)
-└── key (VARCHAR(255), NOT NULL)
-
-issue_groups（Issue ↔ Group 多対多・開示・共同文脈）
-├── issue_id (FK → issues.id)
-├── group_id (FK → groups.id)
-├── role (nullable)                     # 例: primary / collaborator / tag・実装で確定
-└── key (VARCHAR(255), NOT NULL)
-
 issue_events（インプリントの列・追記のみ。上記「イベントログ」節と同一概念）
 ├── （上記セクションの列定義に準拠）
 
@@ -227,16 +236,16 @@ issue_templates
 └── created_at
 ```
 
-> **レガシー（移行予定）**: 実装 DB に `workflows` / `workflow_steps` / `approval_objects` / `issue_approvals` および `issues.workflow_id` / `issue_templates.workflow_id` が残っている場合がある。Issue 管理を正とする設計では **これらは廃止方向**。[transition-permissions.md](transition-permissions.md) で合意したあと、スキーマから除去する。
+> **レガシー（削除対象）**: 承認ステップ系（`workflow_steps` / `approval_objects` / `issue_approvals`）は Issue 管理を正とする設計では **廃止**。起動時マイグレーションで削除する。
 
 ---
 
-## ステータス遷移・Group（仕様の柱の一部）
+## ステータス遷移（仕様の柱の一部）
 
-**許可遷移・遷移アラート・監査**の意味論は [transition-permissions.md](transition-permissions.md)（**7**）。本ドキュメントでは **テーブル**として `groups` / `issue_groups` / `user_groups` / `issue_events` を置く（上記 ER・各節）。
+**許可遷移・遷移アラート・監査**の意味論は [transition-permissions.md](transition-permissions.md)（**7**）。本ドキュメントでは **テーブル**として `issue_events` を置く（上記 ER・各節）。
 
-- **役職（roles）** は稟議・ディレクトリ型のマスタとして必須ではない。**Issue 文脈の Group** を主とし、`roles` / `user_roles` は既存互換・補助として扱う（廃止は別議論）。
-- **Position** 専用テーブルは必須としない。表示順が必要なら `groups.display_order` 等で足りる想定（詳細は transition-permissions）。
+- **役職（roles）** は稟議・ディレクトリ型のマスタとして必須ではない。`roles` / `user_roles` は既存互換・補助として扱う（廃止は別議論）。
+- **Position** 専用テーブルは必須としない（詳細は transition-permissions）。
 
 ---
 
@@ -248,7 +257,7 @@ issue_templates
 |-------|-----|------|------|
 | id | UUID | PK | 組織ID |
 | key | VARCHAR(255) | NOT NULL | API/URL 用識別子 |
-| name | VARCHAR(200) | UNIQUE, NOT NULL | 組織名 |
+| name | VARCHAR(200) | NOT NULL | 組織名（**アプリ**で一意） |
 | admin_email | VARCHAR(255) | nullable | 組織管理者のメールアドレス |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
@@ -259,7 +268,7 @@ issue_templates
 | id | UUID | PK | スーパー管理者ID |
 | key | VARCHAR(255) | NOT NULL | API/URL 用識別子 |
 | name | VARCHAR(100) | NOT NULL | 表示名 |
-| email | VARCHAR(255) | UNIQUE, NOT NULL | メールアドレス |
+| email | VARCHAR(255) | NOT NULL | メールアドレス（**アプリ**で一意） |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
 ### users
@@ -279,7 +288,7 @@ issue_templates
 | joined_at | TIMESTAMP | NOT NULL | 参加日時 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
-> **Note:** (organization_id, email) でユニークインデックス。
+> **Note:** (organization_id, email) の一意は **Service** で保証。DB には非一意インデックスのみ（任意）。
 
 ### roles
 
@@ -293,14 +302,27 @@ issue_templates
 | organization_id | UUID | FK, nullable | 所属組織（NULL はグローバル） |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
-> **Note:** (name, organization_id) でユニークインデックス。
+> **Note:** (name, organization_id) の一意は **Service** で保証。
+
+### user_roles
+
+| カラム | 型 | 制約 | 説明 |
+|-------|-----|------|------|
+| id | UUID | PK | 行ID（代理キー） |
+| organization_id | UUID | FK, NOT NULL | 所属組織 |
+| user_id | UUID | FK, NOT NULL | ユーザー |
+| role_id | INTEGER | FK, NOT NULL | 役職 |
+| key | VARCHAR(255) | NOT NULL | API/URL 用 |
+| deleted_at | TIMESTAMP | nullable | 論理削除 |
+
+> **Note:** 有効行における `(user_id, role_id)` の一意は **Repository/Service** で保証。DB には非一意の複合インデックス（任意）。
 
 ### projects
 
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
 | id | UUID | PK | プロジェクトID |
-| key | VARCHAR(10) | NOT NULL | 識別キー（組織内でユニーク）。API/URL 用にも使用 |
+| key | VARCHAR(10) | NOT NULL | 識別キー（組織内は**アプリ**で一意）。API/URL 用にも使用 |
 | name | VARCHAR(200) | NOT NULL | プロジェクト名 |
 | description | TEXT | nullable | 説明 |
 | owner_id | UUID | FK | オーナーユーザー |
@@ -309,7 +331,7 @@ issue_templates
 | project_status_id | UUID | FK → project_statuses.id, nullable | 現在のプロジェクト進行 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
-> **Note:** (organization_id, key) でユニークインデックス。
+> **Note:** (organization_id, key) の一意は **Service** で保証。
 
 ### statuses（Issue 専用）
 
@@ -320,10 +342,14 @@ issue_templates
 | workflow_id | BIGINT | FK → workflows.id, NOT NULL | 所属ワークフロー |
 | name | VARCHAR(50) | NOT NULL | ステータス名 |
 | color | VARCHAR(7) | NOT NULL | HEXカラー (#RRGGBB) |
-| order | INTEGER | NOT NULL | 表示順 |
-| status_key | VARCHAR(50) | nullable | システム用: sts_start, sts_goal。NULL=ユーザー定義 |
+| display_order | INTEGER | NOT NULL | 表示順 |
+| status_key | VARCHAR(50) | nullable | 拡張用の任意キー |
+| is_entry | BOOLEAN | NOT NULL, DEFAULT false | ワークフロー内で開始ステータス（高々1件・DB 部分一意） |
+| is_terminal | BOOLEAN | NOT NULL, DEFAULT false | 終了ステータス（複数可）。`is_entry` と同時 true は **Service で拒否**（DB CHECK は張らない） |
 
-> **重複防止**: 同一 `workflow_id` で `(name, order)` は **論理削除されていない行のみ**一意（部分ユニークインデックス `idx_statuses_wf_name_order_active`）。起動時 `MigrateStatusDedupeAndUniqueIndex`（`internal/db/status_integrity.go`）。旧 `type` 列は `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）で除去する。
+> **重複防止**: 同一 `workflow_id` で、論理削除されていない行について `(name, display_order)` の一意は **Service** で保証する。起動時 `MigrateStatusDedupe`（`internal/db/status_integrity.go`）でレガシー重複行を畳む。旧 `type` 列は `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）で除去する。レガシー列名 `order` は `MigrateStatusOrderToDisplayOrder` で `display_order` に寄せる。必要に応じ **非一意** の複合インデックスで検索を補助してよい。
+>
+> **件数下限（Issue 用）**: 同一 `workflow_id` に紐づく有効な `statuses` は **少なくとも 2 行**を保つ（削除で 1 行以下になる操作は API で拒否）。運用上の意味・用語の正本は [domain-model.md](domain-model.md)。
 
 ### project_statuses
 
@@ -395,38 +421,18 @@ issue_templates
 | default_priority | VARCHAR(20) | NOT NULL, DEFAULT 'medium' | デフォルト優先度 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 
-### groups
+### organization_user_groups
 
 | カラム | 型 | 制約 | 説明 |
 |-------|-----|------|------|
-| id | UUID | PK | グループID |
-| key | VARCHAR(255) | NOT NULL | API/URL 用識別子 |
-| organization_id | UUID | FK, NOT NULL | 所属組織 |
-| name | VARCHAR(200) | NOT NULL | 表示名 |
-| kind | VARCHAR(50) | nullable | 用途区分（例: team / tag / notification）。集計・フィルタ用 |
-| display_order | INTEGER | nullable | 一覧の並び（任意） |
-| created_at | TIMESTAMPTZ | NOT NULL | 作成日時 |
-
-### user_groups
-
-| カラム | 型 | 制約 | 説明 |
-|-------|-----|------|------|
+| id | UUID | PK | 行ID（代理キー） |
+| organization_id | UUID | FK, NOT NULL | 組織 |
 | user_id | UUID | FK, NOT NULL | ユーザー |
 | group_id | UUID | FK, NOT NULL | グループ |
 | key | VARCHAR(255) | NOT NULL | API/URL 用 |
+| deleted_at | TIMESTAMP | nullable | 論理削除 |
 
-> **Note:** (user_id, group_id) でユニーク。兼務は複数行で表現。
-
-### issue_groups
-
-| カラム | 型 | 制約 | 説明 |
-|-------|-----|------|------|
-| issue_id | UUID | FK, NOT NULL | Issue |
-| group_id | UUID | FK, NOT NULL | グループ |
-| role | VARCHAR(50) | nullable | 例: primary / collaborator / tag |
-| key | VARCHAR(255) | NOT NULL | API/URL 用 |
-
-> **Note:** (issue_id, group_id) でユニーク。
+> **Note:** 有効行における `(organization_id, user_id, group_id)` の一意は **Repository** で保証。
 
 ### issue_events
 

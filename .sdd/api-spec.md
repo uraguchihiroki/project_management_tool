@@ -6,7 +6,7 @@
 
 | 順 | ドキュメント | 内容 |
 |----|--------------|------|
-| **5** | [db-schema.md](db-schema.md) | **インプリント**（`issue_events` の追記行）、**イベントログ**、**Group** と **Issue↔Group / User↔Group** 多対多 |
+| **5** | [db-schema.md](db-schema.md) | **インプリント**（`issue_events` の追記行）、**イベントログ** |
 | **6** | 本ドキュメント（api-spec） | 一覧・フィルタ・**イベント取得**など **クエリしやすい** API 契約 |
 | **7** | [transition-permissions.md](transition-permissions.md) | **許可される遷移（形）**、**遷移アラート**、**監査の意味**（運用・通知・ログの分担） |
 
@@ -75,7 +75,7 @@ http://localhost:8080/api/v1
 | POST | /organizations | 組織作成 |
 | GET | /users/:id/organizations | ユーザーの所属組織（1ユーザー＝1組織のため1件） |
 | POST | /organizations/:orgId/users | 組織にユーザーを追加（既存ユーザーの name/email で新規ユーザーを作成） |
-| GET | /organizations/:orgId/statuses | 組織に属する **Issue 用** statuses（各ワークフローの `statuses`）。`?type=project` は互換のため **空配列**（プロジェクト進行は `/projects/:id/project-statuses`）。`?exclude_system=1` で sts_start/sts_goal を除外 |
+| GET | /organizations/:orgId/statuses | 組織に属する **Issue 用** statuses（各ワークフローの `statuses`）。`?type=project` は互換のため **空配列**（プロジェクト進行は `/projects/:id/project-statuses`）。`?exclude_system=1` は互換のため残すが **フィルタは行わない**（同一応答） |
 | POST | /organizations/:orgId/statuses | 組織の「組織Issue」固定ワークフローへ Issue 用ステータス追加 |
 
 ### Workflows（組織スコープのワークフロー）
@@ -86,17 +86,24 @@ http://localhost:8080/api/v1
 | POST | /workflows | 作成（body: `organization_id`, `name`, `description`） |
 | PUT | /workflows/reorder | 表示順更新（body: `ids`） |
 | GET | /workflows/:id | 詳細取得（他組織の ID は 404） |
-| GET | /workflows/:id/statuses | **当該ワークフローに紐づく Issue 用 Status 一覧**（`order` 昇順）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。同一 `(name, order)` の重複は **DB 制約**で防ぐ（[tenant-invariants.md](tenant-invariants.md)、[db-schema.md](db-schema.md)）。 |
-| POST | /workflows/:id/statuses | **Issue 用ステータス追加**。body: `name`（必須）, `color`（省略時 `#6B7280`）, `order`（`0` または省略時は同一 WF 内の最大 `order` + 1）。作成後、当該 WF の **許可遷移を全ペア再シード** |
+| GET | /workflows/:id/statuses | **当該ワークフローに紐づく Issue 用 Status 一覧**（`display_order` 昇順、各要素に `is_entry`, `is_terminal` を含む）。`:id` のワークフローが JWT の組織に属さなければ **403/404**。同一 `(name, display_order)` の重複は **Service** で防ぐ（[tenant-invariants.md](tenant-invariants.md)、[db-schema.md](db-schema.md)）。 |
+| POST | /workflows/:id/statuses | **Issue 用ステータス追加**。body: `name`（必須）, `color`（省略時 `#6B7280`）, `display_order`（`0` または省略時は同一 WF 内の最大 `display_order` + 1）。**許可遷移は自動では作らない**（`POST /workflows/:id/transitions` で都度追加） |
+| PUT | /workflows/:id/statuses/reorder | ステータス並び替え。body: `status_ids`（UUID の配列・全件・順序どおり `display_order` が 1..n に振り直される） |
 | PUT | /workflows/:id | 名前・説明の更新 |
+| PUT | /workflows/:id/editor | **管理画面用・一括保存**。body: `name`（必須）, `description`, `statuses`（配列）, `transitions`（配列）。**1 トランザクション**でワークフロー表示名・説明・当該 WF の全ステータス・全許可遷移を**置換**する。既存個別 API（`PUT /statuses/:id` 等）は従来どおり利用可。**検証（400）:** ステータス **2 件以上**；`is_entry` が**ちょうど 1 件**；`is_terminal` が **1 件以上**；同一行で `is_entry` と `is_terminal` の同時 true は不可；同一 WF 内で `(name, display_order)` の重複不可（`display_order` は配列順で 1..n）；`statuses[].id` と `statuses[].client_id` は各行で**どちらか一方のみ**（新規のみ `client_id`・既存のみ `id`）；`transitions[].from_ref` / `to_ref` は **既存ステータス UUID** または **新規行の `client_id`**（UUID 文字列）。`from`≠`to`、遷移 `(from,to)` の重複不可。リクエストに含まれない既存ステータスは**削除試行**（使用中の Issue がある・削除後に 2 未満になる等は 400）。**応答:** **204 No Content**（成功後クライアントは GET で再取得）。 |
 | DELETE | /workflows/:id | 削除 |
+| GET | /workflows/:id/transitions | 当該ワークフローの許可遷移一覧（`display_order` 昇順） |
+| PUT | /workflows/:id/transitions/reorder | 遷移行の並び替え。body: `transition_ids`（数値 ID の配列・当該 WF の全遷移を含む順列） |
+| POST | /workflows/:id/transitions | 遷移追加。body: `from_status_id`, `to_status_id`。同一ステータスへの遷移や既存と同じ `from→to` は **400** |
+| PUT | /workflows/:id/transitions/:transitionId | 遷移更新（同上の検証） |
+| DELETE | /workflows/:id/transitions/:transitionId | 遷移削除 |
 
 ### Statuses（個別更新・削除）
 
 | Method | Path | 説明 |
 |--------|------|------|
-| PUT | /statuses/:id | 更新 |
-| DELETE | /statuses/:id | 削除 |
+| PUT | /statuses/:id | 更新（body: `name`, `color`, `display_order`、省略可: `is_entry`, `is_terminal`）。**同一ステータスで `is_entry` と `is_terminal` を同時に true にできない**（400）。`is_entry: true` のとき同一ワークフロー他行の `is_entry` はサーバが false に寄せる。**新規ブートストラップ**（組織Issue用3ステータス等）では `display_order` 最小が既定で `is_entry`。**起動時マイグレーション**で、同一ワークフローに `is_entry=true` が0件のときは `display_order` 最小の1行に付与する |
+| DELETE | /statuses/:id | 削除。**許可遷移**（`workflow_transitions` の from/to）で参照中は **400**。削除後に当該ワークフロー内の有効ステータスが **2 未満**になる場合も **400**（メッセージで理由を返す）。**削除行が `is_entry` のとき**は削除後、残りの有効ステータスのうち **`display_order` 最小**の1行に `is_entry` を付け替える |
 
 > **UI導線:** 管理画面では `/admin/statuses` はレガシー導線として `/admin/workflows` へリダイレクトし、実際の編集は `/admin/workflows/:id` の **共通ダイアログ（新規/編集）** で行う。
 
@@ -122,41 +129,25 @@ http://localhost:8080/api/v1
 | Method | Path | 説明 |
 |--------|------|------|
 | GET | /projects | プロジェクト一覧取得（org_id クエリでフィルタ可） |
-| POST | /projects | プロジェクト作成 |
+| POST | /projects | プロジェクト作成。**Issue 用ワークフローは作らない**（応答の `default_workflow_id` / `statuses` は未設定のことがある）。プロジェクト進行用の初期 `project_status_id` は設定される。 |
+| POST | /projects/:id/default-issue-workflow | 未設定時のみ、デフォルト Issue 用ワークフロー（未着手・進行・完了＋許可遷移 4 本）を作成し `default_workflow_id` を紐付ける（**冪等**、200 + 更新後の project） |
 | GET | /projects/:id | プロジェクト詳細取得 |
 | GET | /projects/:id/project-statuses | 当該プロジェクトの **進行用** `project_statuses` 一覧（JWT の組織と一致しないプロジェクトは 404） |
-| PUT | /projects/:id/project-statuses/:statusId | 進行ステータス更新。body: `name`, `color`（#RRGGBB）, `order`。当該行がこのプロジェクトに属することを検証。`status_key` が sts_start / sts_goal の行は変更不可 |
+| PUT | /projects/:id/project-statuses/:statusId | 進行ステータス更新。body: `name`, `color`（#RRGGBB）, `order`。当該行がこのプロジェクトに属することを検証 |
 | PUT | /projects/:id | プロジェクト更新（任意: `project_status_id` で進行変更。許可遷移は `project_status_transitions` で検証） |
 | DELETE | /projects/:id | プロジェクト削除 |
 
-> **Note:** GET /projects/:id の `statuses` は **Issue 用**（`default_workflow_id` の列）。`project_status` は現在のプロジェクト進行。進行の一覧は GET /projects/:id/project-statuses。
-
-### Groups（グループ）
-
-組織内の **Group**（開示・共同文脈・通知の宛先・タグ的用途）。**Issue 文脈を主**とし、HR ディレクトリと完全一致させる必要はない（同期は `kind` 等で表現可能）。
-
-| Method | Path | 説明 |
-|--------|------|------|
-| GET | /organizations/:orgId/groups | グループ一覧（`?kind=` でフィルタ可） |
-| POST | /organizations/:orgId/groups | グループ作成 |
-| GET | /groups/:id | グループ詳細 |
-| PUT | /groups/:id | グループ更新 |
-| DELETE | /groups/:id | グループ削除 |
-| GET | /groups/:id/members | メンバー（User）一覧 |
-| PUT | /groups/:id/members | メンバー一括置換または差分（実装で確定） |
-| GET | /users/:id/groups | ユーザーが所属するグループ一覧 |
+> **Note:** GET /projects/:id の `statuses` は **Issue 用**（`default_workflow_id` の列）。**POST /projects 直後は未プロビジョンのため空や未設定になりうる**。カンバンを使う前に POST …/default-issue-workflow または初回 Issue 作成で確保する。`project_status` は現在のプロジェクト進行。進行の一覧は GET /projects/:id/project-statuses。
 
 ### Issues（チケット）
 
 | Method | Path | 説明 |
 |--------|------|------|
-| GET | /projects/:projectId/issues | Issue一覧取得。**クエリ例**: `group_id`（Group に紐づく Issue のみ）、`status_id`、`assignee_id`、期間は **`updated_at` またはイベント API** と整合させる（一覧は軽量を優先） |
-| POST | /projects/:projectId/issues | Issue作成（body に `group_ids` 任意） |
-| GET | /projects/:projectId/issues/:number | Issue詳細取得（**groups** を含めてもよい） |
+| GET | /projects/:projectId/issues | Issue一覧取得。期間は **`updated_at` またはイベント API** と整合させる（一覧は軽量を優先） |
+| POST | /projects/:projectId/issues | Issue作成 |
+| GET | /projects/:projectId/issues/:number | Issue詳細取得 |
 | PUT | /projects/:projectId/issues/:number | Issue更新（ステータス・担当変更時はサーバが **issue_events** に追記する想定） |
 | DELETE | /projects/:projectId/issues/:number | Issue削除 |
-| GET | /projects/:projectId/issues/:number/groups | Issue に付いた Group 一覧 |
-| PUT | /projects/:projectId/issues/:number/groups | Issue ↔ Group の紐付け更新（多対多） |
 
 ### Issue events（インプリント・イベントログ・監査向け）
 

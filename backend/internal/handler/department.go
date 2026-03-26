@@ -8,29 +8,29 @@ import (
 	"github.com/uraguchihiroki/project_management_tool/internal/service"
 )
 
-type DepartmentHandler struct {
-	deptService service.DepartmentService
+type GroupHandler struct {
+	groupService service.GroupService
 }
 
-func NewDepartmentHandler(deptService service.DepartmentService) *DepartmentHandler {
-	return &DepartmentHandler{deptService: deptService}
+func NewGroupHandler(groupService service.GroupService) *GroupHandler {
+	return &GroupHandler{groupService: groupService}
 }
 
-// GET /api/v1/organizations/:orgId/departments
-func (h *DepartmentHandler) List(c echo.Context) error {
+// GET /api/v1/organizations/:orgId/groups
+func (h *GroupHandler) List(c echo.Context) error {
 	orgID, _, authErr := requireOrgParam(c, "orgId")
 	if authErr != nil {
 		return authErr
 	}
-	depts, err := h.deptService.ListByOrganization(orgID)
+	groups, err := h.groupService.ListByOrganization(orgID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"data": depts})
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": groups})
 }
 
-// POST /api/v1/organizations/:orgId/departments
-func (h *DepartmentHandler) Create(c echo.Context) error {
+// POST /api/v1/organizations/:orgId/groups
+func (h *GroupHandler) Create(c echo.Context) error {
 	orgID, _, authErr := requireOrgParam(c, "orgId")
 	if authErr != nil {
 		return authErr
@@ -43,27 +43,27 @@ func (h *DepartmentHandler) Create(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "部署名は必須です")
+		return echo.NewHTTPError(http.StatusBadRequest, "グループ名は必須です")
 	}
 	if len(req.Name) > 200 {
-		return echo.NewHTTPError(http.StatusBadRequest, "部署名は200文字以内で指定してください")
+		return echo.NewHTTPError(http.StatusBadRequest, "グループ名は200文字以内で指定してください")
 	}
-	dept, err := h.deptService.Create(orgID, req.Name)
+	group, err := h.groupService.Create(orgID, req.Name)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-	return c.JSON(http.StatusCreated, map[string]interface{}{"data": dept})
+	return c.JSON(http.StatusCreated, map[string]interface{}{"data": group})
 }
 
-// PUT /api/v1/organizations/:orgId/departments/:id
-func (h *DepartmentHandler) Update(c echo.Context) error {
+// PUT /api/v1/organizations/:orgId/groups/:id
+func (h *GroupHandler) Update(c echo.Context) error {
 	orgID, _, authErr := requireOrgParam(c, "orgId")
 	if authErr != nil {
 		return authErr
 	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid department id")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid group id")
 	}
 	type Request struct {
 		Name string `json:"name"`
@@ -72,28 +72,28 @@ func (h *DepartmentHandler) Update(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	dept, err := h.deptService.Get(id)
+	group, err := h.groupService.Get(id)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "department not found")
+		return echo.NewHTTPError(http.StatusNotFound, "group not found")
 	}
-	if dept.OrganizationID != orgID {
-		return echo.NewHTTPError(http.StatusNotFound, "department not found")
+	if group.OrganizationID != orgID {
+		return echo.NewHTTPError(http.StatusNotFound, "group not found")
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "部署名は必須です")
+		return echo.NewHTTPError(http.StatusBadRequest, "グループ名は必須です")
 	}
 	if len(req.Name) > 200 {
-		return echo.NewHTTPError(http.StatusBadRequest, "部署名は200文字以内で指定してください")
+		return echo.NewHTTPError(http.StatusBadRequest, "グループ名は200文字以内で指定してください")
 	}
-	updated, err := h.deptService.Update(id, req.Name)
+	updated, err := h.groupService.Update(id, req.Name)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": updated})
 }
 
-// PUT /api/v1/organizations/:orgId/departments/reorder
-func (h *DepartmentHandler) Reorder(c echo.Context) error {
+// PUT /api/v1/organizations/:orgId/groups/reorder
+func (h *GroupHandler) Reorder(c echo.Context) error {
 	orgID, _, authErr := requireOrgParam(c, "orgId")
 	if authErr != nil {
 		return authErr
@@ -113,37 +113,37 @@ func (h *DepartmentHandler) Reorder(c echo.Context) error {
 		}
 		ids = append(ids, id)
 	}
-	if err := h.deptService.Reorder(orgID, ids); err != nil {
+	if err := h.groupService.Reorder(orgID, ids); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-// DELETE /api/v1/organizations/:orgId/departments/:id
-func (h *DepartmentHandler) Delete(c echo.Context) error {
+// DELETE /api/v1/organizations/:orgId/groups/:id
+func (h *GroupHandler) Delete(c echo.Context) error {
 	orgID, _, authErr := requireOrgParam(c, "orgId")
 	if authErr != nil {
 		return authErr
 	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid department id")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid group id")
 	}
-	dept, err := h.deptService.Get(id)
+	group, err := h.groupService.Get(id)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "department not found")
+		return echo.NewHTTPError(http.StatusNotFound, "group not found")
 	}
-	if dept.OrganizationID != orgID {
-		return echo.NewHTTPError(http.StatusNotFound, "department not found")
+	if group.OrganizationID != orgID {
+		return echo.NewHTTPError(http.StatusNotFound, "group not found")
 	}
-	if err := h.deptService.Delete(id); err != nil {
+	if err := h.groupService.Delete(id); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-// GET /api/v1/users/:id/departments?org_id=xxx
-func (h *DepartmentHandler) GetUserDepartments(c echo.Context) error {
+// GET /api/v1/users/:id/groups?org_id=xxx
+func (h *GroupHandler) GetUserGroups(c echo.Context) error {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
@@ -152,15 +152,15 @@ func (h *DepartmentHandler) GetUserDepartments(c echo.Context) error {
 	if authErr != nil {
 		return authErr
 	}
-	depts, err := h.deptService.GetUserDepartments(orgID, userID)
+	groups, err := h.groupService.GetUserGroups(orgID, userID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"data": depts})
+	return c.JSON(http.StatusOK, map[string]interface{}{"data": groups})
 }
 
-// PUT /api/v1/users/:id/departments?org_id=xxx
-func (h *DepartmentHandler) SetUserDepartments(c echo.Context) error {
+// PUT /api/v1/users/:id/groups?org_id=xxx
+func (h *GroupHandler) SetUserGroups(c echo.Context) error {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
@@ -170,22 +170,22 @@ func (h *DepartmentHandler) SetUserDepartments(c echo.Context) error {
 		return authErr
 	}
 	type Request struct {
-		DepartmentIDs []string `json:"department_ids"`
+		GroupIDs []string `json:"group_ids"`
 	}
 	var req Request
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	ids := make([]uuid.UUID, 0, len(req.DepartmentIDs))
-	for _, s := range req.DepartmentIDs {
+	ids := make([]uuid.UUID, 0, len(req.GroupIDs))
+	for _, s := range req.GroupIDs {
 		id, err := uuid.Parse(s)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid department_id: "+s)
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid group_id: "+s)
 		}
 		ids = append(ids, id)
 	}
-	if err := h.deptService.SetUserDepartments(orgID, userID, ids); err != nil {
+	if err := h.groupService.SetUserGroups(orgID, userID, ids); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"message": "departments updated"})
+	return c.JSON(http.StatusOK, map[string]interface{}{"message": "groups updated"})
 }

@@ -22,6 +22,7 @@
 | [domain-model.md](domain-model.md) | エンティティ関係・ドメインモデル |
 | [transition-permissions.md](transition-permissions.md) | ステータス遷移・**遷移アラート**・監査（**§5–§7** と [db-schema](db-schema.md) / [api-spec](api-spec.md) の役割分担） |
 | [db-schema.md](db-schema.md) | データベース設計・テーブル定義（**インプリント**・イベントログ） |
+| [spec-implementation-divergences.md](spec-implementation-divergences.md) | **仕様と実装の乖離**（ユーザー合意済みのみ列挙。正本は各 `.sdd`） |
 | [api-spec.md](api-spec.md) | REST API 仕様・エンドポイント一覧 |
 | [key-flows.md](key-flows.md) | 認証・マルチテナント・ステータス遷移の権限の主要フロー |
 | [visual-flow/](visual-flow/) | 画面設計・遷移（Visual Flow 方式） |

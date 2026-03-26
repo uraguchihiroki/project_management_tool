@@ -12,7 +12,6 @@ import type {
   Organization,
   SuperAdmin,
   Workflow,
-  Group,
   IssueEvent,
   WorkflowTransition,
 } from '@/types'
@@ -206,6 +205,10 @@ export const createProject = (data: {
   end_date?: string
 }) => api.post<ApiResponse<Project>>('/projects', data).then((r) => r.data.data)
 
+/** 未設定時のみデフォルト Issue 用ワークフローとカンバン列を紐付ける（冪等） */
+export const ensureDefaultIssueWorkflow = (projectId: string) =>
+  api.post<ApiResponse<Project>>(`/projects/${projectId}/default-issue-workflow`).then((r) => r.data.data)
+
 export const updateProject = (
   id: string,
   data: {
@@ -234,12 +237,8 @@ export const updateProjectStatus = (
     .then((r) => r.data.data)
 
 // Issues
-export const getIssues = (projectId: string, opts?: { group_id?: string }) =>
-  api
-    .get<ListResponse<Issue>>(`/projects/${projectId}/issues`, {
-      params: opts?.group_id ? { group_id: opts.group_id } : {},
-    })
-    .then((r) => r.data.data)
+export const getIssues = (projectId: string) =>
+  api.get<ListResponse<Issue>>(`/projects/${projectId}/issues`).then((r) => r.data.data)
 
 export const getIssue = (projectId: string, number: number) =>
   api.get<ApiResponse<Issue>>(`/projects/${projectId}/issues/${number}`).then((r) => r.data.data)
@@ -255,7 +254,6 @@ export const createIssue = (
     reporter_id: string
     due_date?: string
     template_id?: number
-    group_ids?: string[]
   }
 ) => api.post<ApiResponse<Issue>>(`/projects/${projectId}/issues`, data).then((r) => r.data.data)
 
@@ -293,27 +291,12 @@ export const updateIssue = (
     status_id: string
     priority: string
     assignee_id: string
-    group_ids: string[]
   }>
 ) => api.put<ApiResponse<Issue>>(`/projects/${projectId}/issues/${number}`, data).then((r) => r.data.data)
 
 /** Issue のインプリント（時系列） */
 export const getIssueEvents = (issueId: string) =>
   api.get<{ data: IssueEvent[] }>(`/issues/${issueId}/events`).then((r) => r.data.data)
-
-/** 組織のグループ一覧 */
-export const getOrganizationGroups = (orgId: string, params?: { kind?: string }) =>
-  api.get<ListResponse<Group>>(`/organizations/${orgId}/groups`, { params: params ?? {} }).then((r) => r.data.data)
-
-/** Issue に付いたグループ一覧（GET は Issue 詳細に含まれることもあるが、明示取得用） */
-export const getIssueGroups = (projectId: string, number: number) =>
-  api.get<{ data: Group[] }>(`/projects/${projectId}/issues/${number}/groups`).then((r) => r.data.data)
-
-export const putIssueGroups = (projectId: string, number: number, groupIds: string[]) =>
-  api.put(`/projects/${projectId}/issues/${number}/groups`, { group_ids: groupIds })
-
-export const getUserGroups = (userId: string) =>
-  api.get<ListResponse<Group>>(`/users/${userId}/groups`).then((r) => r.data.data)
 
 export const deleteIssue = (projectId: string, number: number) =>
   api.delete(`/projects/${projectId}/issues/${number}`)
@@ -335,6 +318,31 @@ export const createWorkflow = (data: {
 
 export const updateWorkflowMeta = (id: string | number, data: { name: string; description: string }) =>
   api.put<ApiResponse<Workflow>>(`/workflows/${id}`, data).then((r) => r.data.data)
+
+/** 管理画面: ワークフロー名・説明・ステータス・許可遷移の一括保存（204 No Content） */
+export type WorkflowEditorStatusPayload = {
+  id?: string
+  client_id?: string
+  name: string
+  color: string
+  is_entry: boolean
+  is_terminal: boolean
+}
+
+export type WorkflowEditorTransitionPayload = {
+  from_ref: string
+  to_ref: string
+}
+
+export const saveWorkflowEditor = (
+  workflowId: string,
+  data: {
+    name: string
+    description: string
+    statuses: WorkflowEditorStatusPayload[]
+    transitions: WorkflowEditorTransitionPayload[]
+  }
+) => api.put(`/workflows/${workflowId}/editor`, data).then(() => undefined)
 
 export const deleteWorkflowApi = (id: string | number) => api.delete(`/workflows/${id}`)
 
@@ -361,16 +369,37 @@ export const createWorkflowTransition = (
 export const deleteWorkflowTransition = (workflowId: string, transitionId: number) =>
   api.delete(`/workflows/${workflowId}/transitions/${transitionId}`).then(() => undefined)
 
+export const updateWorkflowTransition = (
+  workflowId: string,
+  transitionId: number,
+  data: { from_status_id: string; to_status_id: string }
+) =>
+  api
+    .put<ApiResponse<WorkflowTransition>>(`/workflows/${workflowId}/transitions/${transitionId}`, data)
+    .then((r) => r.data.data)
+
 export const createWorkflowStatus = (
   workflowId: string,
-  data: { name: string; color?: string; order?: number }
+  data: { name: string; color?: string; display_order?: number }
 ) =>
   api.post<ApiResponse<Status>>(`/workflows/${workflowId}/statuses`, data).then((r) => r.data.data)
 
 export const updateStatus = (
   id: string,
-  data: { name: string; color: string; order: number }
+  data: {
+    name?: string
+    color?: string
+    display_order: number
+    is_entry?: boolean
+    is_terminal?: boolean
+  }
 ) => api.put<ApiResponse<Status>>(`/statuses/${id}`, data).then((r) => r.data.data)
+
+export const reorderWorkflowStatuses = (workflowId: string, statusIds: string[]) =>
+  api.put(`/workflows/${workflowId}/statuses/reorder`, { status_ids: statusIds }).then(() => undefined)
+
+export const reorderWorkflowTransitions = (workflowId: string, transitionIds: number[]) =>
+  api.put(`/workflows/${workflowId}/transitions/reorder`, { transition_ids: transitionIds }).then(() => undefined)
 
 export const deleteStatus = (id: string) =>
   api.delete(`/statuses/${id}`).then(() => undefined)

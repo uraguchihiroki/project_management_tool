@@ -8,8 +8,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	appdb "github.com/uraguchihiroki/project_management_tool/internal/db"
+	"github.com/uraguchihiroki/project_management_tool/internal/handler"
 	authmw "github.com/uraguchihiroki/project_management_tool/internal/middleware"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"github.com/uraguchihiroki/project_management_tool/internal/repository"
@@ -39,13 +39,21 @@ func main() {
 		log.Fatalf("failed to migrate issue/project status split (pre): %v", err)
 	}
 
+	if err := appdb.MigrateRenameDepartmentsToGroups(db); err != nil {
+		log.Fatalf("failed migrate rename departments to groups: %v", err)
+	}
+
+	if err := appdb.MigrateJunctionTablesSurrogatePK(db); err != nil {
+		log.Fatalf("failed to migrate junction tables surrogate PK: %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&model.Organization{},
 		&model.SuperAdmin{},
 		&model.Role{},
 		&model.User{},
-		&model.Department{},
-		&model.OrganizationUserDepartment{},
+		&model.Group{},
+		&model.OrganizationUserGroup{},
 		&model.Project{},
 		&model.Workflow{},
 		&model.Status{},
@@ -56,20 +64,47 @@ func main() {
 		&model.Comment{},
 		&model.IssueTemplate{},
 		&model.IssueEvent{},
-		&model.Group{},
-		&model.UserGroup{},
-		&model.IssueGroup{},
 		&model.TransitionAlertRule{},
 	); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
+	}
+
+	if err := appdb.MigrateDropLegacyBusinessUniqueIndexes(db); err != nil {
+		log.Fatalf("failed to drop legacy unique indexes: %v", err)
 	}
 
 	if err := appdb.MigrateProjectStatusSeed(db); err != nil {
 		log.Fatalf("failed to migrate project status seed: %v", err)
 	}
 
-	if err := appdb.MigrateStatusDedupeAndUniqueIndex(db); err != nil {
-		log.Fatalf("failed to migrate status dedupe / unique index: %v", err)
+	if err := appdb.MigrateStatusOrderToDisplayOrder(db); err != nil {
+		log.Fatalf("failed migrate status order column: %v", err)
+	}
+
+	if err := appdb.MigrateWorkflowTransitionDisplayOrder(db); err != nil {
+		log.Fatalf("failed migrate workflow transition display_order: %v", err)
+	}
+
+	if err := appdb.MigrateStatusDedupe(db); err != nil {
+		log.Fatalf("failed to migrate status dedupe: %v", err)
+	}
+	if err := appdb.MigrateJunctionOrganizationID(db); err != nil {
+		log.Fatalf("failed migrate junction organization_id: %v", err)
+	}
+	if err := appdb.MigrateRemoveLegacyGlobalIssueStatuses(db); err != nil {
+		log.Fatalf("failed migrate remove legacy global issue statuses: %v", err)
+	}
+	if err := appdb.MigrateStatusEntryUniqueIndex(db); err != nil {
+		log.Fatalf("failed migrate status entry unique index: %v", err)
+	}
+	if err := appdb.MigrateEnsureDefaultIssueEntryStatus(db); err != nil {
+		log.Fatalf("failed migrate ensure default issue entry status: %v", err)
+	}
+	if err := appdb.MigrateDropGroupTables(db); err != nil {
+		log.Fatalf("failed migrate drop group tables: %v", err)
+	}
+	if err := appdb.MigrateDropApprovalTables(db); err != nil {
+		log.Fatalf("failed migrate drop approval tables: %v", err)
 	}
 
 	userRepo := repository.NewUserRepository(db)
@@ -77,9 +112,6 @@ func main() {
 	statusRepo := repository.NewStatusRepository(db)
 	issueRepo := repository.NewIssueRepository(db)
 	issueEventRepo := repository.NewIssueEventRepository(db)
-	groupRepo := repository.NewGroupRepository(db)
-	userGroupRepo := repository.NewUserGroupRepository(db)
-	issueGroupRepo := repository.NewIssueGroupRepository(db)
 	alertRuleRepo := repository.NewTransitionAlertRuleRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
@@ -90,37 +122,38 @@ func main() {
 	templateRepo := repository.NewTemplateRepository(db)
 	orgRepo := repository.NewOrganizationRepository(db)
 	superAdminRepo := repository.NewSuperAdminRepository(db)
-	departmentRepo := repository.NewDepartmentRepository(db)
+	groupRepo := repository.NewGroupRepository(db)
 
 	userSvc := service.NewUserService(userRepo, orgRepo)
-	projectSvc := service.NewProjectService(projectRepo, statusRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
-	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, departmentRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, projectStatusTransitionRepo)
+	issueWFProv := service.NewIssueWorkflowProvisioner(projectRepo, workflowRepo, statusRepo, transitionRepo)
+	projectSvc := service.NewProjectService(projectRepo, statusRepo, projectStatusRepo, projectStatusTransitionRepo)
+	orgSeedSvc := service.NewOrgSeedService(orgRepo, statusRepo, roleRepo, projectRepo, groupRepo, issueRepo, workflowRepo, transitionRepo, projectStatusRepo, issueWFProv)
 	orgSvc := service.NewOrganizationService(orgRepo, userRepo, orgSeedSvc)
 	superAdminSvc := service.NewSuperAdminService(superAdminRepo)
-	departmentSvc := service.NewDepartmentService(departmentRepo, orgRepo)
-	alertEval := &service.TransitionAlertEvaluator{Rules: alertRuleRepo, UG: userGroupRepo}
-	issueSvc := service.NewIssueService(issueRepo, projectRepo, statusRepo, workflowRepo, transitionRepo, issueEventRepo, groupRepo, issueGroupRepo, alertEval)
+	groupSvc := service.NewGroupService(groupRepo, orgRepo)
+	alertEval := &service.TransitionAlertEvaluator{Rules: alertRuleRepo}
+	issueSvc := service.NewIssueService(issueRepo, projectRepo, statusRepo, workflowRepo, transitionRepo, issueEventRepo, alertEval, issueWFProv)
 	commentSvc := service.NewCommentService(commentRepo, issueRepo)
 	roleSvc := service.NewRoleService(roleRepo)
 	workflowSvc := service.NewWorkflowService(workflowRepo)
+	workflowEditorSvc := service.NewWorkflowEditorService(db)
 	templateSvc := service.NewTemplateService(templateRepo, projectRepo)
 	statusSvc := service.NewStatusService(statusRepo, workflowRepo, transitionRepo)
-	groupSvc := service.NewGroupService(groupRepo, userGroupRepo)
 
 	userHandler := handler.NewUserHandler(userSvc)
-	projectHandler := handler.NewProjectHandler(projectSvc)
+	projectHandler := handler.NewProjectHandler(projectSvc, issueWFProv)
 	issueHandler := handler.NewIssueHandler(issueSvc, projectSvc)
 	commentHandler := handler.NewCommentHandler(commentSvc)
 	roleHandler := handler.NewRoleHandler(roleSvc, userSvc)
 	workflowHandler := handler.NewWorkflowHandler(workflowSvc)
+	workflowEditorHandler := handler.NewWorkflowEditorHandler(workflowEditorSvc, workflowSvc)
 	workflowTransitionHandler := handler.NewWorkflowTransitionHandler(workflowSvc, statusSvc, transitionRepo)
 	templateHandler := handler.NewTemplateHandler(templateSvc, projectSvc)
 	orgHandler := handler.NewOrganizationHandler(orgSvc)
 	superAdminHandler := handler.NewSuperAdminHandler(superAdminSvc, orgSvc)
-	departmentHandler := handler.NewDepartmentHandler(departmentSvc)
+	groupHandler := handler.NewGroupHandler(groupSvc)
 	statusHandler := handler.NewStatusHandler(statusSvc, workflowSvc)
 	issueEventHandler := handler.NewIssueEventHandler(issueRepo, issueEventRepo)
-	groupHandler := handler.NewGroupHandler(groupSvc)
 
 	e := echo.New()
 	e.Use(middleware.Logger())
@@ -163,7 +196,6 @@ func main() {
 	public.POST("/admin/login", userHandler.AdminLogin)
 	public.POST("/super-admin/login", superAdminHandler.Login)
 	api.GET("/users", userHandler.List)
-	api.GET("/users/:id/groups", groupHandler.ListByUser)
 	api.GET("/users/:id", userHandler.Get)
 	api.POST("/admin/switch-organization", userHandler.SwitchOrganization)
 	api.PUT("/users/:id/admin", userHandler.SetAdmin)
@@ -180,10 +212,14 @@ func main() {
 	api.POST("/workflows", workflowHandler.Create)
 	api.PUT("/workflows/reorder", workflowHandler.Reorder)
 	api.GET("/workflows/:id", workflowHandler.Get)
+	api.PUT("/workflows/:id/editor", workflowEditorHandler.Put)
 	api.GET("/workflows/:id/statuses", statusHandler.ListByWorkflow)
 	api.POST("/workflows/:id/statuses", statusHandler.CreateForWorkflow)
+	api.PUT("/workflows/:id/statuses/reorder", statusHandler.ReorderForWorkflow)
 	api.GET("/workflows/:id/transitions", workflowTransitionHandler.ListByWorkflow)
+	api.PUT("/workflows/:id/transitions/reorder", workflowTransitionHandler.ReorderForWorkflow)
 	api.POST("/workflows/:id/transitions", workflowTransitionHandler.CreateForWorkflow)
+	api.PUT("/workflows/:id/transitions/:transitionId", workflowTransitionHandler.Update)
 	api.DELETE("/workflows/:id/transitions/:transitionId", workflowTransitionHandler.Delete)
 	api.PUT("/workflows/:id", workflowHandler.Update)
 	api.DELETE("/workflows/:id", workflowHandler.Delete)
@@ -201,13 +237,13 @@ func main() {
 	api.GET("/users/:id/organizations", orgHandler.ListByUser)
 	api.POST("/organizations/:orgId/users", orgHandler.AddUser)
 
-	api.GET("/organizations/:orgId/departments", departmentHandler.List)
-	api.POST("/organizations/:orgId/departments", departmentHandler.Create)
-	api.PUT("/organizations/:orgId/departments/reorder", departmentHandler.Reorder)
-	api.PUT("/organizations/:orgId/departments/:id", departmentHandler.Update)
-	api.DELETE("/organizations/:orgId/departments/:id", departmentHandler.Delete)
-	api.GET("/users/:id/departments", departmentHandler.GetUserDepartments)
-	api.PUT("/users/:id/departments", departmentHandler.SetUserDepartments)
+	api.GET("/organizations/:orgId/groups", groupHandler.List)
+	api.POST("/organizations/:orgId/groups", groupHandler.Create)
+	api.PUT("/organizations/:orgId/groups/reorder", groupHandler.Reorder)
+	api.PUT("/organizations/:orgId/groups/:id", groupHandler.Update)
+	api.DELETE("/organizations/:orgId/groups/:id", groupHandler.Delete)
+	api.GET("/users/:id/groups", groupHandler.GetUserGroups)
+	api.PUT("/users/:id/groups", groupHandler.SetUserGroups)
 
 	api.GET("/super-admin/organizations", superAdminHandler.ListOrganizations)
 	api.POST("/super-admin/organizations", superAdminHandler.CreateOrganization)
@@ -225,18 +261,11 @@ func main() {
 	api.PUT("/statuses/:id", statusHandler.Update)
 	api.DELETE("/statuses/:id", statusHandler.Delete)
 	api.POST("/projects", projectHandler.Create)
+	api.POST("/projects/:id/default-issue-workflow", projectHandler.EnsureDefaultIssueWorkflow)
 	api.PUT("/projects/reorder", projectHandler.Reorder)
 	api.GET("/projects/:id", projectHandler.Get)
 	api.PUT("/projects/:id", projectHandler.Update)
 	api.DELETE("/projects/:id", projectHandler.Delete)
-
-	api.GET("/organizations/:orgId/groups", groupHandler.List)
-	api.POST("/organizations/:orgId/groups", groupHandler.Create)
-	api.GET("/groups/:id/members", groupHandler.ListMembers)
-	api.PUT("/groups/:id/members", groupHandler.ReplaceMembers)
-	api.GET("/groups/:id", groupHandler.Get)
-	api.PUT("/groups/:id", groupHandler.Update)
-	api.DELETE("/groups/:id", groupHandler.Delete)
 
 	api.GET("/projects/:projectId/issues", issueHandler.List)
 	api.POST("/projects/:projectId/issues", issueHandler.Create)
@@ -245,8 +274,6 @@ func main() {
 	api.GET("/organizations/:orgId/issues/:number", issueHandler.GetByOrgAndNumber)
 	api.PUT("/organizations/:orgId/issues/:number", issueHandler.UpdateByOrgAndNumber)
 	api.DELETE("/organizations/:orgId/issues/:number", issueHandler.DeleteByOrgAndNumber)
-	api.GET("/projects/:projectId/issues/:number/groups", issueHandler.ListIssueGroups)
-	api.PUT("/projects/:projectId/issues/:number/groups", issueHandler.PutIssueGroups)
 	api.GET("/projects/:projectId/issues/:number", issueHandler.Get)
 	api.PUT("/projects/:projectId/issues/:number", issueHandler.Update)
 	api.DELETE("/projects/:projectId/issues/:number", issueHandler.Delete)

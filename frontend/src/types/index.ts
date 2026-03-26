@@ -4,7 +4,7 @@ export interface Organization {
   created_at: string
 }
 
-export interface Department {
+export interface Group {
   id: string
   organization_id: string
   name: string
@@ -72,24 +72,13 @@ export interface Status {
   workflow_id?: number
   name: string
   color: string
-  order: number
-  status_key?: string // sts_start, sts_goal。空=ユーザー定義
+  display_order: number
+  status_key?: string
+  is_entry?: boolean
+  is_terminal?: boolean
 }
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical'
-
-export interface IssueApproval {
-  id: string
-  issue_id: string
-  workflow_step_id: number
-  workflow_step: WorkflowStep
-  approver_id?: string
-  approver?: User
-  status: 'pending' | 'approved' | 'rejected'
-  comment: string
-  acted_at?: string
-  created_at: string
-}
 
 export interface IssueTemplate {
   id: number
@@ -105,15 +94,6 @@ export interface IssueTemplate {
 }
 
 /** 組織スコープのグループ（Issue への紐付け・通知等） */
-export interface Group {
-  id: string
-  organization_id: string
-  name: string
-  kind?: string
-  display_order: number
-  created_at: string
-}
-
 /** issue_events の1行（インプリント） */
 export interface IssueEvent {
   id: string
@@ -147,7 +127,6 @@ export interface Issue {
   template_id?: number
   workflow_id?: number
   comments?: Comment[]
-  groups?: Group[]
   created_at: string
   updated_at: string
 }
@@ -162,21 +141,6 @@ export interface Comment {
   updated_at: string
 }
 
-export interface ApprovalObject {
-  id: number
-  workflow_step_id: number
-  order: number
-  type: 'role' | 'user'
-  role_id?: number
-  role?: Role
-  role_operator?: 'eq' | 'gte'
-  user_id?: string
-  user?: User
-  points: number
-  exclude_reporter: boolean
-  exclude_assignee: boolean
-}
-
 export interface WorkflowStep {
   id: number
   workflow_id: number
@@ -187,7 +151,6 @@ export interface WorkflowStep {
   next_status?: Status
   description?: string
   threshold?: number
-  approval_objects?: ApprovalObject[]
   exclude_reporter?: boolean
   exclude_assignee?: boolean
 }
@@ -206,6 +169,7 @@ export interface WorkflowTransition {
   workflow_id: number
   from_status_id: string
   to_status_id: string
+  display_order: number
   created_at: string
 }
 

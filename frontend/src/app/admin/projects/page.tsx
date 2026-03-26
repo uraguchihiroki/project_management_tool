@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getProjects, createProject, resolveApiBaseURL } from '@/lib/api'
+import { getProjects, createProject, ensureDefaultIssueWorkflow, resolveApiBaseURL } from '@/lib/api'
 import { useState } from 'react'
 import Link from 'next/link'
 import { Plus, FolderKanban, ChevronRight } from 'lucide-react'
@@ -32,7 +32,11 @@ export default function AdminProjectsPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (data: Parameters<typeof createProject>[0]) => createProject(data),
+    mutationFn: async (data: Parameters<typeof createProject>[0]) => {
+      const p = await createProject(data)
+      await ensureDefaultIssueWorkflow(p.id)
+      return p
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       setShowForm(false)

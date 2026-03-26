@@ -55,6 +55,23 @@
 
 4. Cursor で WSL に接続: `Ctrl+Shift+P` → 「WSL: Connect to WSL」→ `~/work/AI/project_management_tool` を開く
 
+### Cursor で TypeScript エラー（`routes.d.ts` が無い等）が出るとき
+
+Git には [`frontend/next-env.d.ts`](frontend/next-env.d.ts) が含まれますが、型の実体である `frontend/.next/` はリポジトリに含めません（[.gitignore](.gitignore)）。そのため **clone 直後に `npm install` だけ**の状態だと、`next-env.d.ts` が参照する `routes.d.ts` などがまだ無く、エディタがエラーを出すことがあります。**アプリ不具合ではなく、Next が未実行で生成物が無いだけ**です。
+
+プロジェクトルートから、次を **そのままコピペ**して実行してください（`build` だけで開発サーバーは不要です）。
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+- 開発サーバーを起動する運用なら、`npm run dev` を一度回しても同様に生成されます（終了は `Ctrl+C`）。
+- すでに [`bash scripts/start.sh`](scripts/start.sh) でフロントまで動かしている場合は、多くの環境で `.next` は既に揃っています。
+
+`npm run dev` と `npm run build` のどちらを最後に実行したかで、Next が `next-env.d.ts` の import 行を書き換えることがあり、その1行だけがコミットで変わることがあります。Pull したあと迷ったら上記を一度実行して揃える、CI では **`npm run build` のあと型チェック**する、とすると衝突が減ります。
+
 ### Cursor の起動方法（重要）
 
 **Cursor は Windows で起動し、WSL にリモート接続する**構成を推奨します。

@@ -3,11 +3,9 @@ package db
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
-	"github.com/uraguchihiroki/project_management_tool/internal/pkg/keygen"
 	"gorm.io/gorm"
 )
 
@@ -26,6 +24,7 @@ func MigrateIssueProjectStatusSplitPre(db *gorm.DB) error {
 	}
 
 	// 組織スコープのプロジェクト進行ワークフロー（Workflow は Issue のみにする）
+	// 以下の DELETE はレガシー移行専用（本番データの論理削除 API ではない）
 	if err := db.Exec(`
 		DELETE FROM workflow_transitions
 		WHERE workflow_id IN (SELECT id FROM workflows WHERE name = ?)
@@ -98,7 +97,7 @@ func dropStatusUniqueIndexIfExists(db *gorm.DB, dialect, indexName string) error
 }
 
 // MigrateProjectStatusSeed は AutoMigrate 後、project_status_id が無いプロジェクトに
-// デフォルトの project_statuses と全ペア遷移を投入する。冪等。
+// デフォルトの project_statuses のみ投入する（許可遷移は作らない）。冪等。
 func MigrateProjectStatusSeed(db *gorm.DB) error {
 	if !tableExists(db, "projects") || !tableExists(db, "project_statuses") {
 		return nil
@@ -126,8 +125,8 @@ func seedOneProjectStatuses(db *gorm.DB, projectID uuid.UUID) error {
 		{"進行中", "#3B82F6", 2},
 		{"完了", "#10B981", 3},
 	}
-	ids := make([]uuid.UUID, 0, len(defaults))
-	for _, d := range defaults {
+	var first uuid.UUID
+	for i, d := range defaults {
 		sid := uuid.New()
 		ps := &model.ProjectStatus{
 			ID:        sid,
@@ -140,40 +139,12 @@ func seedOneProjectStatuses(db *gorm.DB, projectID uuid.UUID) error {
 		if err := db.Create(ps).Error; err != nil {
 			return fmt.Errorf("migrate seed: create project_status: %w", err)
 		}
-		ids = append(ids, sid)
+		if i == 0 {
+			first = sid
+		}
 	}
-	if err := seedProjectStatusAllPairs(db, projectID, ids); err != nil {
-		return err
-	}
-	first := ids[0]
 	if err := db.Model(&model.Project{}).Where("id = ?", projectID).Update("project_status_id", first).Error; err != nil {
 		return fmt.Errorf("migrate seed: set project.project_status_id: %w", err)
 	}
 	return nil
-}
-
-func seedProjectStatusAllPairs(db *gorm.DB, projectID uuid.UUID, statusIDs []uuid.UUID) error {
-	if len(statusIDs) == 0 {
-		return nil
-	}
-	return db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("project_id = ?", projectID).Delete(&model.ProjectStatusTransition{}).Error; err != nil {
-			return err
-		}
-		for _, from := range statusIDs {
-			for _, to := range statusIDs {
-				pt := &model.ProjectStatusTransition{
-					Key:                 keygen.UUIDKey(uuid.New()),
-					ProjectID:           projectID,
-					FromProjectStatusID: from,
-					ToProjectStatusID:   to,
-					CreatedAt:           time.Now(),
-				}
-				if err := tx.Create(pt).Error; err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	})
 }

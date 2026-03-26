@@ -98,7 +98,7 @@ func PrepareStatusesWorkflowColumn(db *gorm.DB) error {
 		`).Error; err != nil {
 			return fmt.Errorf("legacy migrate: backfill workflow_id from issues: %w", err)
 		}
-		// organization_id が NULL の行（旧 sts_start 等）も Issue から辿れるなら紐づける
+		// workflow_id が NULL の行も Issue から辿れるなら紐づける
 		if err := db.Exec(`
 			UPDATE statuses s
 			SET workflow_id = sub.wfid
@@ -151,37 +151,7 @@ func PrepareStatusesWorkflowColumn(db *gorm.DB) error {
 		}
 	}
 
-	// workflow_steps が参照する status（旧 sts_start / sts_goal 等、project_id 無し）→ 最小の workflow_id に寄せる
-	if columnExists(db, "workflow_steps", "status_id") && columnExists(db, "workflow_steps", "workflow_id") {
-		var err error
-		if columnExists(db, "workflow_steps", "deleted_at") {
-			err = db.Exec(`
-				UPDATE statuses s
-				SET workflow_id = sub.wfid
-				FROM (
-					SELECT ws.status_id AS sid, MIN(ws.workflow_id)::bigint AS wfid
-					FROM workflow_steps ws
-					WHERE ws.deleted_at IS NULL
-					GROUP BY ws.status_id
-				) sub
-				WHERE s.workflow_id IS NULL AND s.id = sub.sid
-			`).Error
-		} else {
-			err = db.Exec(`
-				UPDATE statuses s
-				SET workflow_id = sub.wfid
-				FROM (
-					SELECT ws.status_id AS sid, MIN(ws.workflow_id)::bigint AS wfid
-					FROM workflow_steps ws
-					GROUP BY ws.status_id
-				) sub
-				WHERE s.workflow_id IS NULL AND s.id = sub.sid
-			`).Error
-		}
-		if err != nil {
-			return fmt.Errorf("legacy migrate: backfill workflow_id from workflow_steps: %w", err)
-		}
-	}
+	// NOTE: workflow_steps は承認ステップ系として廃止。承認テーブルは起動時に DROP されるため、ここでは参照しない。
 
 	var remaining int64
 	if err := db.Raw(`

@@ -6,16 +6,16 @@ import { Shield, ShieldOff, X, Check, Plus, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, resolveApiBaseURL } from '@/lib/api'
 import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
-import type { User, Department } from '@/types'
+import type { User, Group } from '@/types'
 
-async function fetchDepartments(orgId: string): Promise<Department[]> {
-  const res = await fetch(`${resolveApiBaseURL()}/organizations/${orgId}/departments`)
+async function fetchGroups(orgId: string): Promise<Group[]> {
+  const res = await fetch(`${resolveApiBaseURL()}/organizations/${orgId}/groups`)
   const json = await res.json()
   return json.data ?? []
 }
 
-async function fetchUserDepartments(orgId: string, userId: string): Promise<Department[]> {
-  const res = await fetch(`${resolveApiBaseURL()}/users/${userId}/departments?org_id=${orgId}`)
+async function fetchUserGroups(orgId: string, userId: string): Promise<Group[]> {
+  const res = await fetch(`${resolveApiBaseURL()}/users/${userId}/groups?org_id=${orgId}`)
   const json = await res.json()
   return json.data ?? []
 }
@@ -29,9 +29,9 @@ export default function AdminUsersPage() {
     queryFn: () => getAdminUsers(currentOrg!.id),
     enabled: authFetch && !!currentOrg?.id,
   })
-  const { data: allDepartments = [] } = useQuery({
-    queryKey: ['departments', currentOrg?.id],
-    queryFn: () => fetchDepartments(currentOrg!.id),
+  const { data: allGroups = [] } = useQuery({
+    queryKey: ['groups', currentOrg?.id],
+    queryFn: () => fetchGroups(currentOrg!.id),
     enabled: authFetch && !!currentOrg?.id,
   })
 
@@ -40,8 +40,8 @@ export default function AdminUsersPage() {
   const [editingNameUserId, setEditingNameUserId] = useState<string | null>(null)
   const [editingDeptUserId, setEditingDeptUserId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
-  const [selectedDeptIds, setSelectedDeptIds] = useState<string[]>([])
-  const [userDepartmentsCache, setUserDepartmentsCache] = useState<Record<string, Department[]>>({})
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
+  const [userGroupsCache, setUserGroupsCache] = useState<Record<string, Group[]>>({})
 
   const createMutation = useMutation({
     mutationFn: () => createAdminUser(currentOrg!.id, createForm.name, createForm.email),
@@ -78,17 +78,17 @@ export default function AdminUsersPage() {
   })
 
   const assignDepartmentsMutation = useMutation({
-    mutationFn: async ({ userId, deptIds }: { userId: string; deptIds: string[] }) => {
-      const res = await fetch(`${resolveApiBaseURL()}/users/${userId}/departments?org_id=${currentOrg!.id}`, {
+    mutationFn: async ({ userId, groupIds }: { userId: string; groupIds: string[] }) => {
+      const res = await fetch(`${resolveApiBaseURL()}/users/${userId}/groups?org_id=${currentOrg!.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ department_ids: deptIds }),
+        body: JSON.stringify({ group_ids: groupIds }),
       })
       if (!res.ok) throw new Error('グループの更新に失敗しました')
     },
-    onSuccess: (_, { userId, deptIds }) => {
-      const depts = allDepartments.filter((d) => deptIds.includes(d.id))
-      setUserDepartmentsCache((c) => ({ ...c, [userId]: depts }))
+    onSuccess: (_, { userId, groupIds }) => {
+      const groups = allGroups.filter((g) => groupIds.includes(g.id))
+      setUserGroupsCache((c) => ({ ...c, [userId]: groups }))
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       setEditingDeptUserId(null)
     },
@@ -96,9 +96,9 @@ export default function AdminUsersPage() {
 
   const startDeptEdit = async (user: User) => {
     setEditingDeptUserId(user.id)
-    const depts = await fetchUserDepartments(currentOrg!.id, user.id)
-    setSelectedDeptIds(depts.map((d) => d.id))
-    setUserDepartmentsCache((c) => ({ ...c, [user.id]: depts }))
+    const groups = await fetchUserGroups(currentOrg!.id, user.id)
+    setSelectedGroupIds(groups.map((g) => g.id))
+    setUserGroupsCache((c) => ({ ...c, [user.id]: groups }))
   }
 
   const startNameEdit = (user: User) => {
@@ -106,9 +106,9 @@ export default function AdminUsersPage() {
     setEditingName(user.name)
   }
 
-  const toggleDept = (deptId: string) => {
-    setSelectedDeptIds((prev) =>
-      prev.includes(deptId) ? prev.filter((id) => id !== deptId) : [...prev, deptId]
+  const toggleGroup = (groupId: string) => {
+    setSelectedGroupIds((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
     )
   }
 
@@ -250,27 +250,27 @@ export default function AdminUsersPage() {
                     {editingDeptUserId === user.id ? (
                       <div className="space-y-2">
                         <div className="flex flex-wrap gap-1.5">
-                          {allDepartments.length === 0 ? (
+                          {allGroups.length === 0 ? (
                             <span className="text-xs text-gray-400">グループがありません</span>
                           ) : (
-                            allDepartments.map((dept) => (
+                            allGroups.map((group) => (
                               <button
-                                key={dept.id}
-                                onClick={() => toggleDept(dept.id)}
+                                key={group.id}
+                                onClick={() => toggleGroup(group.id)}
                                 className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
-                                  selectedDeptIds.includes(dept.id)
+                                  selectedGroupIds.includes(group.id)
                                     ? 'bg-green-100 text-green-700 border-green-300'
                                     : 'bg-white text-gray-500 border-gray-300 hover:border-green-300'
                                 }`}
                               >
-                                {dept.name}
+                                {group.name}
                               </button>
                             ))
                           )}
                         </div>
                         <div className="flex gap-1.5">
                           <button
-                            onClick={() => assignDepartmentsMutation.mutate({ userId: user.id, deptIds: selectedDeptIds })}
+                            onClick={() => assignDepartmentsMutation.mutate({ userId: user.id, groupIds: selectedGroupIds })}
                             disabled={assignDepartmentsMutation.isPending}
                             className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white rounded-md text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
                           >
@@ -292,17 +292,17 @@ export default function AdminUsersPage() {
                         className="flex flex-wrap gap-1 group"
                         title="クリックしてグループを編集"
                       >
-                        {(userDepartmentsCache[user.id] ?? []).length === 0 && editingDeptUserId !== user.id ? (
+                        {(userGroupsCache[user.id] ?? []).length === 0 && editingDeptUserId !== user.id ? (
                           <span className="text-xs text-gray-400 group-hover:text-blue-500 transition-colors">
                             グループなし（クリックして設定）
                           </span>
                         ) : (
-                          (userDepartmentsCache[user.id] ?? []).map((dept) => (
+                          (userGroupsCache[user.id] ?? []).map((group) => (
                             <span
-                              key={dept.id}
+                              key={group.id}
                               className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-md text-xs font-medium"
                             >
-                              {dept.name}
+                              {group.name}
                             </span>
                           ))
                         )}

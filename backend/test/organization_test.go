@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 )
@@ -22,6 +23,46 @@ func TestOrganization_Create(t *testing.T) {
 			"name": "",
 		})
 		assertStatus(t, status, http.StatusBadRequest, "create org without name")
+	})
+
+	t.Run("新規組織の組織Issueワークフローに未着手・進行・完了の3ステータスがある", func(t *testing.T) {
+		_, orgResp := ts.req(t, "POST", "/api/v1/organizations", map[string]interface{}{
+			"name": "シード検証株式会社",
+		})
+		orgID := mustGetString(t, orgResp, "data", "id")
+		st, wfListResp := ts.req(t, "GET", "/api/v1/workflows?org_id="+orgID, nil)
+		assertStatus(t, st, http.StatusOK, "list workflows for new org")
+		workflows := mustGetArray(t, wfListResp, "data")
+		var issueWfID string
+		for _, w := range workflows {
+			m := w.(map[string]interface{})
+			if m["name"].(string) == "組織Issue" {
+				issueWfID = fmt.Sprintf("%.0f", m["id"].(float64))
+				break
+			}
+		}
+		if issueWfID == "" {
+			t.Fatal("組織Issue workflow not found")
+		}
+		st2, statResp := ts.req(t, "GET", "/api/v1/workflows/"+issueWfID+"/statuses", nil)
+		assertStatus(t, st2, http.StatusOK, "GET statuses for 組織Issue")
+		arr := mustGetArray(t, statResp, "data")
+		if len(arr) != 3 {
+			t.Fatalf("expected 3 default statuses, got %d", len(arr))
+		}
+		names := make([]string, 0, 3)
+		for _, row := range arr {
+			names = append(names, row.(map[string]interface{})["name"].(string))
+		}
+		if names[0] != "未着手" || names[1] != "進行" || names[2] != "完了" {
+			t.Fatalf("default status names = %v, want [未着手 進行 完了]", names)
+		}
+		st3, transResp := ts.req(t, "GET", "/api/v1/workflows/"+issueWfID+"/transitions", nil)
+		assertStatus(t, st3, http.StatusOK, "GET transitions for 組織Issue")
+		transitions := mustGetArray(t, transResp, "data")
+		if len(transitions) != 4 {
+			t.Fatalf("expected 4 default workflow transitions, got %d", len(transitions))
+		}
 	})
 }
 

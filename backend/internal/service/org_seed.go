@@ -22,12 +22,12 @@ type orgSeedService struct {
 	statusRepo     repository.StatusRepository
 	roleRepo       repository.RoleRepository
 	projectRepo    repository.ProjectRepository
-	departmentRepo repository.DepartmentRepository
+	groupRepo      repository.GroupRepository
 	issueRepo      repository.IssueRepository
 	workflowRepo   repository.WorkflowRepository
 	transitionRepo repository.WorkflowTransitionRepository
 	psRepo         repository.ProjectStatusRepository
-	pstRepo        repository.ProjectStatusTransitionRepository
+	issueWFProv    *IssueWorkflowProvisioner
 }
 
 func NewOrgSeedService(
@@ -35,24 +35,24 @@ func NewOrgSeedService(
 	statusRepo repository.StatusRepository,
 	roleRepo repository.RoleRepository,
 	projectRepo repository.ProjectRepository,
-	departmentRepo repository.DepartmentRepository,
+	groupRepo repository.GroupRepository,
 	issueRepo repository.IssueRepository,
 	workflowRepo repository.WorkflowRepository,
 	transitionRepo repository.WorkflowTransitionRepository,
 	psRepo repository.ProjectStatusRepository,
-	pstRepo repository.ProjectStatusTransitionRepository,
+	issueWFProv *IssueWorkflowProvisioner,
 ) OrgSeedService {
 	return &orgSeedService{
 		orgRepo:        orgRepo,
 		statusRepo:     statusRepo,
 		roleRepo:       roleRepo,
 		projectRepo:    projectRepo,
-		departmentRepo: departmentRepo,
+		groupRepo:      groupRepo,
 		issueRepo:      issueRepo,
 		workflowRepo:   workflowRepo,
 		transitionRepo: transitionRepo,
 		psRepo:         psRepo,
-		pstRepo:        pstRepo,
+		issueWFProv:    issueWFProv,
 	}
 }
 
@@ -64,31 +64,22 @@ func (s *orgSeedService) ensureOrgIssueWorkflow(orgID uuid.UUID) error {
 	if err != gorm.ErrRecordNotFound {
 		return err
 	}
-	_, _, err = CreateWorkflowWithIssueStatuses(s.workflowRepo, s.statusRepo, s.transitionRepo, orgID, "組織Issue")
-	return err
-}
-
-func (s *orgSeedService) ensureProjectDefaultWorkflow(project *model.Project) error {
-	if project.DefaultWorkflowID != nil {
-		return nil
-	}
-	wfID, _, err := CreateWorkflowWithIssueStatuses(
-		s.workflowRepo, s.statusRepo, s.transitionRepo,
-		project.OrganizationID,
-		project.Name+" - Issue",
-	)
+	wfID, statusIDs, err := CreateOrgIssueWorkflowWithDefaultStatuses(s.workflowRepo, s.statusRepo, orgID, "組織Issue")
 	if err != nil {
 		return err
 	}
-	project.DefaultWorkflowID = &wfID
-	return s.projectRepo.Update(project)
+	return SeedDefaultIssueWorkflowTransitions(s.transitionRepo, wfID, statusIDs)
+}
+
+func (s *orgSeedService) ensureProjectDefaultWorkflow(project *model.Project) error {
+	return s.issueWFProv.EnsureDefaultForProject(project.ID)
 }
 
 func (s *orgSeedService) ensureProjectStatuses(project *model.Project) error {
 	if project.ProjectStatusID != nil {
 		return nil
 	}
-	firstID, err := SeedDefaultProjectStatuses(s.psRepo, s.pstRepo, project.ID)
+	firstID, err := SeedDefaultProjectStatuses(s.psRepo, project.ID)
 	if err != nil {
 		return err
 	}
@@ -117,9 +108,9 @@ func (s *orgSeedService) SeedNewOrganization(orgID uuid.UUID, ownerID *uuid.UUID
 		}
 	}
 
-	departments := []string{"開発部", "営業部", "管理部"}
-	for i, name := range departments {
-		if err := s.upsertDepartment(orgID, name, i+1); err != nil {
+	groups := []string{"開発部", "営業部", "管理部"}
+	for i, name := range groups {
+		if err := s.upsertGroup(orgID, name, i+1); err != nil {
 			return err
 		}
 	}
@@ -210,22 +201,22 @@ func (s *orgSeedService) upsertSampleProject(orgID uuid.UUID, ownerID uuid.UUID)
 	return project, nil
 }
 
-func (s *orgSeedService) upsertDepartment(orgID uuid.UUID, name string, _ int) error {
-	_, err := s.departmentRepo.FindByOrgAndName(orgID, name)
+func (s *orgSeedService) upsertGroup(orgID uuid.UUID, name string, _ int) error {
+	_, err := s.groupRepo.FindByOrgAndName(orgID, name)
 	if err == nil {
 		return nil
 	}
 	if err != gorm.ErrRecordNotFound {
 		return err
 	}
-	maxOrder, _ := s.departmentRepo.GetMaxOrder(orgID)
-	deptID := uuid.New()
+	maxOrder, _ := s.groupRepo.GetMaxOrder(orgID)
+	groupID := uuid.New()
 	key := strings.ReplaceAll(strings.ToLower(name), " ", "-")
 	if key == "" {
-		key = deptID.String()
+		key = groupID.String()
 	}
-	return s.departmentRepo.Create(&model.Department{
-		ID:             deptID,
+	return s.groupRepo.Create(&model.Group{
+		ID:             groupID,
 		Key:            key,
 		OrganizationID: orgID,
 		Name:           name,
@@ -235,7 +226,7 @@ func (s *orgSeedService) upsertDepartment(orgID uuid.UUID, name string, _ int) e
 }
 
 func (s *orgSeedService) upsertSampleIssue(orgID uuid.UUID, projectID uuid.UUID, reporterID uuid.UUID) error {
-	issues, err := s.issueRepo.FindByProject(projectID, nil)
+	issues, err := s.issueRepo.FindByProject(projectID)
 	if err != nil || len(issues) > 0 {
 		return err
 	}

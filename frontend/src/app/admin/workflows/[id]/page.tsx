@@ -1,37 +1,122 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { use } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import dagre from 'dagre'
 import { ChevronLeft, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { SortableDndProvider, SortableList, SortableTbody, DragHandle } from '@/components/SortableList'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthFetchEnabled } from '@/hooks/useAuthFetchEnabled'
-import type { Status, WorkflowTransition } from '@/types'
+import type { Status, Workflow, WorkflowTransition } from '@/types'
 import {
-  createWorkflowTransition,
-  createWorkflowStatus,
-  deleteWorkflowTransition,
-  deleteStatus,
   deleteWorkflowApi,
+  formatApiError,
   getWorkflow,
   getWorkflowStatuses,
   getWorkflowTransitions,
-  updateStatus,
-  updateWorkflowMeta,
+  saveWorkflowEditor,
 } from '@/lib/api'
+import {
+  draftToPayload,
+  transitionsFromDraft,
+  snapshotFromServer,
+  serializeEditorSnapshot,
+  statusesFromDraft,
+  type EditorDraftTransition,
+  type EditorSnapshot,
+} from '@/app/admin/workflows/[id]/workflowEditorSnapshot'
 
 type StatusDialogMode = 'create' | 'edit'
-type InvalidTransitionStrap = {
-  clientId: string
-  from_status_id: string
-  to_status_id: string
+type TransitionInvalidReason = 'same' | 'duplicate'
+type TransitionDiagramNode = {
+  id: string
+  name: string
+  color: string
+  x: number
+  y: number
+  isEntry: boolean
+  isTerminal: boolean
+}
+type TransitionDiagramEdge = {
+  id: string
+  from: string
+  to: string
+  invalid: boolean
+}
+
+/** API 由来の UUID 文字列の表記揺れ（大文字・小文字）で辺の端点とノード id が一致しないのを防ぐ */
+function normUuid(id: string): string {
+  return id.trim().toLowerCase()
+}
+
+function orient2(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
+  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+}
+
+function onSeg2(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): boolean {
+  return (
+    cx >= Math.min(ax, bx) - 1e-9 &&
+    cx <= Math.max(ax, bx) + 1e-9 &&
+    cy >= Math.min(ay, by) - 1e-9 &&
+    cy <= Math.max(ay, by) + 1e-9
+  )
+}
+
+/** 線分 AB と線分 CD が交差（端点接触含む） */
+function segmentsIntersect2(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number
+): boolean {
+  const o1 = orient2(ax, ay, bx, by, cx, cy)
+  const o2 = orient2(ax, ay, bx, by, dx, dy)
+  const o3 = orient2(cx, cy, dx, dy, ax, ay)
+  const o4 = orient2(cx, cy, dx, dy, bx, by)
+  if (o1 * o2 < 0 && o3 * o4 < 0) return true
+  if (o1 === 0 && onSeg2(ax, ay, bx, by, cx, cy)) return true
+  if (o2 === 0 && onSeg2(ax, ay, bx, by, dx, dy)) return true
+  if (o3 === 0 && onSeg2(cx, cy, dx, dy, ax, ay)) return true
+  if (o4 === 0 && onSeg2(cx, cy, dx, dy, bx, by)) return true
+  return false
+}
+
+/** 開線分が拡張矩形と交わるか（他ノード貫通の検知用） */
+function segmentHitsExpandedRect(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  rx: number,
+  ry: number,
+  rw: number,
+  rh: number
+): boolean {
+  const r2x = rx + rw
+  const r2y = ry + rh
+  const edges: [number, number, number, number][] = [
+    [rx, ry, r2x, ry],
+    [r2x, ry, r2x, r2y],
+    [r2x, r2y, rx, r2y],
+    [rx, r2y, rx, ry],
+  ]
+  for (const [x1, y1, x2, y2] of edges) {
+    if (segmentsIntersect2(ax, ay, bx, by, x1, y1, x2, y2)) return true
+  }
+  return false
 }
 
 export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const transitionDiagramDebugEnabled = searchParams.get('debug') === '1'
   const queryClient = useQueryClient()
   const authFetch = useAuthFetchEnabled()
   const { currentOrg } = useAuth()
@@ -55,9 +140,9 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     enabled: authFetch && !!id && !!workflow && orgMatches,
   })
 
-  const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState({ name: '', description: '' })
   const [error, setError] = useState('')
+  const [editorBaseline, setEditorBaseline] = useState<EditorSnapshot | null>(null)
+  const [editorDraft, setEditorDraft] = useState<EditorSnapshot | null>(null)
 
   const [statusDialogOpen, setStatusDialogOpen] = useState(false)
   const [statusDialogMode, setStatusDialogMode] = useState<StatusDialogMode>('create')
@@ -65,32 +150,52 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const [statusDialogForm, setStatusDialogForm] = useState({
     name: '',
     color: '#6B7280',
-    order: '',
   })
   const [statusDialogError, setStatusDialogError] = useState('')
-  const [transitionDrafts, setTransitionDrafts] = useState<
-    Record<number, { from_status_id: string; to_status_id: string; invalid: boolean }>
-  >({})
-  const [transitionBusyId, setTransitionBusyId] = useState<number | null>(null)
   const [transitionError, setTransitionError] = useState('')
-  const [addingTransition, setAddingTransition] = useState(false)
-  const [invalidTransitionStraps, setInvalidTransitionStraps] = useState<InvalidTransitionStrap[]>([])
+
+  const isDraftDirty = useMemo(() => {
+    if (!editorBaseline || !editorDraft) return false
+    return serializeEditorSnapshot(editorBaseline) !== serializeEditorSnapshot(editorDraft)
+  }, [editorBaseline, editorDraft])
 
   useEffect(() => {
-    if (workflow) {
-      setForm({ name: workflow.name, description: workflow.description ?? '' })
-    }
-  }, [workflow])
+    setEditorBaseline(null)
+    setEditorDraft(null)
+  }, [id])
 
-  const saveMutation = useMutation({
-    mutationFn: () => updateWorkflowMeta(id, { name: form.name, description: form.description }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id] })
-      queryClient.invalidateQueries({ queryKey: ['workflows'] })
-      setEditing(false)
-      setError('')
+  useEffect(() => {
+    if (!workflow || !orgMatches || statusesLoading || transitionsLoading) return
+    if (isDraftDirty) return
+    const snap = snapshotFromServer(workflow, statuses, transitions)
+    setEditorBaseline(structuredClone(snap))
+    setEditorDraft(structuredClone(snap))
+  }, [workflow, statuses, transitions, orgMatches, statusesLoading, transitionsLoading, isDraftDirty])
+
+  const saveEditorMutation = useMutation({
+    mutationFn: () => {
+      if (!editorDraft) throw new Error('ドラフトが未初期化です')
+      return saveWorkflowEditor(id, draftToPayload(editorDraft))
     },
-    onError: (e: Error) => setError(e.message),
+    onMutate: () => setError(''),
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ['workflow', currentOrg?.id, id] })
+      await queryClient.refetchQueries({ queryKey: ['workflow', currentOrg?.id, id, 'statuses'] })
+      await queryClient.refetchQueries({ queryKey: ['workflow', currentOrg?.id, id, 'transitions'] })
+      const wfRow = queryClient.getQueryData<Workflow>(['workflow', currentOrg?.id, id])
+      const st = queryClient.getQueryData<Status[]>(['workflow', currentOrg?.id, id, 'statuses']) ?? []
+      const tr =
+        queryClient.getQueryData<WorkflowTransition[]>(['workflow', currentOrg?.id, id, 'transitions']) ?? []
+      if (wfRow) {
+        const snap = snapshotFromServer(wfRow, st, tr)
+        setEditorBaseline(structuredClone(snap))
+        setEditorDraft(structuredClone(snap))
+      }
+      queryClient.invalidateQueries({ queryKey: ['workflows'] })
+      setError('')
+      setTransitionError('')
+    },
+    onError: (e: unknown) => setError(formatApiError(e)),
   })
 
   const deleteMutation = useMutation({
@@ -99,62 +204,13 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
       router.push('/admin/workflows')
     },
-    onError: (e: Error) => setError(e.message),
-  })
-
-  const addStatusMutation = useMutation({
-    mutationFn: (data: { name: string; color: string; order?: number }) => createWorkflowStatus(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'statuses'] })
-      setStatusDialogOpen(false)
-      setStatusDialogError('')
-    },
-    onError: (e: Error) => setStatusDialogError(e.message),
-  })
-
-  const updateStatusMutation = useMutation({
-    mutationFn: ({ statusId, data }: { statusId: string; data: { name: string; color: string; order: number } }) =>
-      updateStatus(statusId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'statuses'] })
-      setStatusDialogOpen(false)
-      setStatusDialogError('')
-    },
-    onError: (e: Error) => setStatusDialogError(e.message),
-  })
-
-  const deleteStatusMutation = useMutation({
-    mutationFn: (statusId: string) => deleteStatus(statusId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'statuses'] })
-      setStatusDialogError('')
-      setError('')
-    },
-    onError: (e: Error) => setError(e.message),
-  })
-
-  const createTransitionMutation = useMutation({
-    mutationFn: (data: { from_status_id: string; to_status_id: string }) => createWorkflowTransition(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'transitions'] })
-      setTransitionError('')
-    },
-    onError: (e: Error) => setTransitionError(e.message),
-  })
-
-  const deleteTransitionMutation = useMutation({
-    mutationFn: (transitionId: number) => deleteWorkflowTransition(id, transitionId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow', currentOrg?.id, id, 'transitions'] })
-      setTransitionError('')
-    },
-    onError: (e: Error) => setTransitionError(e.message),
+    onError: (e: unknown) => setError(formatApiError(e)),
   })
 
   const openCreateStatusDialog = () => {
     setStatusDialogMode('create')
     setStatusDialogStatusId(null)
-    setStatusDialogForm({ name: '', color: '#6B7280', order: '' })
+    setStatusDialogForm({ name: '', color: '#6B7280' })
     setStatusDialogError('')
     setStatusDialogOpen(true)
   }
@@ -165,14 +221,12 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     setStatusDialogForm({
       name: status.name,
       color: status.color,
-      order: String(status.order),
     })
     setStatusDialogError('')
     setStatusDialogOpen(true)
   }
 
   const closeStatusDialog = () => {
-    if (addStatusMutation.isPending || updateStatusMutation.isPending) return
     setStatusDialogOpen(false)
     setStatusDialogError('')
   }
@@ -180,8 +234,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const submitStatusDialog = () => {
     const name = statusDialogForm.name.trim()
     const color = statusDialogForm.color.trim()
-    const orderStr = statusDialogForm.order.trim()
-    const orderParsed = orderStr === '' ? NaN : parseInt(orderStr, 10)
 
     if (!name) {
       setStatusDialogError('ステータス名は必須です')
@@ -191,17 +243,29 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       setStatusDialogError('色は#RRGGBB形式で指定してください')
       return
     }
-    if (orderStr !== '' && (Number.isNaN(orderParsed) || orderParsed <= 0)) {
-      setStatusDialogError('表示順は1以上の整数で指定してください')
-      return
-    }
+
+    if (!editorDraft) return
 
     if (statusDialogMode === 'create') {
-      addStatusMutation.mutate({
-        name,
-        color,
-        ...(orderStr !== '' ? { order: orderParsed } : {}),
+      const cid =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `new-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      setEditorDraft({
+        ...editorDraft,
+        statuses: [
+          ...editorDraft.statuses,
+          {
+            client_id: cid,
+            name,
+            color,
+            is_entry: false,
+            is_terminal: false,
+          },
+        ],
       })
+      setStatusDialogOpen(false)
+      setStatusDialogError('')
       return
     }
 
@@ -209,123 +273,400 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       setStatusDialogError('編集対象のステータスが特定できません')
       return
     }
-    updateStatusMutation.mutate({
-      statusId: statusDialogStatusId,
-      data: {
-        name,
-        color,
-        order: Number.isNaN(orderParsed) ? 1 : orderParsed,
-      },
+    const sid = normUuid(statusDialogStatusId)
+    setEditorDraft({
+      ...editorDraft,
+      statuses: editorDraft.statuses.map((row) => {
+        const rid = row.id ? normUuid(row.id) : normUuid(row.client_id ?? '')
+        if (rid !== sid) return row
+        return { ...row, name, color }
+      }),
+    })
+    setStatusDialogOpen(false)
+    setStatusDialogError('')
+  }
+
+  const visibleStatuses = useMemo(() => {
+    if (!editorDraft) return []
+    return statusesFromDraft(editorDraft)
+  }, [editorDraft])
+
+  const draftTransitionRows = useMemo(() => {
+    if (!editorDraft) return []
+    return transitionsFromDraft(editorDraft)
+  }, [editorDraft])
+
+  const transitionDiagram = useMemo(() => {
+    if (!editorDraft) {
+      const nodeWidth = 170
+      const nodeHeight = 54
+      return {
+        nodeWidth,
+        nodeHeight,
+        width: 420,
+        height: 170,
+        nodes: [] as TransitionDiagramNode[],
+        nodeById: new Map<string, TransitionDiagramNode>(),
+        edges: [] as TransitionDiagramEdge[],
+      }
+    }
+    const visibleStatuses = statusesFromDraft(editorDraft)
+    const nodeWidth = 170
+    const nodeHeight = 54
+    const paddingX = 36
+    const paddingY = 30
+    const minWidth = 420
+    const minHeight = 170
+
+    const statusIdByNorm = new Map<string, string>()
+    for (const s of visibleStatuses) statusIdByNorm.set(normUuid(s.id), s.id)
+    const canonStatusId = (raw: string) => statusIdByNorm.get(normUuid(raw)) ?? raw
+
+    const persistedEdges: TransitionDiagramEdge[] = editorDraft.transitions.map((t) => {
+      let invalid = normUuid(t.from_ref) === normUuid(t.to_ref)
+      if (!invalid) {
+        for (const u of editorDraft.transitions) {
+          if (u.key === t.key) continue
+          if (
+            normUuid(u.from_ref) === normUuid(t.from_ref) &&
+            normUuid(u.to_ref) === normUuid(t.to_ref)
+          ) {
+            invalid = true
+            break
+          }
+        }
+      }
+      return {
+        id: `draft-${t.key}`,
+        from: canonStatusId(t.from_ref),
+        to: canonStatusId(t.to_ref),
+        invalid,
+      }
+    })
+    const edgeCandidates = persistedEdges
+
+    const visibleNodeIds = new Set(visibleStatuses.map((s) => s.id))
+    const edges = edgeCandidates.filter((e) => visibleNodeIds.has(e.from) && visibleNodeIds.has(e.to))
+
+    const degreeById = new Map<string, number>()
+    for (const s of visibleStatuses) degreeById.set(s.id, 0)
+    for (const e of edges) {
+      degreeById.set(e.from, (degreeById.get(e.from) ?? 0) + 1)
+      degreeById.set(e.to, (degreeById.get(e.to) ?? 0) + 1)
+    }
+
+    const connectedStatuses = visibleStatuses.filter((s) => (degreeById.get(s.id) ?? 0) > 0)
+    const disconnectedStatuses = visibleStatuses.filter((s) => (degreeById.get(s.id) ?? 0) === 0)
+
+    const graph = new dagre.graphlib.Graph()
+    graph.setGraph({
+      rankdir: 'LR',
+      ranksep: 100,
+      nodesep: 52,
+      marginx: paddingX,
+      marginy: paddingY,
+    })
+    graph.setDefaultEdgeLabel(() => ({}))
+
+    for (const s of connectedStatuses) {
+      graph.setNode(s.id, { width: nodeWidth, height: nodeHeight })
+    }
+    for (const e of edges) {
+      if (!graph.hasNode(e.from) || !graph.hasNode(e.to)) continue
+      graph.setEdge(e.from, e.to)
+    }
+    if (connectedStatuses.length > 0) {
+      dagre.layout(graph)
+    }
+
+    const connectedNodes: TransitionDiagramNode[] = connectedStatuses.map((s) => {
+      const laid = graph.node(s.id) as { x: number; y: number } | undefined
+      const defaultX = paddingX + nodeWidth / 2
+      const defaultY = paddingY + nodeHeight / 2
+      const centerX = laid?.x ?? defaultX
+      const centerY = laid?.y ?? defaultY
+      return {
+        id: s.id,
+        name: s.name,
+        color: s.color,
+        x: Math.round(centerX - nodeWidth / 2),
+        y: Math.round(centerY - nodeHeight / 2),
+        isEntry: s.is_entry === true,
+        isTerminal: s.is_terminal === true,
+      }
+    })
+
+    const connectedMaxX =
+      connectedNodes.length > 0
+        ? Math.max(...connectedNodes.map((n) => n.x + nodeWidth))
+        : paddingX + nodeWidth
+    const disconnectedStartX = connectedMaxX + 120
+    const disconnectedNodes: TransitionDiagramNode[] = disconnectedStatuses.map((s, idx) => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      x: disconnectedStartX,
+      y: paddingY + idx * (nodeHeight + 22),
+      isEntry: s.is_entry === true,
+      isTerminal: s.is_terminal === true,
+    }))
+
+    const nodes = [...connectedNodes, ...disconnectedNodes]
+    const nodeById = new Map(nodes.map((n) => [n.id, n]))
+    const drawnEdges = edges.filter((e) => nodeById.has(e.from) && nodeById.has(e.to))
+
+    // Curves can extend beyond node bounds. Reserve vertical padding and shift the whole drawing down if needed.
+    const hasLoop = drawnEdges.some((e) => e.from === e.to)
+    const hasReverseHorizontal = drawnEdges.some((e) => {
+      const f = nodeById.get(e.from)
+      const t = nodeById.get(e.to)
+      if (!f || !t) return false
+      const fromCx = f.x + nodeWidth / 2
+      const toCx = t.x + nodeWidth / 2
+      return toCx < fromCx
+    })
+    const extraTop = (hasReverseHorizontal ? 120 : 0) + (hasLoop ? 120 : 0) + 36
+    const extraBottom = (hasReverseHorizontal ? 72 : 0) + 36
+
+    for (const n of nodes) n.y += extraTop
+
+    const width = Math.max(
+      minWidth,
+      nodes.length > 0 ? Math.max(...nodes.map((n) => n.x + nodeWidth)) + paddingX : minWidth
+    )
+    const height = Math.max(
+      minHeight,
+      nodes.length > 0 ? Math.max(...nodes.map((n) => n.y + nodeHeight)) + paddingY + extraBottom : minHeight
+    )
+
+    return {
+      nodeWidth,
+      nodeHeight,
+      width,
+      height,
+      nodes,
+      nodeById,
+      edges: drawnEdges,
+    }
+  }, [editorDraft])
+
+  const transitionDiagramDebugPayload = useMemo(() => {
+    const label = (sid: string) =>
+      visibleStatuses.find((s) => normUuid(s.id) === normUuid(sid))?.name ?? sid
+    const edgesDrawn = transitionDiagram.edges.map((e) => ({
+      id: e.id,
+      from: e.from,
+      to: e.to,
+      fromLabel: label(e.from),
+      toLabel: label(e.to),
+      invalid: e.invalid,
+      reverseEdgeExists: transitionDiagram.edges.some(
+        (x) => normUuid(x.from) === normUuid(e.to) && normUuid(x.to) === normUuid(e.from)
+      ),
+    }))
+    const forwardKeys = new Set(
+      transitionDiagram.edges.map((e) => `${normUuid(e.from)}>${normUuid(e.to)}`)
+    )
+    const seenUndirected = new Set<string>()
+    const bidirectionalPairsInDraw: string[] = []
+    for (const e of transitionDiagram.edges) {
+      const a = normUuid(e.from)
+      const b = normUuid(e.to)
+      const uKey = a < b ? `${a}|${b}` : `${b}|${a}`
+      if (seenUndirected.has(uKey)) continue
+      seenUndirected.add(uKey)
+      if (forwardKeys.has(`${a}>${b}`) && forwardKeys.has(`${b}>${a}`)) {
+        bidirectionalPairsInDraw.push(`${label(e.from)} ⟷ ${label(e.to)}`)
+      }
+    }
+    return {
+      visibleStatusIds: visibleStatuses.map((s) => s.id),
+      visibleStatusKeys: visibleStatuses.map((s) => s.status_key),
+      draftTransitions: (editorDraft?.transitions ?? []).map((t) => ({
+        key: t.key,
+        from: t.from_ref,
+        to: t.to_ref,
+        fromLabel: label(t.from_ref),
+        toLabel: label(t.to_ref),
+      })),
+      bidirectionalPairsInDraw,
+      edgesDrawn,
+      nodesForDraw: transitionDiagram.nodes.map((n) => ({
+        id: n.id,
+        name: n.name,
+        x: n.x,
+        y: n.y,
+      })),
+      svg: { width: transitionDiagram.width, height: transitionDiagram.height },
+    }
+  }, [transitionDiagram, visibleStatuses, editorDraft?.transitions])
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+    console.log('[WorkflowTransitionDiagram] draw payload', transitionDiagramDebugPayload)
+  }, [transitionDiagramDebugPayload])
+
+  const applyEntryStatus = (targetId: string) => {
+    if (!editorDraft) return
+    const tid = normUuid(targetId)
+    setEditorDraft({
+      ...editorDraft,
+      statuses: editorDraft.statuses.map((s) => {
+        const sid = normUuid(s.id ?? s.client_id ?? '')
+        return { ...s, is_entry: sid === tid }
+      }),
     })
   }
 
-  const statusesByOrder = [...statuses].sort((a, b) => a.order - b.order)
-  const defaultStatusId = statusesByOrder[0]?.id
-
-  const getDisplayTransition = (t: WorkflowTransition) => transitionDrafts[t.id] ?? {
-    from_status_id: t.from_status_id,
-    to_status_id: t.to_status_id,
-    invalid: false,
+  const toggleTerminalStatus = (st: Status) => {
+    if (!editorDraft) return
+    const tid = normUuid(st.id)
+    setEditorDraft({
+      ...editorDraft,
+      statuses: editorDraft.statuses.map((s) => {
+        const sid = normUuid(s.id ?? s.client_id ?? '')
+        if (sid !== tid) return s
+        if (s.is_entry) return s
+        return { ...s, is_terminal: !s.is_terminal }
+      }),
+    })
   }
 
-  const isInvalidTransition = (fromStatusId: string, toStatusId: string) => fromStatusId === toStatusId
+  const entryRadioName = `workflow-${id}-entry`
 
-  const addTransitionStrap = async () => {
-    if (!defaultStatusId || addingTransition) return
-    if (isInvalidTransition(defaultStatusId, defaultStatusId)) {
-      const clientId = `invalid-${Date.now()}-${Math.random().toString(36).slice(2)}`
-      setInvalidTransitionStraps((prev) => [
-        ...prev,
-        { clientId, from_status_id: defaultStatusId, to_status_id: defaultStatusId },
-      ])
-      return
-    }
-    setAddingTransition(true)
-    try {
-      await createTransitionMutation.mutateAsync({
-        from_status_id: defaultStatusId,
-        to_status_id: defaultStatusId,
-      })
-    } catch {
-      // onError で transitionError を表示するため、ここでは握りつぶす
-    } finally {
-      setAddingTransition(false)
-    }
+  const statusReferencedInTransition = (statusId: string) => {
+    const u = normUuid(statusId)
+    if (!editorDraft) return false
+    return editorDraft.transitions.some(
+      (t) => normUuid(t.from_ref) === u || normUuid(t.to_ref) === u
+    )
   }
+  const initialFromStatusId = visibleStatuses[0]?.id
+  const initialToStatusId = visibleStatuses[1]?.id
 
-  const deleteTransitionStrap = async (transitionId: number) => {
-    setTransitionBusyId(transitionId)
-    try {
-      await deleteTransitionMutation.mutateAsync(transitionId)
-      setTransitionDrafts((prev) => {
-        const next = { ...prev }
-        delete next[transitionId]
-        return next
-      })
-    } finally {
-      setTransitionBusyId(null)
-    }
-  }
-
-  const changeTransitionStrap = async (
-    transitionId: number,
-    field: 'from_status_id' | 'to_status_id',
-    value: string
-  ) => {
-    const base = transitions.find((t) => t.id === transitionId)
-    if (!base) return
-    const current = getDisplayTransition(base)
-    const nextFrom = field === 'from_status_id' ? value : current.from_status_id
-    const nextTo = field === 'to_status_id' ? value : current.to_status_id
-    const invalid = isInvalidTransition(nextFrom, nextTo)
-    setTransitionDrafts((prev) => ({
-      ...prev,
-      [transitionId]: { from_status_id: nextFrom, to_status_id: nextTo, invalid },
-    }))
-    if (invalid) return
-
-    setTransitionBusyId(transitionId)
-    try {
-      await deleteTransitionMutation.mutateAsync(transitionId)
-      await createTransitionMutation.mutateAsync({ from_status_id: nextFrom, to_status_id: nextTo })
-      setTransitionDrafts((prev) => {
-        const next = { ...prev }
-        delete next[transitionId]
-        return next
-      })
-    } catch {
-      // onError で transitionError を表示するため、ここでは握りつぶす
-    } finally {
-      setTransitionBusyId(null)
-    }
-  }
-
-  const removeInvalidTransitionStrap = (clientId: string) => {
-    setInvalidTransitionStraps((prev) => prev.filter((s) => s.clientId !== clientId))
-  }
-
-  const changeInvalidTransitionStrap = async (
-    clientId: string,
-    field: 'from_status_id' | 'to_status_id',
-    value: string
-  ) => {
-    const current = invalidTransitionStraps.find((s) => s.clientId === clientId)
-    if (!current) return
-    const nextFrom = field === 'from_status_id' ? value : current.from_status_id
-    const nextTo = field === 'to_status_id' ? value : current.to_status_id
-    const invalid = isInvalidTransition(nextFrom, nextTo)
-    if (invalid) {
-      setInvalidTransitionStraps((prev) =>
-        prev.map((s) => (s.clientId === clientId ? { ...s, from_status_id: nextFrom, to_status_id: nextTo } : s))
+  const transitionReasonForDraftKey = (
+    key: string,
+    fromStatusId: string,
+    toStatusId: string
+  ): TransitionInvalidReason | null => {
+    if (!editorDraft) return null
+    if (normUuid(fromStatusId) === normUuid(toStatusId)) return 'same'
+    for (const t of editorDraft.transitions) {
+      if (t.key === key) continue
+      if (
+        normUuid(t.from_ref) === normUuid(fromStatusId) &&
+        normUuid(t.to_ref) === normUuid(toStatusId)
       )
+        return 'duplicate'
+    }
+    return null
+  }
+
+  const transitionStrapPending = saveEditorMutation.isPending
+
+  const reorderDraftTransitions = (orderedKeys: string[]) => {
+    if (!editorDraft) return
+    const byKey = new Map(editorDraft.transitions.map((x) => [x.key, x]))
+    const next = orderedKeys.map((k) => byKey.get(k)).filter(Boolean) as EditorDraftTransition[]
+    setEditorDraft({ ...editorDraft, transitions: next })
+  }
+
+  const reorderDraftStatuses = (orderedIds: string[]) => {
+    if (!editorDraft) return
+    const byEff = new Map(
+      editorDraft.statuses.map((s) => [normUuid(s.id ?? s.client_id ?? ''), s])
+    )
+    const next = orderedIds
+      .map((oid) => byEff.get(normUuid(oid)))
+      .filter(Boolean) as typeof editorDraft.statuses
+    setEditorDraft({ ...editorDraft, statuses: next })
+  }
+
+  const addTransitionStrap = () => {
+    if (!editorDraft || !initialFromStatusId || !initialToStatusId) return
+    const key = `n-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    setEditorDraft({
+      ...editorDraft,
+      transitions: [
+        ...editorDraft.transitions,
+        {
+          key,
+          from_ref: normUuid(initialFromStatusId),
+          to_ref: normUuid(initialToStatusId),
+        },
+      ],
+    })
+  }
+
+  const deleteTransitionStrapByKey = (transitionKey: string) => {
+    if (!editorDraft) return
+    setEditorDraft({
+      ...editorDraft,
+      transitions: editorDraft.transitions.filter((t) => t.key !== transitionKey),
+    })
+  }
+
+  const changeTransitionStrap = (
+    transitionKey: string,
+    field: 'from_status_id' | 'to_status_id',
+    value: string
+  ) => {
+    if (!editorDraft) return
+    const v = normUuid(value)
+    setEditorDraft({
+      ...editorDraft,
+      transitions: editorDraft.transitions.map((t) => {
+        if (t.key !== transitionKey) return t
+        if (field === 'from_status_id') return { ...t, from_ref: v }
+        return { ...t, to_ref: v }
+      }),
+    })
+  }
+
+  const removeStatusFromDraft = (statusId: string) => {
+    if (!editorDraft) return
+    const u = normUuid(statusId)
+    const nextStatuses = editorDraft.statuses.filter(
+      (s) => normUuid(s.id ?? s.client_id ?? '') !== u
+    )
+    const nextTrans = editorDraft.transitions.filter(
+      (t) => normUuid(t.from_ref) !== u && normUuid(t.to_ref) !== u
+    )
+    setEditorDraft({ ...editorDraft, statuses: nextStatuses, transitions: nextTrans })
+  }
+
+  const tryNavigateAway = useCallback(
+    (href: string) => {
+      if (
+        orgMatches &&
+        isDraftDirty &&
+        !window.confirm('保存していない変更があります。ページを離れますか？')
+      ) {
+        return
+      }
+      router.push(href)
+    },
+    [orgMatches, isDraftDirty, router]
+  )
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isDraftDirty || !orgMatches) return
+      e.preventDefault()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [isDraftDirty, orgMatches])
+
+  const cancelEditorDraft = () => {
+    if (!editorBaseline) return
+    if (
+      isDraftDirty &&
+      !window.confirm('保存していない変更を破棄してよいですか？')
+    ) {
       return
     }
-    try {
-      await createTransitionMutation.mutateAsync({ from_status_id: nextFrom, to_status_id: nextTo })
-      setInvalidTransitionStraps((prev) => prev.filter((s) => s.clientId !== clientId))
-    } catch {
-      // onError で transitionError を表示するため、ここでは握りつぶす
-    }
+    setEditorDraft(structuredClone(editorBaseline))
   }
 
   if (!authFetch) {
@@ -333,7 +674,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   }
   if (!currentOrg?.id) {
     return (
-      <div className="max-w-3xl mx-auto p-6">
+      <div className="w-full max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           現在の組織が選択されていません。プロジェクト一覧に戻り、右上の組織から選択してください。
         </div>
@@ -348,70 +689,75 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   }
 
   const orgMismatch = !orgMatches
+  const atStatusDeleteFloor = (editorDraft?.statuses.length ?? 0) <= 2
   const statusDialogTitle = statusDialogMode === 'create' ? 'ステータスを追加' : 'ステータスを編集'
-  const statusDialogSaving = addStatusMutation.isPending || updateStatusMutation.isPending
+  const statusDialogSaving = false
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <Link
-        href="/admin/workflows"
+    <div className="w-full max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <button
+        type="button"
+        onClick={() => tryNavigateAway('/admin/workflows')}
         className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-6"
       >
         <ChevronLeft className="w-4 h-4" />
         一覧へ
-      </Link>
+      </button>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         {orgMismatch && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             このワークフローは<strong>現在選択中の組織</strong>に属していません。右上で組織を切り替えるか、
-            <Link href="/admin/workflows" className="text-blue-700 underline">
+            <button
+              type="button"
+              onClick={() => tryNavigateAway('/admin/workflows')}
+              className="text-blue-700 underline"
+            >
               ワークフロー一覧
-            </Link>
+            </button>
             から開き直してください。
           </div>
         )}
         <div className="flex justify-between items-start gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{workflow.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {editorDraft?.meta.name ?? workflow.name}
+            </h1>
             {!orgMismatch && currentOrg && (
               <p className="mt-1 text-sm text-gray-500">
                 選択中の組織: <span className="font-medium text-gray-800">{currentOrg.name}</span>
               </p>
             )}
-            <p className="mt-2 text-gray-600 whitespace-pre-wrap">{workflow.description || '—'}</p>
+            <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 inline-block">
+              変更は「保存する」でサーバに反映されます（画面は自動では遷移しません）。
+            </p>
           </div>
-          <div className="flex gap-2">
-            {!orgMismatch && !editing ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setForm({ name: workflow.name, description: workflow.description ?? '' })
-                  setEditing(true)
-                }}
-                className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
-              >
-                編集
-              </button>
-            ) : !orgMismatch && editing ? (
+          <div className="flex flex-wrap gap-2 justify-end">
+            {!orgMismatch && (
               <>
                 <button
                   type="button"
-                  onClick={() => saveMutation.mutate()}
-                  disabled={saveMutation.isPending || !form.name.trim()}
+                  onClick={() => saveEditorMutation.mutate()}
+                  disabled={
+                    saveEditorMutation.isPending ||
+                    !isDraftDirty ||
+                    !(editorDraft?.meta.name?.trim()) ||
+                    visibleStatuses.length < 2
+                  }
                   className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
-                  保存
+                  {saveEditorMutation.isPending ? '保存中…' : '保存する'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditing(false)}
-                  className="px-3 py-1.5 text-sm border rounded-lg"
+                  onClick={cancelEditorDraft}
+                  disabled={saveEditorMutation.isPending || !isDraftDirty}
+                  className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50"
                 >
-                  取消
+                  変更を破棄
                 </button>
               </>
-            ) : null}
+            )}
             {!orgMismatch && (
               <button
                 type="button"
@@ -427,21 +773,43 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           </div>
         </div>
 
-        {!orgMismatch && editing && (
+        {error && (
+          <div
+            className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+            role="alert"
+          >
+            <p className="font-medium text-red-800">保存または削除に失敗しました</p>
+            <p className="mt-1 whitespace-pre-wrap">{error}</p>
+          </div>
+        )}
+
+        {!orgMismatch && (
           <div className="mt-6 space-y-4 border-t pt-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">名前</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">ワークフロー名</label>
               <input
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                value={editorDraft?.meta.name ?? ''}
+                onChange={(e) =>
+                  editorDraft &&
+                  setEditorDraft({
+                    ...editorDraft,
+                    meta: { ...editorDraft.meta, name: e.target.value },
+                  })
+                }
                 className="w-full border rounded-lg px-3 py-2"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">説明</label>
               <textarea
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                value={editorDraft?.meta.description ?? ''}
+                onChange={(e) =>
+                  editorDraft &&
+                  setEditorDraft({
+                    ...editorDraft,
+                    meta: { ...editorDraft.meta, description: e.target.value },
+                  })
+                }
                 rows={4}
                 className="w-full border rounded-lg px-3 py-2"
               />
@@ -456,8 +824,13 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           {!orgMismatch && (
             <button
               type="button"
-              onClick={() => void addTransitionStrap()}
-              disabled={addingTransition || !defaultStatusId}
+              onClick={() => addTransitionStrap()}
+              disabled={visibleStatuses.length < 2}
+              title={
+                visibleStatuses.length < 2
+                  ? 'ステータスが2つ以上あるときのみ遷移を追加できます'
+                  : undefined
+              }
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               <Plus className="w-4 h-4" />
@@ -465,6 +838,271 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
             </button>
           )}
         </div>
+        {!orgMismatch && (
+          <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50/60 p-4">
+            <h3 className="text-sm font-semibold text-gray-900">遷移図</h3>
+            <p className="mt-1 text-xs text-gray-600">現在の許可遷移を図で表示しています。</p>
+            {(statusesLoading || transitionsLoading) && (
+              <p className="mt-3 text-sm text-gray-500">遷移図を読み込み中...</p>
+            )}
+            {!statusesLoading && !transitionsLoading && visibleStatuses.length < 2 && (
+              <p className="mt-3 text-sm text-gray-500">ステータスが2つ以上あるときに遷移図を表示できます。</p>
+            )}
+            {!statusesLoading && !transitionsLoading && visibleStatuses.length >= 2 && (
+              <div className="mt-3 overflow-x-auto">
+                <svg
+                  width="100%"
+                  viewBox={`0 0 ${transitionDiagram.width} ${transitionDiagram.height}`}
+                  preserveAspectRatio="xMinYMin meet"
+                  className="h-auto min-w-[640px] xl:min-w-0"
+                  role="img"
+                  aria-label="ステータス遷移図"
+                >
+                  <defs>
+                    <marker
+                      id="transition-arrow"
+                      markerWidth="10"
+                      markerHeight="10"
+                      refX="8"
+                      refY="3"
+                      orient="auto"
+                      markerUnits="strokeWidth"
+                    >
+                      <path d="M0,0 L0,6 L9,3 z" fill="#94A3B8" />
+                    </marker>
+                    <marker
+                      id="transition-arrow-invalid"
+                      markerWidth="10"
+                      markerHeight="10"
+                      refX="8"
+                      refY="3"
+                      orient="auto"
+                      markerUnits="strokeWidth"
+                    >
+                      <path d="M0,0 L0,6 L9,3 z" fill="#D97706" />
+                    </marker>
+                  </defs>
+
+                  {transitionDiagram.edges.map((edge, idx) => {
+                    const from = transitionDiagram.nodeById.get(edge.from)
+                    const to = transitionDiagram.nodeById.get(edge.to)
+                    if (!from || !to) return null
+
+                    const samePair = transitionDiagram.edges.filter(
+                      (e) =>
+                        (normUuid(e.from) === normUuid(edge.from) &&
+                          normUuid(e.to) === normUuid(edge.to)) ||
+                        (normUuid(e.from) === normUuid(edge.to) &&
+                          normUuid(e.to) === normUuid(edge.from))
+                    )
+                    const samePairIndex = samePair.findIndex((e) => e.id === edge.id)
+                    const pairSep = samePair.length > 1 ? 34 : 18
+                    const pairOffset = (samePairIndex - (samePair.length - 1) / 2) * pairSep
+
+                    let path = ''
+                    if (edge.from === edge.to) {
+                      // 自己ループのみ折れ線（曲線は使わない）
+                      const sx = from.x + transitionDiagram.nodeWidth
+                      const sy = from.y + transitionDiagram.nodeHeight / 2
+                      const pad = 28 + (idx % 3) * 7
+                      const lift = 38 + (idx % 2) * 10
+                      const lx = from.x
+                      path = `M ${sx} ${sy} L ${sx + pad} ${sy} L ${sx + pad} ${sy - lift} L ${lx} ${sy - lift} L ${lx} ${sy}`
+                    } else {
+                      const fromCx = from.x + transitionDiagram.nodeWidth / 2
+                      const fromCy = from.y + transitionDiagram.nodeHeight / 2
+                      const toCx = to.x + transitionDiagram.nodeWidth / 2
+                      const toCy = to.y + transitionDiagram.nodeHeight / 2
+                      const centerDx = toCx - fromCx
+                      const centerDy = toCy - fromCy
+
+                      const horizontalDominant = Math.abs(centerDx) >= Math.abs(centerDy)
+                      const fromCandidates = [
+                        { x: from.x + transitionDiagram.nodeWidth, y: fromCy, side: 'right' as const },
+                        { x: from.x, y: fromCy, side: 'left' as const },
+                        { x: fromCx, y: from.y, side: 'top' as const },
+                        { x: fromCx, y: from.y + transitionDiagram.nodeHeight, side: 'bottom' as const },
+                      ]
+                      const toCandidates = [
+                        { x: to.x + transitionDiagram.nodeWidth, y: toCy, side: 'right' as const },
+                        { x: to.x, y: toCy, side: 'left' as const },
+                        { x: toCx, y: to.y, side: 'top' as const },
+                        { x: toCx, y: to.y + transitionDiagram.nodeHeight, side: 'bottom' as const },
+                      ]
+
+                      let best = {
+                        sx: fromCandidates[0].x,
+                        sy: fromCandidates[0].y,
+                        ex: toCandidates[0].x,
+                        ey: toCandidates[0].y,
+                        score: Number.POSITIVE_INFINITY,
+                      }
+                      for (const s of fromCandidates) {
+                        for (const t of toCandidates) {
+                          const dx = t.x - s.x
+                          const dy = t.y - s.y
+                          const d2 = dx * dx + dy * dy
+                          const sIsVertical = s.side === 'top' || s.side === 'bottom'
+                          const tIsVertical = t.side === 'top' || t.side === 'bottom'
+                          const orientationPenalty =
+                            (horizontalDominant && (sIsVertical || tIsVertical)) ||
+                            (!horizontalDominant && (!sIsVertical || !tIsVertical))
+                              ? 8000
+                              : 0
+                          const score = d2 + orientationPenalty
+                          if (score < best.score) best = { sx: s.x, sy: s.y, ex: t.x, ey: t.y, score }
+                        }
+                      }
+
+                      const startX = best.sx
+                      const startY = best.sy
+                      const endX = best.ex
+                      const endY = best.ey
+
+                      const dx = endX - startX
+                      const dy = endY - startY
+                      const dist = Math.max(1, Math.hypot(dx, dy))
+                      const ux = dx / dist
+                      const uy = dy / dist
+                      const nx = -uy
+                      const ny = ux
+
+                      // 直線＋法線方向の平行オフセット（双方向の分離＋他ノード貫通の回避）
+                      const basePerp = samePair.length > 1 ? pairOffset : 0
+                      const obstaclePad = 8
+                      const avoidStep = 20
+                      const avoidMaxK = 32
+
+                      const blockers = transitionDiagram.nodes.filter(
+                        (n) =>
+                          normUuid(n.id) !== normUuid(edge.from) &&
+                          normUuid(n.id) !== normUuid(edge.to)
+                      )
+                      const nw = transitionDiagram.nodeWidth
+                      const nh = transitionDiagram.nodeHeight
+
+                      const hitsObstacle = (perpMag: number) => {
+                        const px1 = startX + nx * perpMag
+                        const py1 = startY + ny * perpMag
+                        const px2 = endX + nx * perpMag
+                        const py2 = endY + ny * perpMag
+                        for (const n of blockers) {
+                          const rx = n.x - obstaclePad
+                          const ry = n.y - obstaclePad
+                          const rw = nw + obstaclePad * 2
+                          const rh = nh + obstaclePad * 2
+                          if (segmentHitsExpandedRect(px1, py1, px2, py2, rx, ry, rw, rh)) {
+                            return true
+                          }
+                        }
+                        return false
+                      }
+
+                      let chosenPerp = basePerp
+                      if (hitsObstacle(chosenPerp)) {
+                        let best: number | null = null
+                        let bestAbs = Number.POSITIVE_INFINITY
+                        for (let k = 1; k <= avoidMaxK; k++) {
+                          for (const s of [1, -1] as const) {
+                            const tryPerp = basePerp + s * k * avoidStep
+                            if (!hitsObstacle(tryPerp)) {
+                              const ad = Math.abs(tryPerp - basePerp)
+                              if (ad < bestAbs) {
+                                bestAbs = ad
+                                best = tryPerp
+                              }
+                            }
+                          }
+                        }
+                        if (best !== null) chosenPerp = best
+                      }
+
+                      const sx1 = startX + nx * chosenPerp
+                      const sy1 = startY + ny * chosenPerp
+                      const ex1 = endX + nx * chosenPerp
+                      const ey1 = endY + ny * chosenPerp
+                      path = `M ${sx1} ${sy1} L ${ex1} ${ey1}`
+                    }
+
+                    return (
+                      <path
+                        key={edge.id}
+                        d={path}
+                        fill="none"
+                        stroke={edge.invalid ? '#D97706' : '#94A3B8'}
+                        strokeWidth="2"
+                        strokeDasharray={edge.invalid ? '5 4' : undefined}
+                        markerEnd={edge.invalid ? 'url(#transition-arrow-invalid)' : 'url(#transition-arrow)'}
+                      />
+                    )
+                  })}
+
+                  {transitionDiagram.nodes.map((node) => (
+                    <g key={node.id}>
+                      <rect
+                        x={node.x}
+                        y={node.y}
+                        width={transitionDiagram.nodeWidth}
+                        height={transitionDiagram.nodeHeight}
+                        rx="10"
+                        fill="#ffffff"
+                        stroke="#D1D5DB"
+                      />
+                      <circle cx={node.x + 16} cy={node.y + 16} r="6" fill={node.color} />
+                      <text
+                        x={node.x + 30}
+                        y={node.y + 20}
+                        fontSize="12"
+                        fontWeight="600"
+                        fill="#111827"
+                        dominantBaseline="middle"
+                      >
+                        {node.name}
+                      </text>
+                      {node.isEntry && (
+                        <text
+                          x={node.x + transitionDiagram.nodeWidth - 8}
+                          y={node.y + 12}
+                          fontSize="9"
+                          fontWeight="700"
+                          fill="#0369A1"
+                          textAnchor="end"
+                        >
+                          START
+                        </text>
+                      )}
+                      {node.isTerminal && (
+                        <text
+                          x={node.x + transitionDiagram.nodeWidth - 8}
+                          y={node.y + (node.isEntry ? 24 : 12)}
+                          fontSize="9"
+                          fontWeight="700"
+                          fill="#15803D"
+                          textAnchor="end"
+                        >
+                          GOAL
+                        </text>
+                      )}
+                    </g>
+                  ))}
+                </svg>
+                {transitionDiagram.edges.length === 0 && (
+                  <p className="mt-2 text-xs text-gray-500">遷移はまだありません。下の「ストラップを追加」から作成できます。</p>
+                )}
+                {transitionDiagram.edges.some((e) => e.invalid) && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    破線の矢印は未保存の無効な遷移候補（同一ステータスまたは重複）です。
+                  </p>
+                )}
+                {transitionDiagramDebugEnabled && (
+                  <pre className="mt-3 max-h-64 overflow-auto rounded border border-amber-200 bg-amber-50/80 p-3 text-left text-[11px] leading-snug text-gray-800">
+                    {JSON.stringify(transitionDiagramDebugPayload, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {orgMismatch && (
           <p className="text-sm text-gray-500">
             選択中の組織に属するワークフローのみ、遷移設定を表示・編集できます。
@@ -473,161 +1111,115 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         {!orgMismatch && (statusesLoading || transitionsLoading) && (
           <p className="text-sm text-gray-500">遷移設定を読み込み中...</p>
         )}
-        {!orgMismatch && !statusesLoading && !transitionsLoading && statusesByOrder.length === 0 && (
-          <p className="text-sm text-gray-500">有効なステータスがないため、遷移を追加できません。</p>
-        )}
-        {!orgMismatch && !transitionsLoading && transitions.length === 0 && statusesByOrder.length > 0 && (
-          <p className="text-sm text-gray-500">遷移はまだありません。「ストラップを追加」から作成できます。</p>
-        )}
-        {!orgMismatch && !transitionsLoading && transitions.length > 0 && (
-          <div className="space-y-2">
-            {transitions.map((t) => {
-              const row = getDisplayTransition(t)
-              const busy = transitionBusyId === t.id
-              return (
-                <div
-                  key={t.id}
-                  className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${row.invalid ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}
-                >
-                  <select
-                    value={row.from_status_id}
-                    onChange={(e) => void changeTransitionStrap(t.id, 'from_status_id', e.target.value)}
-                    disabled={busy || deleteTransitionMutation.isPending || createTransitionMutation.isPending}
-                    className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
-                  >
-                    {statusesByOrder.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.order}. {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-gray-500">→</span>
-                  <select
-                    value={row.to_status_id}
-                    onChange={(e) => void changeTransitionStrap(t.id, 'to_status_id', e.target.value)}
-                    disabled={busy || deleteTransitionMutation.isPending || createTransitionMutation.isPending}
-                    className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
-                  >
-                    {statusesByOrder.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.order}. {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  {row.invalid && (
-                    <span className="text-xs text-amber-700 border border-amber-300 rounded px-2 py-0.5">
-                      無効（遷移前後が同一）
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => void deleteTransitionStrap(t.id)}
-                    disabled={busy || deleteTransitionMutation.isPending || createTransitionMutation.isPending}
-                    className="ml-auto p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
-                    title="削除"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              )
-            })}
-            {invalidTransitionStraps.map((s) => (
-              <div
-                key={s.clientId}
-                className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 border-amber-300 bg-amber-50"
-              >
-                <select
-                  value={s.from_status_id}
-                  onChange={(e) => void changeInvalidTransitionStrap(s.clientId, 'from_status_id', e.target.value)}
-                  disabled={createTransitionMutation.isPending}
-                  className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
-                >
-                  {statusesByOrder.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.order}. {st.name}
-                    </option>
-                  ))}
-                </select>
-                <span className="text-gray-500">→</span>
-                <select
-                  value={s.to_status_id}
-                  onChange={(e) => void changeInvalidTransitionStrap(s.clientId, 'to_status_id', e.target.value)}
-                  disabled={createTransitionMutation.isPending}
-                  className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
-                >
-                  {statusesByOrder.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.order}. {st.name}
-                    </option>
-                  ))}
-                </select>
-                <span className="text-xs text-amber-700 border border-amber-300 rounded px-2 py-0.5">
-                  無効（遷移前後が同一）
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeInvalidTransitionStrap(s.clientId)}
-                  disabled={createTransitionMutation.isPending}
-                  className="ml-auto p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
-                  title="削除"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
+        {!orgMismatch && !statusesLoading && !transitionsLoading && visibleStatuses.length < 2 && (
+          <p className="text-sm text-gray-500">
+            ステータスが2つ以上あるときのみ遷移を追加できます。まず「ステータスを追加」でステータスを用意してください。
+          </p>
         )}
         {!orgMismatch &&
+          !statusesLoading &&
           !transitionsLoading &&
-          transitions.length === 0 &&
-          invalidTransitionStraps.length > 0 && (
-            <div className="space-y-2">
-              {invalidTransitionStraps.map((s) => (
-                <div
-                  key={s.clientId}
-                  className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 border-amber-300 bg-amber-50"
-                >
-                  <select
-                    value={s.from_status_id}
-                    onChange={(e) => void changeInvalidTransitionStrap(s.clientId, 'from_status_id', e.target.value)}
-                    disabled={createTransitionMutation.isPending}
-                    className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
-                  >
-                    {statusesByOrder.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.order}. {st.name}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-gray-500">→</span>
-                  <select
-                    value={s.to_status_id}
-                    onChange={(e) => void changeInvalidTransitionStrap(s.clientId, 'to_status_id', e.target.value)}
-                    disabled={createTransitionMutation.isPending}
-                    className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
-                  >
-                    {statusesByOrder.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.order}. {st.name}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-xs text-amber-700 border border-amber-300 rounded px-2 py-0.5">
-                    無効（遷移前後が同一）
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => removeInvalidTransitionStrap(s.clientId)}
-                    disabled={createTransitionMutation.isPending}
-                    className="ml-auto p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
-                    title="削除"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          draftTransitionRows.length === 0 &&
+          visibleStatuses.length >= 2 && (
+          <p className="text-sm text-gray-500">遷移はまだありません。「ストラップを追加」から作成できます。</p>
+        )}
+        {!orgMismatch && !transitionsLoading && draftTransitionRows.length > 0 && (
+          <div className="space-y-2">
+            <SortableDndProvider
+              items={editorDraft?.transitions ?? []}
+              itemId={(t) => t.key}
+              onReorder={reorderDraftTransitions}
+              disabled={transitionStrapPending}
+            >
+              <SortableList
+                items={editorDraft?.transitions ?? []}
+                itemId={(t) => t.key}
+                onReorder={() => {}}
+                renderItem={(t, props) => {
+                  const reason = transitionReasonForDraftKey(t.key, t.from_ref, t.to_ref)
+                  const fromSt = visibleStatuses.find((x) => normUuid(x.id) === normUuid(t.from_ref))
+                  const toSt = visibleStatuses.find((x) => normUuid(x.id) === normUuid(t.to_ref))
+                  const fromVal = fromSt?.id ?? visibleStatuses[0]?.id ?? ''
+                  const toVal = toSt?.id ?? visibleStatuses[0]?.id ?? ''
+                  return (
+                    <div
+                      key={t.key}
+                      ref={props.setNodeRef}
+                      style={props.style}
+                      className={`flex flex-wrap xl:flex-nowrap items-center gap-2 rounded-lg border px-3 py-2 ${reason ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}
+                    >
+                      <DragHandle handleProps={props.handleProps} />
+                      <select
+                        value={fromVal}
+                        onChange={(e) => changeTransitionStrap(t.key, 'from_status_id', e.target.value)}
+                        disabled={transitionStrapPending}
+                        className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
+                      >
+                        {visibleStatuses.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                      {fromSt?.is_entry && (
+                        <span className="text-[10px] font-semibold text-sky-700 border border-sky-200 rounded px-1 py-0.5">
+                          開始
+                        </span>
+                      )}
+                      {fromSt?.is_terminal && (
+                        <span className="text-[10px] font-semibold text-emerald-800 border border-emerald-200 rounded px-1 py-0.5">
+                          終了
+                        </span>
+                      )}
+                      <span className="text-gray-500">→</span>
+                      <select
+                        value={toVal}
+                        onChange={(e) => changeTransitionStrap(t.key, 'to_status_id', e.target.value)}
+                        disabled={transitionStrapPending}
+                        className="min-w-44 border rounded-lg px-2 py-1.5 text-sm"
+                      >
+                        {visibleStatuses.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                      {toSt?.is_entry && (
+                        <span className="text-[10px] font-semibold text-sky-700 border border-sky-200 rounded px-1 py-0.5">
+                          開始
+                        </span>
+                      )}
+                      {toSt?.is_terminal && (
+                        <span className="text-[10px] font-semibold text-emerald-800 border border-emerald-200 rounded px-1 py-0.5">
+                          終了
+                        </span>
+                      )}
+                      {reason === 'same' && (
+                        <span className="text-xs text-amber-700 border border-amber-300 rounded px-2 py-0.5">
+                          無効（遷移前後が同一）
+                        </span>
+                      )}
+                      {reason === 'duplicate' && (
+                        <span className="text-xs text-amber-700 border border-amber-300 rounded px-2 py-0.5">
+                          無効（重複）
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => deleteTransitionStrapByKey(t.key)}
+                        disabled={transitionStrapPending}
+                        className="ml-auto p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                        title="削除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )
+                }}
+              />
+            </SortableDndProvider>
+          </div>
+        )}
         {transitionError && <p className="mt-4 text-sm text-red-600">{transitionError}</p>}
       </div>
 
@@ -646,6 +1238,12 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           )}
         </div>
 
+        {!orgMismatch && (
+          <p className="mb-3 text-xs text-gray-600">
+            開始は常に1件（ラジオで付け替え）。新規ワークフローの既定は表示順が最小の列。終了は複数（チェック）。並べ替えは左のハンドルをドラッグ。
+          </p>
+        )}
+
         {orgMismatch && (
           <p className="text-sm text-gray-500">
             選択中の組織に属するワークフローのみ、ステータス一覧を表示・編集できます。
@@ -655,37 +1253,72 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         {!orgMismatch && statusesLoading && (
           <p className="text-sm text-gray-500">ステータスを読み込み中...</p>
         )}
-        {!orgMismatch && !statusesLoading && statuses.length === 0 && (
+        {!orgMismatch && !statusesLoading && visibleStatuses.length === 0 && (
           <p className="text-sm text-gray-500">まだステータスがありません。「ステータスを追加」から作成できます。</p>
         )}
-        {!orgMismatch && !statusesLoading && statuses.length > 0 && (
+        {!orgMismatch && !statusesLoading && visibleStatuses.length > 0 && (
           <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600">
-                <tr>
-                  <th className="px-3 py-2 font-medium">順</th>
-                  <th className="px-3 py-2 font-medium">名前</th>
-                  <th className="px-3 py-2 font-medium">色</th>
-                  <th className="px-3 py-2 font-medium w-28">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {statuses.map((s) => (
-                  <tr key={s.id} className="border-t border-gray-100">
-                    <td className="px-3 py-2 text-gray-700">{s.order}</td>
-                    <td className="px-3 py-2 font-medium text-gray-900">{s.name}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className="inline-block w-6 h-6 rounded border border-gray-200 align-middle"
-                        style={{ backgroundColor: s.color }}
-                        title={s.color}
-                      />
-                      <span className="ml-2 text-gray-600 font-mono text-xs">{s.color}</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      {s.status_key === 'sts_start' || s.status_key === 'sts_goal' ? (
-                        <span className="text-xs text-gray-400">システム</span>
-                      ) : (
+            <SortableDndProvider
+              items={visibleStatuses}
+              itemId={(s) => s.id}
+              onReorder={(ids) => reorderDraftStatuses(ids)}
+              disabled={saveEditorMutation.isPending || statusesLoading}
+            >
+              <table className="min-w-[720px] w-full text-sm">
+                <thead className="bg-gray-50 text-left text-gray-600">
+                  <tr>
+                    <th className="w-10 px-2 py-2" aria-hidden />
+                    <th className="px-3 py-2 font-medium">名前</th>
+                    <th className="px-3 py-2 font-medium">色</th>
+                    <th className="px-3 py-2 font-medium w-24">開始</th>
+                    <th className="px-3 py-2 font-medium w-24">終了</th>
+                    <th className="px-3 py-2 font-medium w-28">操作</th>
+                  </tr>
+                </thead>
+                <SortableTbody
+                  items={visibleStatuses}
+                  itemId={(s) => s.id}
+                  disabled={saveEditorMutation.isPending || statusesLoading}
+                  tbodyClassName="divide-y divide-gray-100"
+                  renderItem={(s, props) => (
+                    <tr
+                      ref={props.setNodeRef}
+                      style={props.style}
+                      key={s.id}
+                      className="border-t border-gray-100 hover:bg-gray-50/80"
+                    >
+                      <td className="px-2 py-2 align-middle">
+                        <DragHandle handleProps={props.handleProps} />
+                      </td>
+                      <td className="px-3 py-2 font-medium text-gray-900">{s.name}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className="inline-block w-6 h-6 rounded border border-gray-200 align-middle"
+                          style={{ backgroundColor: s.color }}
+                          title={s.color}
+                        />
+                        <span className="ml-2 text-gray-600 font-mono text-xs">{s.color}</span>
+                      </td>
+                      <td className="px-3 py-2 align-middle">
+                        <input
+                          type="radio"
+                          name={entryRadioName}
+                          checked={s.is_entry === true}
+                          onChange={() => applyEntryStatus(s.id)}
+                          disabled={saveEditorMutation.isPending}
+                          aria-label={`${s.name} を開始にする`}
+                        />
+                      </td>
+                      <td className="px-3 py-2 align-middle">
+                        <input
+                          type="checkbox"
+                          checked={s.is_terminal === true}
+                          onChange={() => toggleTerminalStatus(s)}
+                          disabled={saveEditorMutation.isPending || s.is_entry === true}
+                          aria-label={`${s.name} を終了にする`}
+                        />
+                      </td>
+                      <td className="px-3 py-2">
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
@@ -697,32 +1330,46 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                           </button>
                           <button
                             type="button"
-                            disabled={deleteStatusMutation.isPending}
+                            disabled={
+                              saveEditorMutation.isPending ||
+                              atStatusDeleteFloor ||
+                              statusReferencedInTransition(s.id)
+                            }
                             onClick={() => {
+                              if (statusReferencedInTransition(s.id)) {
+                                window.alert(
+                                  'このステータスは許可遷移で使用されているため削除できません'
+                                )
+                                return
+                              }
                               if (confirm(`「${s.name}」を本当に削除しますか？`)) {
-                                deleteStatusMutation.mutate(s.id)
+                                removeStatusFromDraft(s.id)
                               }
                             }}
                             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
-                            title="削除"
+                            title={
+                              atStatusDeleteFloor
+                                ? 'ステータスはワークフロー内で最低2つ必要なため削除できません'
+                                : statusReferencedInTransition(s.id)
+                                  ? 'このステータスは許可遷移で使用されているため削除できません'
+                                  : '削除'
+                            }
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                    </tr>
+                  )}
+                />
+              </table>
+            </SortableDndProvider>
           </div>
         )}
 
         <p className="mt-4 text-xs text-gray-500">
-          追加時は同一ワークフロー内の遷移（全ペア）が再計算され、Issue のステータス変更と整合します。
+          Issue のステータス変更は、上記の「ステータス遷移設定」で許可した遷移に沿う必要があります。ステータスはワークフロー内で最低2つ必要です。
         </p>
-
-        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
       </div>
 
       {!orgMismatch && statusDialogOpen && (
@@ -749,29 +1396,14 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   placeholder="例: レビュー待ち"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">色</label>
-                  <input
-                    type="color"
-                    value={statusDialogForm.color}
-                    onChange={(e) => setStatusDialogForm((f) => ({ ...f, color: e.target.value }))}
-                    className="h-10 w-14 rounded border cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    表示順{statusDialogMode === 'create' ? '（任意）' : '（必須）'}
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={statusDialogForm.order}
-                    onChange={(e) => setStatusDialogForm((f) => ({ ...f, order: e.target.value }))}
-                    placeholder={statusDialogMode === 'create' ? '自動' : '1'}
-                    className="w-full border rounded-lg px-3 py-2"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">色</label>
+                <input
+                  type="color"
+                  value={statusDialogForm.color}
+                  onChange={(e) => setStatusDialogForm((f) => ({ ...f, color: e.target.value }))}
+                  className="h-10 w-14 rounded border cursor-pointer"
+                />
               </div>
               {statusDialogError && (
                 <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">

@@ -63,7 +63,7 @@ graph TD
 ### 現行実装との整合メモ
 
 - 上記はシステム全体の必須方針（ターゲット仕様）。
-- 現行実装では、主要な管理系 API（projects/statuses/departments/users/admin-users/issues/templates 等）で JWT 前提の組織スコープ制御を適用している。
+- 現行実装では、主要な管理系 API（projects/statuses/groups/users/admin-users/issues/templates 等）で JWT 前提の組織スコープ制御を適用している。
 - **GET /workflows** は非スーパーアドミンで JWT 組織にフィルタ済み。スーパーアドミン向けにクエリ `org_id` で組織絞り込み可能（管理画面の「選択中組織」と整合）。テナント境界のブラックボックステストは [backend/test/TENANT_TEST_MATRIX.md](../backend/test/TENANT_TEST_MATRIX.md) で追跡する。
 - 方針に対して適用漏れの可能性があるエンドポイントは、同方針に合わせて継続的に補完する。
 

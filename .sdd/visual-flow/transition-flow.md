@@ -18,7 +18,7 @@
 | /projects/[id]/issues/[number] | Issue 詳細 | [v_issue_detail.md](v_issue_detail.md) |
 | /admin | 管理画面 | [v_admin.md](v_admin.md) |
 | /admin/users | ユーザー管理 | [v_admin_users.md](v_admin_users.md) |
-| /admin/departments | グループ管理 | [v_admin_departments.md](v_admin_departments.md) |
+| /admin/groups | グループ管理 | [v_admin_groups.md](v_admin_groups.md) |
 | /admin/statuses | ステータス管理 | [v_admin_statuses.md](v_admin_statuses.md) |
 | /admin/projects | プロジェクト管理 | [v_admin_projects.md](v_admin_projects.md) |
 | /admin/projects/[id] | プロジェクト編集 | [v_admin_project_detail.md](v_admin_project_detail.md) |

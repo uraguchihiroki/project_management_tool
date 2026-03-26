@@ -71,7 +71,7 @@ UPDATE users SET
 WHERE organization_id IS NULL;
 ALTER TABLE users ALTER COLUMN organization_id SET NOT NULL;
 DROP INDEX IF EXISTS idx_user_org_email;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_user_org_email ON users(organization_id, email);
+CREATE INDEX IF NOT EXISTS idx_user_org_email ON users(organization_id, email);
 
 -- 10. Set admin_email for FRS from first org admin user
 UPDATE organizations o
@@ -109,12 +109,7 @@ ALTER TABLE statuses ALTER COLUMN project_id DROP NOT NULL;
 -- 旧 type 列はサーバ起動時 MigrateIssueProjectStatusSplitPre で DROP。
 -- 組織横断の Issue 列・project_statuses の初期値は API 経由のシード（組織作成・プロジェクト作成）を正とする。
 
--- 13. WorkflowStep: Phase 5 承認対象拡張
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS approver_type VARCHAR(20) DEFAULT 'role';
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS approver_user_id UUID;
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS min_approvers INTEGER DEFAULT 1;
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS exclude_reporter BOOLEAN DEFAULT false;
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS exclude_assignee BOOLEAN DEFAULT false;
+-- 13. 承認ステップ系テーブル（workflow_steps/approval_objects/issue_approvals）は廃止（Issue トラッキングを正とする）
 
 -- 13c. projects.status カラム削除（ステータステーブル参照に移行したため未使用）
 ALTER TABLE projects DROP COLUMN IF EXISTS status;
@@ -142,66 +137,30 @@ UPDATE issue_templates t SET display_order = sub.rn FROM (
   SELECT id, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY name) AS rn FROM issue_templates
 ) sub WHERE t.id = sub.id;
 
--- 14e. ステップ仕様v2: step_type, description, threshold, approval_objects
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS step_type VARCHAR(20) NOT NULL DEFAULT 'normal';
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS threshold INTEGER NOT NULL DEFAULT 1;
-UPDATE workflow_steps SET step_type = 'normal' WHERE step_type IS NULL OR step_type = '';
-
-CREATE TABLE IF NOT EXISTS approval_objects (
-  id SERIAL PRIMARY KEY,
-  workflow_step_id INTEGER NOT NULL REFERENCES workflow_steps(id) ON DELETE CASCADE,
-  sort_order INTEGER NOT NULL DEFAULT 1,
-  type VARCHAR(20) NOT NULL,
-  role_id INTEGER REFERENCES roles(id),
-  role_operator VARCHAR(10),
-  user_id UUID REFERENCES users(id),
-  points INTEGER NOT NULL DEFAULT 1,
-  exclude_reporter BOOLEAN DEFAULT false,
-  exclude_assignee BOOLEAN DEFAULT false
-);
+-- 14e. 承認ステップ系（workflow_steps/approval_objects）は廃止
 
 -- 14g. ステータスベースワークフローステップ
 ALTER TABLE statuses ADD COLUMN IF NOT EXISTS status_key VARCHAR(50);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_statuses_status_key ON statuses(status_key) WHERE status_key IS NOT NULL AND status_key != '';
+CREATE INDEX IF NOT EXISTS idx_statuses_status_key ON statuses(status_key) WHERE status_key IS NOT NULL AND status_key != '';
 
--- sts_start, sts_goal システムステータス（全会社共通・グローバル）
-INSERT INTO statuses (id, project_id, organization_id, name, color, "order", status_key)
-VALUES
-  ('30000000-0000-0000-0000-000000000001', NULL, NULL, 'sts_start', '#9CA3AF', 0, 'sts_start'),
-  ('30000000-0000-0000-0000-000000000002', NULL, NULL, 'sts_goal', '#9CA3AF', 99, 'sts_goal')
-ON CONFLICT (id) DO UPDATE SET status_key = EXCLUDED.status_key, name = EXCLUDED.name, organization_id = NULL;
+-- グローバル sts_start/sts_goal は廃止（アプリ起動マイグレーションで除去）
 
-UPDATE statuses SET organization_id = NULL WHERE status_key IN ('sts_start','sts_goal');
+-- workflow_steps: next_status_id は廃止
 
--- workflow_steps: next_status_id 追加
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS next_status_id UUID REFERENCES statuses(id);
-
--- 14f. comments, workflow_steps, approval_objects, issue_templates, issue_approvals に organization_id 追加
+-- 14f. comments, issue_templates に organization_id 追加
 ALTER TABLE comments ADD COLUMN IF NOT EXISTS organization_id UUID;
 UPDATE comments c SET organization_id = i.organization_id FROM issues i WHERE c.issue_id = i.id AND c.organization_id IS NULL;
 UPDATE comments SET organization_id = '00000000-0000-0000-0000-000000000001' WHERE organization_id IS NULL;
 ALTER TABLE comments ALTER COLUMN organization_id SET NOT NULL;
 
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS organization_id UUID;
-UPDATE workflow_steps ws SET organization_id = w.organization_id FROM workflows w WHERE ws.workflow_id = w.id AND ws.organization_id IS NULL;
-UPDATE workflow_steps SET organization_id = '00000000-0000-0000-0000-000000000001' WHERE organization_id IS NULL;
-ALTER TABLE workflow_steps ALTER COLUMN organization_id SET NOT NULL;
-
-ALTER TABLE approval_objects ADD COLUMN IF NOT EXISTS organization_id UUID;
-UPDATE approval_objects ao SET organization_id = ws.organization_id FROM workflow_steps ws WHERE ao.workflow_step_id = ws.id AND ao.organization_id IS NULL;
-UPDATE approval_objects SET organization_id = '00000000-0000-0000-0000-000000000001' WHERE organization_id IS NULL;
-ALTER TABLE approval_objects ALTER COLUMN organization_id SET NOT NULL;
+-- workflow_steps/approval_objects/issue_approvals は廃止のため organization_id 付与も不要
 
 ALTER TABLE issue_templates ADD COLUMN IF NOT EXISTS organization_id UUID;
 UPDATE issue_templates it SET organization_id = p.organization_id FROM projects p WHERE it.project_id = p.id AND it.organization_id IS NULL;
 UPDATE issue_templates SET organization_id = '00000000-0000-0000-0000-000000000001' WHERE organization_id IS NULL;
 ALTER TABLE issue_templates ALTER COLUMN organization_id SET NOT NULL;
 
-ALTER TABLE issue_approvals ADD COLUMN IF NOT EXISTS organization_id UUID;
-UPDATE issue_approvals ia SET organization_id = i.organization_id FROM issues i WHERE ia.issue_id = i.id AND ia.organization_id IS NULL;
-UPDATE issue_approvals SET organization_id = '00000000-0000-0000-0000-000000000001' WHERE organization_id IS NULL;
-ALTER TABLE issue_approvals ALTER COLUMN organization_id SET NOT NULL;
+-- issue_approvals は廃止
 
 -- 14f2. organization_users 廃止（users に organization_id を移行済み）
 DROP TABLE IF EXISTS organization_users CASCADE;
@@ -210,32 +169,27 @@ DROP TABLE IF EXISTS organization_users CASCADE;
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
-ALTER TABLE departments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
-ALTER TABLE organization_user_departments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE organization_user_groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE roles ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE statuses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE issues ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE workflows ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
-ALTER TABLE approval_objects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE issue_templates ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
-ALTER TABLE issue_approvals ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 CREATE INDEX IF NOT EXISTS idx_organizations_deleted_at ON organizations(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_departments_deleted_at ON departments(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_organization_user_departments_deleted_at ON organization_user_departments(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_groups_deleted_at ON groups(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_organization_user_groups_deleted_at ON organization_user_groups(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_roles_deleted_at ON roles(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_projects_deleted_at ON projects(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_statuses_deleted_at ON statuses(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_issues_deleted_at ON issues(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_comments_deleted_at ON comments(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_workflows_deleted_at ON workflows(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_workflow_steps_deleted_at ON workflow_steps(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_approval_objects_deleted_at ON approval_objects(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_issue_templates_deleted_at ON issue_templates(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_issue_approvals_deleted_at ON issue_approvals(deleted_at);
+-- 承認ステップ系テーブルの deleted_at / index は廃止
 
 -- 14h. 全テーブルに key カラム追加（VARCHAR(255), NOT NULL）
 -- projects は既に key あり（組織内識別キー）のためスキップ
@@ -255,13 +209,13 @@ ALTER TABLE roles ADD COLUMN IF NOT EXISTS key VARCHAR(255);
 UPDATE roles SET key = 'role-' || id::text WHERE key IS NULL OR key = '';
 ALTER TABLE roles ALTER COLUMN key SET NOT NULL;
 
-ALTER TABLE departments ADD COLUMN IF NOT EXISTS key VARCHAR(255);
-UPDATE departments SET key = id::text WHERE key IS NULL OR key = '';
-ALTER TABLE departments ALTER COLUMN key SET NOT NULL;
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE groups SET key = id::text WHERE key IS NULL OR key = '';
+ALTER TABLE groups ALTER COLUMN key SET NOT NULL;
 
-ALTER TABLE organization_user_departments ADD COLUMN IF NOT EXISTS key VARCHAR(255);
-UPDATE organization_user_departments SET key = organization_id::text || '-' || user_id::text || '-' || department_id::text WHERE key IS NULL OR key = '';
-ALTER TABLE organization_user_departments ALTER COLUMN key SET NOT NULL;
+ALTER TABLE organization_user_groups ADD COLUMN IF NOT EXISTS key VARCHAR(255);
+UPDATE organization_user_groups SET key = organization_id::text || '-' || user_id::text || '-' || group_id::text WHERE key IS NULL OR key = '';
+ALTER TABLE organization_user_groups ALTER COLUMN key SET NOT NULL;
 
 ALTER TABLE statuses ADD COLUMN IF NOT EXISTS key VARCHAR(255);
 UPDATE statuses SET key = COALESCE(NULLIF(TRIM(status_key), ''), 'sts-' || id::text) WHERE key IS NULL OR key = '';
@@ -280,21 +234,12 @@ ALTER TABLE workflows ADD COLUMN IF NOT EXISTS key VARCHAR(255);
 UPDATE workflows SET key = 'wf-' || id::text WHERE key IS NULL OR key = '';
 ALTER TABLE workflows ALTER COLUMN key SET NOT NULL;
 
-ALTER TABLE workflow_steps ADD COLUMN IF NOT EXISTS key VARCHAR(255);
-UPDATE workflow_steps SET key = 'ws-' || id::text WHERE key IS NULL OR key = '';
-ALTER TABLE workflow_steps ALTER COLUMN key SET NOT NULL;
-
-ALTER TABLE approval_objects ADD COLUMN IF NOT EXISTS key VARCHAR(255);
-UPDATE approval_objects SET key = 'ao-' || id::text WHERE key IS NULL OR key = '';
-ALTER TABLE approval_objects ALTER COLUMN key SET NOT NULL;
 
 ALTER TABLE issue_templates ADD COLUMN IF NOT EXISTS key VARCHAR(255);
 UPDATE issue_templates SET key = 'tmpl-' || id::text WHERE key IS NULL OR key = '';
 ALTER TABLE issue_templates ALTER COLUMN key SET NOT NULL;
 
-ALTER TABLE issue_approvals ADD COLUMN IF NOT EXISTS key VARCHAR(255);
-UPDATE issue_approvals SET key = id::text WHERE key IS NULL OR key = '';
-ALTER TABLE issue_approvals ALTER COLUMN key SET NOT NULL;
+-- 承認ステップ系テーブルの key 追加は廃止
 
 -- user_roles（GORM many2many 中間テーブル）
 ALTER TABLE user_roles ADD COLUMN IF NOT EXISTS key VARCHAR(255);

@@ -11,8 +11,6 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrDuplicateEmailInOrg = errors.New("email already exists in organization")
-
 type UserService interface {
 	List() ([]model.User, error)
 	ListWithRoles() ([]model.User, error)
@@ -73,6 +71,11 @@ func (s *userService) Create(name, email string) (*model.User, error) {
 	if orgID == uuid.Nil {
 		return nil, fmt.Errorf("invalid organization id on first organization row")
 	}
+	if _, err := s.userRepo.FindByEmailAndOrg(orgID, email); err == nil {
+		return nil, ErrDuplicateEmailInOrg
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	// 最初のユーザーを自動的に管理者にする
 	count, err := s.userRepo.Count()
 	if err != nil {
@@ -96,9 +99,10 @@ func (s *userService) Create(name, email string) (*model.User, error) {
 }
 
 func (s *userService) CreateForOrg(orgID uuid.UUID, name, email string) (*model.User, error) {
-	// 組織内で同一メールが既にいればエラー（1ユーザー＝1組織、組織内でemailユニーク）
-	if existing, err := s.userRepo.FindByEmailAndOrg(orgID, email); err == nil && existing != nil {
+	if _, err := s.userRepo.FindByEmailAndOrg(orgID, email); err == nil {
 		return nil, ErrDuplicateEmailInOrg
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
 	}
 	newUserID := uuid.New()
 	user := &model.User{

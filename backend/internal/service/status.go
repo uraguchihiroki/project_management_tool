@@ -16,8 +16,9 @@ type StatusService interface {
 	Create(orgID uuid.UUID, name, color string, order int) (*model.Status, error)
 	ListByWorkflowID(workflowID uint) ([]model.Status, error)
 	CreateForWorkflow(workflowID uint, name, color string, order int) (*model.Status, error)
-	Update(id uuid.UUID, name, color string, order int) (*model.Status, error)
+	Update(id uuid.UUID, name, color string, order int, isEntry, isTerminal *bool) (*model.Status, error)
 	Delete(id uuid.UUID) error
+	ReorderForWorkflow(workflowID uint, orderedIDs []uuid.UUID) error
 }
 
 type statusService struct {
@@ -62,19 +63,19 @@ func (s *statusService) Create(orgID uuid.UUID, name, color string, order int) (
 		return nil, err
 	}
 	for _, st := range existingOrg {
-		if st.Name == name && st.Order == order {
+		if st.Name == name && st.DisplayOrder == order {
 			return nil, fmt.Errorf("同一ワークフローに同じ表示順・名前のステータスが既にあります")
 		}
 	}
 	statusID := uuid.New()
 	key := "sts-" + statusID.String()
 	status := &model.Status{
-		ID:         statusID,
-		Key:        key,
-		WorkflowID: wf.ID,
-		Name:       name,
-		Color:      color,
-		Order:      order,
+		ID:           statusID,
+		Key:          key,
+		WorkflowID:   wf.ID,
+		Name:         name,
+		Color:        color,
+		DisplayOrder: order,
 	}
 	if err := s.statusRepo.Create(status); err != nil {
 		return nil, err
@@ -106,26 +107,26 @@ func (s *statusService) CreateForWorkflow(workflowID uint, name, color string, o
 	if order <= 0 {
 		maxO := 0
 		for _, st := range existing {
-			if st.Order > maxO {
-				maxO = st.Order
+			if st.DisplayOrder > maxO {
+				maxO = st.DisplayOrder
 			}
 		}
 		order = maxO + 1
 	}
 	for _, st := range existing {
-		if st.Name == name && st.Order == order {
+		if st.Name == name && st.DisplayOrder == order {
 			return nil, fmt.Errorf("同一ワークフローに同じ表示順・名前のステータスが既にあります")
 		}
 	}
 	statusID := uuid.New()
 	key := "sts-" + statusID.String()
 	status := &model.Status{
-		ID:         statusID,
-		Key:        key,
-		WorkflowID: workflowID,
-		Name:       name,
-		Color:      color,
-		Order:      order,
+		ID:           statusID,
+		Key:          key,
+		WorkflowID:   workflowID,
+		Name:         name,
+		Color:        color,
+		DisplayOrder: order,
 	}
 	if err := s.statusRepo.Create(status); err != nil {
 		return nil, err
@@ -133,13 +134,10 @@ func (s *statusService) CreateForWorkflow(workflowID uint, name, color string, o
 	return s.statusRepo.FindByID(statusID)
 }
 
-func (s *statusService) Update(id uuid.UUID, name, color string, order int) (*model.Status, error) {
+func (s *statusService) Update(id uuid.UUID, name, color string, order int, isEntry, isTerminal *bool) (*model.Status, error) {
 	status, err := s.statusRepo.FindByID(id)
 	if err != nil {
 		return nil, err
-	}
-	if status.StatusKey == "sts_start" || status.StatusKey == "sts_goal" {
-		return nil, fmt.Errorf("システムステータスは変更できません")
 	}
 	if name != "" {
 		if len(name) > 50 {
@@ -153,8 +151,29 @@ func (s *statusService) Update(id uuid.UUID, name, color string, order int) (*mo
 		}
 		status.Color = color
 	}
-	status.Order = order
-	if err := s.statusRepo.Update(status); err != nil {
+	status.DisplayOrder = order
+	if isEntry != nil {
+		status.IsEntry = *isEntry
+	}
+	if isTerminal != nil {
+		status.IsTerminal = *isTerminal
+	}
+	if status.IsEntry && status.IsTerminal {
+		return nil, fmt.Errorf("開始ステータスと終了ステータスを同時に付けられません")
+	}
+	peers, err := s.statusRepo.FindByWorkflowID(status.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+	for _, st := range peers {
+		if st.ID == id {
+			continue
+		}
+		if st.Name == status.Name && st.DisplayOrder == status.DisplayOrder {
+			return nil, fmt.Errorf("同一ワークフローに同じ表示順・名前のステータスが既にあります")
+		}
+	}
+	if err := s.statusRepo.PersistWithEntryExclusive(status); err != nil {
 		return nil, err
 	}
 	return s.statusRepo.FindByID(id)
@@ -165,8 +184,12 @@ func (s *statusService) Delete(id uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	if status.StatusKey == "sts_start" || status.StatusKey == "sts_goal" {
-		return fmt.Errorf("システムステータスは削除できません")
+	tref, err := s.transitionRepo.CountReferencingStatus(id)
+	if err != nil {
+		return err
+	}
+	if tref > 0 {
+		return fmt.Errorf("このステータスは許可遷移で使用されているため削除できません")
 	}
 	count, err := s.statusRepo.CountInUse(id)
 	if err != nil {
@@ -175,5 +198,53 @@ func (s *statusService) Delete(id uuid.UUID) error {
 	if count > 0 {
 		return fmt.Errorf("このステータスは使用中のため削除できません")
 	}
-	return s.statusRepo.Delete(id)
+	wfCount, err := s.statusRepo.CountByWorkflowID(status.WorkflowID)
+	if err != nil {
+		return err
+	}
+	if wfCount <= 2 {
+		return fmt.Errorf("ステータスはワークフロー内で最低2つ必要なため削除できません")
+	}
+	wasEntry := status.IsEntry
+	wfID := status.WorkflowID
+	if err := s.statusRepo.Delete(id); err != nil {
+		return err
+	}
+	if !wasEntry {
+		return nil
+	}
+	peers, err := s.statusRepo.FindByWorkflowID(wfID)
+	if err != nil {
+		return err
+	}
+	if len(peers) == 0 {
+		return nil
+	}
+	next := peers[0]
+	next.IsEntry = true
+	return s.statusRepo.PersistWithEntryExclusive(&next)
+}
+
+func (s *statusService) ReorderForWorkflow(workflowID uint, orderedIDs []uuid.UUID) error {
+	existing, err := s.statusRepo.FindByWorkflowID(workflowID)
+	if err != nil {
+		return err
+	}
+	if len(orderedIDs) != len(existing) {
+		return fmt.Errorf("ステータス ID の件数が一致しません")
+	}
+	want := make(map[uuid.UUID]struct{}, len(existing))
+	for _, e := range existing {
+		want[e.ID] = struct{}{}
+	}
+	for _, id := range orderedIDs {
+		if _, ok := want[id]; !ok {
+			return fmt.Errorf("無効なステータス ID が含まれます")
+		}
+		delete(want, id)
+	}
+	if len(want) != 0 {
+		return fmt.Errorf("ステータス ID が不足しています")
+	}
+	return s.statusRepo.ReorderWorkflow(workflowID, orderedIDs)
 }

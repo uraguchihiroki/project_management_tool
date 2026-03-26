@@ -4,18 +4,18 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/uraguchihiroki/project_management_tool/internal/model"
 	"gorm.io/gorm"
 )
 
-const statusUniqueIndexName = "idx_statuses_wf_name_order_active"
+const statusWorkflowNameOrderLookupIndex = "idx_statuses_wf_name_order_active"
 
-// MigrateStatusDedupeAndUniqueIndex は (1) 同一 workflow 内の重複 statuses を参照先を付け替えて1行にまとめ、
-// (2) 有効行のみ対象とする部分ユニークインデックスを作成する。サーバ起動・テストの AutoMigrate 後に1回呼ぶ。冪等。
-func MigrateStatusDedupeAndUniqueIndex(db *gorm.DB) error {
+// MigrateStatusDedupe は (1) 同一 workflow 内の重複 statuses を参照先を付け替えて1行にまとめ、
+// (2) 有効行のみ対象とする部分インデックス（非一意）を作成する。サーバ起動・テストの AutoMigrate 後に1回呼ぶ。冪等。
+// 業務上の (workflow_id, name, display_order) の一意は Service で保証する。
+func MigrateStatusDedupe(db *gorm.DB) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		if err := dedupeStatuses(tx); err != nil {
 			return err
@@ -23,7 +23,7 @@ func MigrateStatusDedupeAndUniqueIndex(db *gorm.DB) error {
 		if err := dedupeWorkflowTransitions(tx); err != nil {
 			return err
 		}
-		if err := ensureStatusPartialUniqueIndex(tx); err != nil {
+		if err := ensureStatusPartialLookupIndex(tx); err != nil {
 			return err
 		}
 		return nil
@@ -38,7 +38,7 @@ func dedupeStatuses(tx *gorm.DB) error {
 
 	groups := make(map[string][]model.Status)
 	for _, s := range all {
-		key := fmt.Sprintf("%d|%s|%d", s.WorkflowID, s.Name, s.Order)
+		key := fmt.Sprintf("%d|%s|%d", s.WorkflowID, s.Name, s.DisplayOrder)
 		groups[key] = append(groups[key], s)
 	}
 
@@ -91,15 +91,6 @@ func pickCanonicalStatus(sts []model.Status) uuid.UUID {
 	if len(sts) == 1 {
 		return sts[0].ID
 	}
-	var keyed []model.Status
-	for _, s := range sts {
-		if s.StatusKey == "sts_start" || s.StatusKey == "sts_goal" {
-			keyed = append(keyed, s)
-		}
-	}
-	if len(keyed) == 1 {
-		return keyed[0].ID
-	}
 	sort.Slice(sts, func(i, j int) bool { return sts[i].ID.String() < sts[j].ID.String() })
 	return sts[0].ID
 }
@@ -126,32 +117,12 @@ func repointStatusFKs(tx *gorm.DB, old, newID uuid.UUID) error {
 	if err := tx.Model(&model.TransitionAlertRule{}).Where("to_status_id = ?", old).Update("to_status_id", newID).Error; err != nil {
 		return fmt.Errorf("repoint transition_alert_rules.to_status_id: %w", err)
 	}
-	return repointLegacyWorkflowStepsStatusID(tx, old, newID)
-}
-
-// レガシー DB に workflow_steps が残っている場合（GORM モデルからは外れているが FK が残る）
-func repointLegacyWorkflowStepsStatusID(tx *gorm.DB, old, newID uuid.UUID) error {
-	if err := tx.Exec(`UPDATE workflow_steps SET status_id = ? WHERE status_id = ?`, newID, old).Error; err != nil {
-		if !isLegacyWorkflowStepsMissingErr(err) {
-			return fmt.Errorf("repoint workflow_steps.status_id: %w", err)
-		}
-	}
-	if err := tx.Exec(`UPDATE workflow_steps SET next_status_id = ? WHERE next_status_id = ?`, newID, old).Error; err != nil {
-		if !isLegacyWorkflowStepsMissingErr(err) {
-			return fmt.Errorf("repoint workflow_steps.next_status_id: %w", err)
-		}
-	}
 	return nil
 }
 
-func isLegacyWorkflowStepsMissingErr(err error) bool {
-	msg := err.Error()
-	return strings.Contains(msg, "no such table") ||
-		strings.Contains(msg, "UndefinedTable") ||
-		strings.Contains(msg, "no such column") ||
-		(strings.Contains(msg, "does not exist") && (strings.Contains(msg, "workflow_steps") || strings.Contains(msg, "column")))
-}
+// NOTE: workflow_steps は承認ステップ系として廃止。起動時に DROP されるため参照しない。
 
+// dedupeWorkflowTransitions は起動時マイグレーション専用。重複行の物理削除（業務 API の論理削除とは別）。
 func dedupeWorkflowTransitions(tx *gorm.DB) error {
 	dialect := tx.Dialector.Name()
 	switch dialect {
@@ -176,22 +147,21 @@ func dedupeWorkflowTransitions(tx *gorm.DB) error {
 	}
 }
 
-func ensureStatusPartialUniqueIndex(tx *gorm.DB) error {
+func ensureStatusPartialLookupIndex(tx *gorm.DB) error {
 	dialect := tx.Dialector.Name()
 	var stmt string
 	switch dialect {
 	case "postgres", "sqlite":
-		// 論理削除されていない行のみユニーク（同一 workflow で name + order）
 		stmt = fmt.Sprintf(`
-			CREATE UNIQUE INDEX IF NOT EXISTS %s
-			ON statuses (workflow_id, name, "order")
+			CREATE INDEX IF NOT EXISTS %s
+			ON statuses (workflow_id, name, display_order)
 			WHERE deleted_at IS NULL
-		`, statusUniqueIndexName)
+		`, statusWorkflowNameOrderLookupIndex)
 	default:
-		return fmt.Errorf("status unique index: unsupported dialect %q", dialect)
+		return fmt.Errorf("status lookup index: unsupported dialect %q", dialect)
 	}
 	if err := tx.Exec(stmt).Error; err != nil {
-		return fmt.Errorf("create partial unique index on statuses: %w", err)
+		return fmt.Errorf("create partial index on statuses: %w", err)
 	}
 	return nil
 }

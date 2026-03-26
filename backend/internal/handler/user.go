@@ -82,6 +82,9 @@ func (h *UserHandler) Create(c echo.Context) error {
 	}
 	user, err := h.userService.Create(req.Name, req.Email)
 	if err != nil {
+		if errors.Is(err, service.ErrDuplicateEmailInOrg) {
+			return echo.NewHTTPError(http.StatusConflict, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": user})
@@ -245,6 +248,9 @@ func (h *UserHandler) CreateForOrg(c echo.Context) error {
 	}
 	user, err := h.userService.CreateForOrg(orgID, req.Name, req.Email)
 	if err != nil {
+		if errors.Is(err, service.ErrDuplicateEmailInOrg) {
+			return echo.NewHTTPError(http.StatusConflict, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": user})

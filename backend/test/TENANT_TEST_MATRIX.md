@@ -16,7 +16,6 @@
 | Method | Path | テナントBB | 主なテスト・備考 |
 |--------|------|------------|-------------------|
 | GET | /users | **done** | `user_tenant_test.go`（一覧は JWT org のみ） |
-| GET | /users/:id/groups | todo | |
 | GET | /users/:id | **done** | `user_tenant_test.go`（他 org ユーザー 404） |
 | POST | /admin/switch-organization | — | 組織切替（別観点） |
 | PUT | /users/:id/admin | todo | |
@@ -46,13 +45,13 @@
 | POST | /organizations | todo | |
 | GET | /users/:id/organizations | todo | |
 | POST | /organizations/:orgId/users | todo | |
-| GET | /organizations/:orgId/departments | todo | |
-| POST | /organizations/:orgId/departments | todo | |
-| PUT | /organizations/:orgId/departments/reorder | todo | |
-| PUT | /organizations/:orgId/departments/:id | todo | |
-| DELETE | /organizations/:orgId/departments/:id | todo | |
-| GET | /users/:id/departments | todo | |
-| PUT | /users/:id/departments | todo | |
+| GET | /organizations/:orgId/groups | todo | |
+| POST | /organizations/:orgId/groups | todo | |
+| PUT | /organizations/:orgId/groups/reorder | todo | |
+| PUT | /organizations/:orgId/groups/:id | todo | |
+| DELETE | /organizations/:orgId/groups/:id | todo | |
+| GET | /users/:id/groups | todo | |
+| PUT | /users/:id/groups | todo | |
 | GET | /super-admin/organizations | — | SA 専用 |
 | POST | /super-admin/organizations | — | SA 専用 |
 | GET | /admin/users | todo | |
@@ -65,17 +64,11 @@
 | PUT | /statuses/:id | todo | |
 | DELETE | /statuses/:id | todo | |
 | POST | /projects | **done** | `project_tenant_test.go`（他 org_id は 403） |
+| POST | /projects/:id/default-issue-workflow | todo | |
 | PUT | /projects/reorder | todo | |
 | GET | /projects/:id | **done** | `project_tenant_test.go`（他 org 404） |
 | PUT | /projects/:id | **done** | 同上 |
 | DELETE | /projects/:id | **done** | 同上 |
-| GET | /organizations/:orgId/groups | todo | |
-| POST | /organizations/:orgId/groups | todo | |
-| GET | /groups/:id/members | todo | |
-| PUT | /groups/:id/members | todo | |
-| GET | /groups/:id | todo | |
-| PUT | /groups/:id | todo | |
-| DELETE | /groups/:id | todo | |
 | GET | /projects/:projectId/issues | todo | |
 | POST | /projects/:projectId/issues | todo | |
 | GET | /organizations/:orgId/issues | todo | |
@@ -83,8 +76,6 @@
 | GET | /organizations/:orgId/issues/:number | todo | |
 | PUT | /organizations/:orgId/issues/:number | todo | |
 | DELETE | /organizations/:orgId/issues/:number | todo | |
-| GET | /projects/:projectId/issues/:number/groups | todo | |
-| PUT | /projects/:projectId/issues/:number/groups | todo | |
 | GET | /projects/:projectId/issues/:number | todo | |
 | PUT | /projects/:projectId/issues/:number | todo | |
 | DELETE | /projects/:projectId/issues/:number | todo | |
@@ -111,4 +102,4 @@
 | 論点 | 正しい理解 | テスト・根拠 |
 |------|------------|--------------|
 | `GET /workflows`（スーパーアドミン） | `org_id` なしでは全組織分を返し得る。管理画面で「選択中の1社」だけ見せるときは **`org_id` をクエリで付け、サーバがその組織だけ返す**（フロントだけで絞らない）。非スーパーアドミンは JWT の org のみ。 | [workflow_tenant_test.go](workflow_tenant_test.go) |
-| `GET/POST /workflows/:id/statuses` | テナント境界は **親ワークフローが JWT の組織に属するか**の検証。通過後の列挙は **`workflow_id = :id`**。同一 `(name,type,order)` の重複は **マイグレーション + 部分ユニーク**で防ぐ（「org での再フィルタが足りない」という筋の問題と混同しない）。 | [workflow_status_test.go](workflow_status_test.go)（別組織 404、重複 INSERT は UNIQUE） |
+| `GET/POST /workflows/:id/statuses` | テナント境界は **親ワークフローが JWT の組織に属するか**の検証。通過後の列挙は **`workflow_id = :id`**。同一 `(name, display_order)` の重複は **Service** で拒否（起動時 `MigrateStatusDedupe` はレガシー重複の整理のみ）。 | [workflow_status_test.go](workflow_status_test.go)（別組織 404、重複 POST は 400） |

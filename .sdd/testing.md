@@ -219,7 +219,7 @@ npm run test:e2e:server -- e2e/login.spec.ts
 | [comment_test.go](backend/test/comment_test.go) | コメント CRUD |
 | [role_test.go](backend/test/role_test.go) | 役職 CRUD、ユーザーへの役職割り当て、管理者一覧 |
 | [workflow_test.go](backend/test/workflow_test.go) | （レガシー）ワークフロー CRUD 等。Issue 管理方針では廃止方向の API |
-| [department_test.go](backend/test/department_test.go) | 部署 CRUD、正常系フロー（一覧→作成→更新→削除）、ユーザー部署紐づけ |
+| [group_test.go](backend/test/group_test.go) | グループ CRUD、正常系フロー（一覧→作成→更新→削除）、ユーザーグループ紐づけ |
 | [template_test.go](backend/test/template_test.go) | テンプレート CRUD、テンプレートからの Issue 作成 |
 | [organization_test.go](backend/test/organization_test.go) | 組織 CRUD、ユーザー追加、SuperAdmin ログイン、管理画面ユーザー一覧 |
 | [login_test.go](backend/test/login_test.go) | **一般ユーザーログイン**（`POST /admin/login`）正常系・異常系、JWT で `GET /users/:id/organizations` |

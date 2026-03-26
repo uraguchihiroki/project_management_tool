@@ -9,6 +9,7 @@ import (
 type OrganizationRepository interface {
 	FindAll() ([]model.Organization, error)
 	FindByID(id uuid.UUID) (*model.Organization, error)
+	FindByName(name string) (*model.Organization, error)
 	Create(org *model.Organization) error
 	FindByUserID(userID uuid.UUID) ([]model.Organization, error)
 	FindFirstOrgAdminID(orgID uuid.UUID) (*uuid.UUID, error)
@@ -31,6 +32,15 @@ func (r *organizationRepository) FindAll() ([]model.Organization, error) {
 func (r *organizationRepository) FindByID(id uuid.UUID) (*model.Organization, error) {
 	var org model.Organization
 	err := r.db.First(&org, "id = ?", id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &org, nil
+}
+
+func (r *organizationRepository) FindByName(name string) (*model.Organization, error) {
+	var org model.Organization
+	err := r.db.Where("name = ?", name).First(&org).Error
 	if err != nil {
 		return nil, err
 	}

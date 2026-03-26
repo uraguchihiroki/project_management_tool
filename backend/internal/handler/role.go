@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -66,6 +67,9 @@ func (h *RoleHandler) Create(c echo.Context) error {
 	}
 	role, err := h.roleService.CreateRole(req.Name, req.Level, req.Description, orgID)
 	if err != nil {
+		if errors.Is(err, service.ErrDuplicateRoleName) {
+			return echo.NewHTTPError(http.StatusConflict, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": role})
@@ -97,6 +101,9 @@ func (h *RoleHandler) Update(c echo.Context) error {
 	}
 	role, err := h.roleService.UpdateRole(uint(id), req.Name, req.Level, req.Description)
 	if err != nil {
+		if errors.Is(err, service.ErrDuplicateRoleName) {
+			return echo.NewHTTPError(http.StatusConflict, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": role})

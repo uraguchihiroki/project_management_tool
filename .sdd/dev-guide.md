@@ -47,6 +47,15 @@
 
 ---
 
+## Bootstrap・初期投入（`*_bootstrap.go`）の規約
+
+- **`workflow_bootstrap.go`** … 組織スコープの **Issue 用** `workflows` / `statuses`（および呼び出し側で付ける遷移シード）のみ。`projects` 行や `default_workflow_id` は更新しない。
+- **`project_status_bootstrap.go`** … **プロジェクト進行**用の `project_statuses` のみ。
+- **同一の `*_bootstrap.go` に Issue 用とプロジェクト進行用を混在させない**（別ファイルに分ける）。
+- **`ProjectService`** は Issue ワークフロー行の作成・`default_workflow_id` の設定を行わない。プロジェクトにデフォルト Issue ワークフローを紐付けるのは **`IssueWorkflowProvisioner`**（`issue_workflow_provision.go`）、**`POST /projects/:id/default-issue-workflow`**、または **`IssueService.Create` 前段の lazy 確保**（実装参照）。
+
+---
+
 ## seed.sql の扱い
 
 - **実行**: `Get-Content backend/seed.sql | docker exec -i pmt_db psql -U pmt_user -d pmt_db`
@@ -57,7 +66,7 @@
 
 ## 組織seed（CLI）
 
-既存組織にステータス・役職・部署・サンプルプロジェクト等を投入する:
+既存組織にステータス・役職・グループ・サンプルプロジェクト等を投入する:
 
 ```bash
 # 全組織に投入
@@ -115,6 +124,8 @@ go run ./cmd/cli org seed --org-id=<uuid> [--owner-id=<uuid>]
 
 ## トラブルシュート（ログイン・API が立たない）
 
+- **IDE で `frontend/.../routes.d.ts` が無い／`next-env.d.ts` が赤い（clone 直後）**  
+  Next の生成物 `.next` がまだ無い状態。[README.md](../README.md) の **「Cursor で TypeScript エラー（`routes.d.ts` が無い等）が出るとき」** を参照。`cd frontend` のうえ `npm install` の後、**`npm run build` または `npm run dev`** を一度実行する。
 - **AI 向け**: 画面・挙動の不具合報告では、**いきなり実装を疑わず**、[AGENTS.md](../AGENTS.md) の **「### 6」** と [`.cursor/rules/browser-first-investigation.mdc`](../.cursor/rules/browser-first-investigation.mdc) に従い、**まずブラウザで再現**し、続けて **疎通・再起動**を確認する。
 - **`bash scripts/start.sh` を使っているのにログインできない**  
   - スクリプトは **フロント（npm）をフォアグラウンド**にするため、ターミナルにはフロントのログばかり出ることがある。  
@@ -124,7 +135,7 @@ go run ./cmd/cli org seed --org-id=<uuid> [--owner-id=<uuid>]
   - 起動時に `PrepareStatusesWorkflowColumn`（`internal/db/legacy_status_workflow.go`）が **AutoMigrate より前**に走り、NULL の `workflow_id` を埋めてから NOT NULL 化する。  
   - 複数テナントで孤立行が残る場合はログに従い手動修正が必要なことがある。
 - **ステータス重複の除去・再発防止**  
-  - `AutoMigrate` の前に `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）が旧 `statuses.type` と「組織Project」ワークフローを整理する。`AutoMigrate` の後に `MigrateProjectStatusSeed` で `project_statuses` を欠けるプロジェクトへ投入し、その直後に `MigrateStatusDedupeAndUniqueIndex`（`internal/db/status_integrity.go`）が走る。既存の同一 `(workflow_id, name, order)` 重複を参照付け替えのうえ削除し、**部分ユニークインデックス**を付与する。
+  - `AutoMigrate` の前に `MigrateIssueProjectStatusSplitPre`（`internal/db/migrate_issue_project_status.go`）が旧 `statuses.type` と「組織Project」ワークフローを整理する。続けて **`MigrateJunctionTablesSurrogatePK`**（`internal/db/migrate_junction_surrogate_pk.go`）が PostgreSQL 上の結合テーブル（`user_roles` 等）を **複合 PK → UUID 単独 PK** に移行する（SQLite はスキップ）。`AutoMigrate` の後に `MigrateDropLegacyBusinessUniqueIndexes` で旧業務 UNIQUE を除去し、`MigrateProjectStatusSeed` で `project_statuses` を欠けるプロジェクトへ投入し、その後に `MigrateStatusDedupe`（`internal/db/status_integrity.go`）が走る。既存の同一 `(workflow_id, name, display_order)` 重複を参照付け替えのうえ削除し、**非一意**の部分インデックス（任意）を付与する。業務一意は Service で保証する（[principles.md](principles.md)）。
 
 ---
 

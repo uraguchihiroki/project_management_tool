@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -58,6 +59,9 @@ func (h *OrganizationHandler) Create(c echo.Context) error {
 	}
 	org, err := h.orgService.Create(req.Name, "", "")
 	if err != nil {
+		if errors.Is(err, service.ErrDuplicateOrganizationName) {
+			return echo.NewHTTPError(http.StatusConflict, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"data": org})
