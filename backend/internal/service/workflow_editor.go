@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -254,6 +255,70 @@ func (s *workflowEditorService) Save(workflowID uint, in *WorkflowEditorSaveInpu
 			if err != nil {
 				return fmt.Errorf("transitions[%d]: %w", i, err)
 			}
+		}
+
+		// 開始から全ステータスへ到達可能か（許可遷移を順方向に辿る）
+		idToName := make(map[uuid.UUID]string)
+		var entryNode uuid.UUID
+		var entryFound bool
+		for _, st := range in.Statuses {
+			var id uuid.UUID
+			if st.ID != nil && strings.TrimSpace(*st.ID) != "" {
+				id = uuid.MustParse(normRef(*st.ID))
+			} else {
+				id = clientToNewID[normRef(*st.ClientID)]
+			}
+			idToName[id] = strings.TrimSpace(st.Name)
+			if st.IsEntry {
+				entryNode = id
+				entryFound = true
+			}
+		}
+		if !entryFound {
+			return fmt.Errorf("開始ステータスが特定できません")
+		}
+		adj := make(map[uuid.UUID][]uuid.UUID)
+		for _, tr := range in.Transitions {
+			from, err := resolve(tr.FromRef)
+			if err != nil {
+				return err
+			}
+			to, err := resolve(tr.ToRef)
+			if err != nil {
+				return err
+			}
+			adj[from] = append(adj[from], to)
+		}
+		reachable := make(map[uuid.UUID]bool)
+		queue := []uuid.UUID{entryNode}
+		reachable[entryNode] = true
+		for head := 0; head < len(queue); head++ {
+			cur := queue[head]
+			for _, nx := range adj[cur] {
+				if !reachable[nx] {
+					reachable[nx] = true
+					queue = append(queue, nx)
+				}
+			}
+		}
+		var unreachableNames []string
+		for id, name := range idToName {
+			if !reachable[id] {
+				unreachableNames = append(unreachableNames, name)
+			}
+		}
+		if len(unreachableNames) > 0 {
+			sort.Strings(unreachableNames)
+			var b strings.Builder
+			for i, n := range unreachableNames {
+				if i > 0 {
+					b.WriteString(", ")
+				}
+				b.WriteString("「")
+				b.WriteString(n)
+				b.WriteString("」")
+			}
+			return fmt.Errorf("開始ステータスから許可遷移を辿ると到達できないステータスがあります: %s", b.String())
 		}
 
 		// ステータス作成・更新

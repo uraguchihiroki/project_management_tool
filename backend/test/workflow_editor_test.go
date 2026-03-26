@@ -2,6 +2,7 @@ package test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -61,6 +62,31 @@ func TestWorkflowEditor_Put_NoTerminalIs400(t *testing.T) {
 	}
 	st, _ := ts.req(t, "PUT", "/api/v1/workflows/"+wfID+"/editor", body)
 	assertStatus(t, st, http.StatusBadRequest, "no is_terminal")
+}
+
+func TestWorkflowEditor_Put_UnreachableFromEntryIs400(t *testing.T) {
+	ts := newTestServer(t)
+	wfID := createTestWorkflow(t, ts, "到達検証")
+	c1 := "99999999-9999-9999-9999-999999999991"
+	c2 := "99999999-9999-9999-9999-999999999992"
+	body := map[string]interface{}{
+		"name":        "到達検証",
+		"description": "",
+		"statuses": []interface{}{
+			map[string]interface{}{"client_id": c1, "name": "開始のみ", "color": "#111111", "is_entry": true, "is_terminal": false},
+			map[string]interface{}{"client_id": c2, "name": "到達不可後段", "color": "#222222", "is_entry": false, "is_terminal": true},
+		},
+		"transitions": []interface{}{},
+	}
+	st, resp := ts.req(t, "PUT", "/api/v1/workflows/"+wfID+"/editor", body)
+	assertStatus(t, st, http.StatusBadRequest, "unreachable from entry")
+	msg := mustGetString(t, resp, "message")
+	if !strings.Contains(msg, "到達不可後段") {
+		t.Fatalf("expected unreachable status name in message, got: %q", msg)
+	}
+	if !strings.Contains(msg, "開始ステータスから許可遷移を辿ると到達できない") {
+		t.Fatalf("expected reachability preamble in message, got: %q", msg)
+	}
 }
 
 func TestWorkflowEditor_Put_EntryBothTrueIs400(t *testing.T) {
